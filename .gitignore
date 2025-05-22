@@ -1,0 +1,20 @@
+# Entorno
+.env
+*.pyc
+__pycache__/
+
+# Logs
+logs/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+
+# Distribución
+dist/
+build/
+*.egg-info/
+
+# Otros
+.DS_Store
