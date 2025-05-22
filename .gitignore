@@ -2,6 +2,7 @@
 .env
 *.pyc
 __pycache__/
+.venv/
 
 # Logs
 logs/
