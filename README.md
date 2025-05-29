@@ -1,3 +1,4 @@
+
 # Proyecto SAM: Sistema Automático de Robots
 
 ## 📜 Visión General
@@ -27,14 +28,14 @@ El servicio **Lanzador** actúa como el brazo ejecutor y el punto de sincronizac
 
 El servicio **Balanceador** se encarga de la gestión inteligente de la carga de trabajo y la asignación de recursos (VMs) a los diferentes robots. Sus funciones principales son:
 
-* **Adquisición de Carga de Trabajo**: Determina la cantidad de "tickets" o tareas pendientes para cada robot. Esta información se obtiene de **dos fuentes de datos distintas**:
+* **Adquisición de Carga de Trabajo**: Determina la cantidad de "tickets" o tareas pendientes para cada robot. Esta información se obtiene de **dos fuentes de datos distintas** de forma concurrente:
     * Una base de datos **SQL Server (rpa360)**, a través del Stored Procedure `dbo.usp_obtener_tickets_pendientes_por_robot`.
     * Una base de datos **MySQL (clouders)**, accediendo a través de un túnel SSH y consultando las tablas `task_task` y `task_robot`. Utiliza un mapeo (`MAPA_ROBOTS` en la configuración) para conciliar los nombres de los robots de Clouders con los nombres en SAM.
-* **Asignación Dinámica de VMs**: Basándose en la carga de trabajo detectada y la configuración de cada robot (ej. `MinEquipos`, `MaxEquipos`, `TicketsPorEquipoAdicional` de `dbo.Robots`), asigna o desasigna dinámicamente equipos (VMs) a los robots.
+* **Asignación Dinámica de VMs**: Basándose en la carga de trabajo detectada y la configuración de cada robot **activo** (`Activo = 1` en `dbo.Robots`) (ej. `MinEquipos`, `MaxEquipos`, `TicketsPorEquipoAdicional`), asigna o desasigna dinámicamente equipos (VMs) a los robots.
 * **Lógica de Balanceo Avanzada**:
-    * Utiliza un **algoritmo de prioridades** para la asignación de VMs cuando los recursos son escasos.
+    * Utiliza un **algoritmo de prioridades** (`PrioridadBalanceo` en `dbo.Robots`) para la asignación de VMs cuando los recursos son escasos.
     * Implementa un **mecanismo de enfriamiento (`CoolingManager`)** para prevenir el "thrashing" (asignaciones y desasignaciones demasiado frecuentes de VMs para un mismo robot).
-* **Gestión del Pool de VMs**: Identifica las VMs disponibles para asignación dinámica desde la tabla `dbo.Equipos` de la SAM DB, considerando su licencia (`ATTENDEDRUNTIME`), estado de actividad y si permiten balanceo dinámico.
+* **Gestión del Pool de VMs**: Identifica las VMs disponibles para asignación dinámica desde la tabla `dbo.Equipos` de la SAM DB, considerando su licencia (`ATTENDEDRUNTIME`), estado de actividad SAM y si permiten balanceo dinámico, además de no estar ya asignadas de forma fija (reservada o programada).
 * **Registro Histórico**: Todas las decisiones de asignación y desasignación tomadas por el Balanceador se registran en la tabla `dbo.HistoricoBalanceo` para auditoría y análisis.
 
 ---
@@ -45,8 +46,8 @@ El servicio **Balanceador** se encarga de la gestión inteligente de la carga de
 3.  **Detección de Carga (Balanceador)**: El Balanceador consulta sus fuentes de datos (SQL Server rpa360 y MySQL clouders) para determinar la cantidad de tickets pendientes por cada robot.
 4.  **Balanceo de Carga (Balanceador)**:
     * El Balanceador analiza la carga de trabajo y la disponibilidad de VMs.
-    * Decide si necesita asignar más VMs a ciertos robots o desasignar VMs de robots con poca o ninguna carga, respetando las reglas de enfriamiento y prioridad.
-    * Actualiza la tabla `dbo.Asignaciones` en la SAM DB para reflejar los cambios.
+    * Decide si necesita asignar más VMs a ciertos robots activos o desasignar VMs de robots con poca o ninguna carga, respetando las reglas de enfriamiento y prioridad.
+    * Actualiza la tabla `dbo.Asignaciones` en la SAM DB para reflejar los cambios (marcando las asignaciones como `AsignadoPor = 'Balanceador'`).
 5.  **Lanzamiento de Robots (Lanzador)**:
     * Periódicamente, el Lanzador consulta `dbo.ObtenerRobotsEjecutables` (que considera las asignaciones hechas por el Balanceador y otras programaciones) para obtener la lista de robots a ejecutar.
     * Si no está en período de pausa, lanza los robots de forma concurrente utilizando la API de AA360.
@@ -80,7 +81,7 @@ El servicio **Balanceador** se encarga de la gestión inteligente de la carga de
     * Alertas por email (`EmailAlertClient`) para eventos críticos y fallos.
 * **Procesamiento Concurrente**:
     * El Lanzador utiliza `concurrent.futures.ThreadPoolExecutor` para el despliegue paralelo de múltiples robots.
-    * El Balanceador también usa `ThreadPoolExecutor` para la obtención concurrente de la carga de trabajo de sus diferentes fuentes.
+    * El Balanceador también usa `concurrent.futures.ThreadPoolExecutor` para la obtención concurrente de la carga de trabajo de sus diferentes fuentes.
 * **Manejo de Callbacks y Conciliación de Estados (Lanzador)**:
     * El Servidor de Callbacks (`waitress` o `wsgiref.simple_server`) procesa actualizaciones de estado de AA360 en tiempo real.
     * El Conciliador asegura la consistencia de los estados de ejecución mediante polling periódico a la API de AA360, convirtiendo fechas UTC a la zona horaria local del servidor SAM con `pytz` y `dateutil`.
@@ -123,9 +124,9 @@ El script `SAM.sql` define la estructura de la base de datos utilizada por el si
 * `dbo.Equipos`: Información sobre las máquinas virtuales/dispositivos y sus usuarios A360 asociados (ID, nombre, `UserId` de A360, licencia, estado de actividad para SAM, si permite balanceo dinámico).
 * `dbo.Asignaciones`: Registra qué robots están asignados a qué equipos (ya sea por programación, manualmente o dinámicamente por el Balanceador).
 * `dbo.Ejecuciones`: Historial y estado actual de cada ejecución de robot lanzada por SAM (incluye `DeploymentId` de AA360, `RobotId`, `EquipoId`, `Estado`, `FechaInicio`, `FechaFin`, `CallbackInfo`).
-* `dbo.Programaciones`: (Si se utiliza extensivamente) Define horarios programados para la ejecución de robots. El SP `ObtenerRobotsEjecutables` ya considera esta tabla.
+* `dbo.Programaciones`: Define horarios programados para la ejecución de robots. El SP `ObtenerRobotsEjecutables` ya considera esta tabla.
 * `dbo.HistoricoBalanceo`: Log de las decisiones tomadas por el servicio Balanceador.
-* `dbo.ErrorLog`: Tabla para registrar errores dentro de Stored Procedures (si está implementado en los SPs).
+* `dbo.ErrorLog`: Tabla para registrar errores dentro de Stored Procedures.
 
 Consulte `SAM.sql` para la definición detallada de todas las tablas, vistas, funciones y Stored Procedures.
 
@@ -205,5 +206,3 @@ Configura NSSM para que los servicios se reinicien en caso de fallo y para un ci
 * **Permisos de Servicio (NSSM)**: La cuenta bajo la cual corren los servicios NSSM (usualmente "Local System") debe tener permisos para escribir en los directorios de logs y acceso a la red según sea necesario.
 * **Errores `INVALID_ARGUMENT` de AA360 (Lanzador)**: Suele indicar que un `UserId` usado para lanzar un bot está deshabilitado o no existe en A360. Verifica la sincronización de `dbo.Equipos` y la lógica de `dbo.ObtenerRobotsEjecutables`.
 * **Balanceador no asigna/desasigna VMs**: Revisa los logs del Balanceador para entender las decisiones del algoritmo de balanceo y el `CoolingManager`. Verifica la carga de trabajo detectada y la configuración de `MinEquipos`/`MaxEquipos`/`TicketsPorEquipoAdicional` para los robots.
-
----
