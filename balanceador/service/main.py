@@ -44,7 +44,7 @@ from balanceador.database.historico_client import HistoricoBalanceoClient
 
 # --- Configurar Logger para el Balanceador ---
 log_cfg_balanceador = ConfigManager.get_log_config()
-logger_name = "SAM.Balanceador.Core"
+logger_name = "SAM.Balanceador.Main"
 logger = setup_logging(
     log_config=log_cfg_balanceador,
     logger_name=logger_name,
@@ -115,7 +115,7 @@ class Balanceador:
         self._lock = RLock()
         
         # Registrar handlers de salida
-        atexit.register(self.finalizar_servicio)
+        atexit.register(self.cleanup_on_exit)
         
         # Configurar tarea programada
         self.configurar_tarea_programada()
