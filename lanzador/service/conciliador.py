@@ -8,22 +8,38 @@ from typing import Optional
 from dateutil import parser as dateutil_parser
 import pytz
 
-# --- Configuración de Path (si es necesario para utils y database) ---
+# --- Configuración de Path (si es necesario, aunque service/main ya debería haberlo hecho) ---
 from pathlib import Path
-import sys # Añadir si falta
-SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+import sys 
+SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent # Raíz de SAM
 if str(SAM_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(SAM_PROJECT_ROOT))
-                    
-from lanzador.clients.aa_client import AutomationAnywhereClient
-from lanzador.database.sql_client import DatabaseConnector
-from lanzador.utils.config import setup_logging
 
-logger = setup_logging()
+from lanzador.clients.aa_client import AutomationAnywhereClient
+# --- CAMBIAR ESTA LÍNEA ---
+# from lanzador.database.sql_client import DatabaseConnector # <-- LÍNEA ANTIGUA
+from common.database.sql_client import DatabaseConnector    # <-- LÍNEA NUEVA Y CORRECTA
+# --- FIN DEL CAMBIO ---
+
+# Si setup_logging se define en lanzador.utils.config y es el que quieres usar aquí:
+# from lanzador.utils.config import get_lanzador_logger # Asumiendo que tienes esta función
+# logger = get_lanzador_logger(__name__) # O un nombre específico como "SAMLanzador.Conciliador"
+
+# O si quieres usar el setup_logging común directamente (necesitarías ConfigManager común):
+from common.utils.logging_setup import setup_logging
+from common.utils.config_manager import ConfigManager
+log_cfg = ConfigManager.get_log_config()
+logger_name = "SAM.Lanzador.Conciliador"
+logger = setup_logging(
+    log_config=log_cfg, 
+    logger_name=logger_name, 
+    log_file_name_override=log_cfg.get("app_log_filename_lanzador")
+)
+
 
 
 class ConciliadorImplementaciones:
-    def __init__(self, db_connector: DatabaseConnector, aa_client: AutomationAnywhereClient): # Usar el nombre de clase correcto
+    def __init__(self, db_connector: DatabaseConnector, aa_client: AutomationAnywhereClient): 
         self.db_connector = db_connector
         self.aa_client = aa_client
         # Estados válidos que la API de A360 podría devolver para el conciliador.

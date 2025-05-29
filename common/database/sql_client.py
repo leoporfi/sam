@@ -1,30 +1,57 @@
-# SAM/Lanzador/database/sql_client.py
+# SAM/common/database/sql_client.py
+
 import time
 import pyodbc
 import logging
 import threading
 from contextlib import contextmanager
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import TYPE_CHECKING, List, Dict, Any, Optional
+import sys
+from pathlib import Path
 
-from lanzador.clients.aa_client import AutomationAnywhereClient
-from lanzador.utils.config import setup_logging, ConfigManager # Importar ConfigManager
+# --- Configuración de Path ---
+COMMON_UTILS_ROOT = Path(__file__).resolve().parent.parent / "utils"
+SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(COMMON_UTILS_ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(COMMON_UTILS_ROOT.parent))
+if str(SAM_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(SAM_PROJECT_ROOT))
 
-logger = setup_logging()
+try:
+    from common.utils.config_manager import ConfigManager
+    # from common.utils.logging_setup import setup_logging
+    # Asumiendo que AutomationAnywhereClient está en lanzador.clients y lo necesitas para type hints
+    if TYPE_CHECKING: # Para evitar dependencia circular, solo para type hints
+        from lanzador.clients.aa_client import AutomationAnywhereClient 
+except ImportError as e:
+    print(f"CRITICAL ERROR en SAM/common/database/sql_client.py: No se pudieron importar módulos: {e}", file=sys.stderr)
+    print(f"sys.path actual: {sys.path}", file=sys.stderr)
+    sys.exit(1)
+
+# Obtener un logger para este módulo. NO se configuran handlers aquí.
+# La configuración (handlers, level) será determinada por la aplicación principal
+# que utilice este módulo (Lanzador o Balanceador).
+logger = logging.getLogger(f"SAM.{Path(__file__).parent.name}.{Path(__file__).stem}")
+# Esto resultará en un logger llamado "SAM.database.sql_client" o similar si __file__.parent.name es "database"
+
 
 class DatabaseConnector:
-    def __init__(self, servidor: str, base_datos: str, usuario: str, contrasena: str, 
-                 timeout_conexion: Optional[int] = None): # timeout_conexion es ahora opcional aquí
+    def __init__(self, servidor: str, base_datos: str, usuario: str, contrasena: str,
+                 db_config_prefix: str = "SQL_SAM"): # db_config_prefix para leer reintentos, etc.
         
-        sql_cfg = ConfigManager.get_sql_server_config() # Cargar toda la config SQL
+        # Obtener la configuración SQL específica usando el prefijo.
+        # El ConfigManager centralizado ya debería tener un método para esto.
+        # Si get_sql_server_config toma un prefijo, es perfecto.
+        sql_cfg = ConfigManager.get_sql_server_config(db_config_prefix)
 
         self.servidor = servidor
         self.base_datos = base_datos
         self.usuario = usuario
         self.contrasena = contrasena
         
-        self.timeout_conexion_inicial = timeout_conexion if timeout_conexion is not None else sql_cfg.get("timeout_conexion_inicial", 30)
-        
+        self.timeout_conexion_inicial = sql_cfg.get("timeout_conexion_inicial", 30)
+        self.driver = sql_cfg.get("driver", "{ODBC Driver 17 for SQL Server}") # Obtener y guardar driver aquí
         # Parámetros de reintento para queries
         self.max_reintentos_query = sql_cfg.get("max_reintentos_query", 3)
         self.delay_reintento_query_base_seg = sql_cfg.get("delay_reintento_query_base_seg", 2)
@@ -51,11 +78,9 @@ class DatabaseConnector:
             except pyodbc.Error as e_close:
                 logger.warning(f"Hilo {threading.get_ident()}: Error menor al cerrar conexión previa: {e_close}")
         
-        sql_cfg_local = ConfigManager.get_sql_server_config() # Para el driver
-        driver = sql_cfg_local.get("driver", "{ODBC Driver 17 for SQL Server}")
         
         connection_string = (
-            f"Driver={driver};"
+            f"Driver={self.driver};"
             f"Server={self.servidor};"
             f"Database={self.base_datos};"
             f"UID={self.usuario};"
@@ -413,7 +438,7 @@ class DatabaseConnector:
             logger.error(f"Error al insertar ejecución para DeploymentId {id_despliegue}: {e}", exc_info=True)
             # Considera si relanzar la excepción
 
-    def lanzar_robots(self, robots_a_ejecutar: List[Dict[str, Any]], aa_client: AutomationAnywhereClient, botInput_plantilla: Optional[dict] = None) -> List[Dict[str, Any]]:
+    def lanzar_robots(self, robots_a_ejecutar: List[Dict[str, Any]], aa_client: 'AutomationAnywhereClient', botInput_plantilla: Optional[dict] = None) -> List[Dict[str, Any]]:
         robots_fallidos_detalle = []
         for robot_info in robots_a_ejecutar:
             db_robot_id = robot_info.get("RobotId")
@@ -431,15 +456,17 @@ class DatabaseConnector:
             a360_deployment_id = None
             error_lanzamiento = None
             try:
-                a360_deployment_id = aa_client.desplegar_bot(
-                    file_id=db_robot_id, run_as_user_ids=[a360_user_id], bot_input=botInput_plantilla)
+                resultado_despliegue = aa_client.desplegar_bot(file_id=db_robot_id, run_as_user_ids=[a360_user_id], bot_input=botInput_plantilla)
+                a360_deployment_id = resultado_despliegue.get("deploymentId") # Asumiendo que desplegar_bot devuelve dict
+                error_lanzamiento = resultado_despliegue.get("error")
+
                 if a360_deployment_id:
                     self.insertar_registro_ejecucion(
                         a360_deployment_id, db_robot_id, db_equipo_id, a360_user_id, 
-                        hora_programada_obj, "RUNNING") # "PENDING_EXECUTION")
+                        hora_programada_obj, "LAUNCHED") # Cambiado a LAUNCHED
                 else:
-                    error_lanzamiento = "Fallo en API de despliegue (no se obtuvo DeploymentId)."
-                    logger.warning(f"{error_lanzamiento} para RobotID(SAM):{db_robot_id}, UserID(A360):{a360_user_id}.")
+                    # error_lanzamiento ya fue asignado desde resultado_despliegue.get("error")
+                    logger.warning(f"Fallo en API de despliegue para RobotID(SAM):{db_robot_id}, UserID(A360):{a360_user_id}. Error: {error_lanzamiento}")
             except Exception as e:
                 error_lanzamiento = str(e)
                 logger.error(f"Excepción al procesar/lanzar RobotID(SAM):{db_robot_id}, UserID(A360):{a360_user_id}: {e}", exc_info=True)
