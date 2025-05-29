@@ -7,40 +7,63 @@ import atexit
 import signal
 import logging
 import threading
-from threading import RLock # RLock para locks reentrantes si es necesario
-from pathlib import Path
 import concurrent.futures
-from datetime import datetime, time as dt_time # dt_time para objetos time
-
-import schedule # <--- IMPORTACIÓN DE SCHEDULE
+import traceback
+import schedule
+from threading import RLock # RLock para locks reentrantes si es necesario
+from datetime import datetime, time as dt_time
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 # --- Configuración de Path ---
-SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(SAM_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(SAM_PROJECT_ROOT))
+LANZADOR_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(LANZADOR_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(LANZADOR_PROJECT_ROOT))
 
-from lanzador.database.sql_client import DatabaseConnector
-from lanzador.clients.aa_client import AutomationAnywhereClient # O el nombre de clase que estés usando
-from lanzador.utils.mail_client import EmailAlertClient
-from lanzador.utils.config import setup_logging, ConfigManager
+# --- Carga de .env específica del Lanzador ---
+from dotenv import load_dotenv
+env_path_lanzador = LANZADOR_PROJECT_ROOT / "lanzador" / '.env'
+if os.path.exists(env_path_lanzador):
+    load_dotenv(dotenv_path=env_path_lanzador)
+else: # O carga un .env general del proyecto SAM si existe
+    env_path_sam_root = LANZADOR_PROJECT_ROOT / '.env'
+    if os.path.exists(env_path_sam_root):
+        load_dotenv(dotenv_path=env_path_sam_root)
+    else:
+        load_dotenv()
+
+# --- Importaciones de Módulos Comunes y Específicos ---
+from common.utils.config_manager import ConfigManager
+from common.utils.logging_setup import setup_logging
+from common.database.sql_client import DatabaseConnector
+from common.utils.mail_client import EmailAlertClient
+
+from lanzador.clients.aa_client import AutomationAnywhereClient 
 from lanzador.service.conciliador import ConciliadorImplementaciones
-from typing import List, Dict, Any, Optional # Para type hints
 
-logger = setup_logging()
+# Configurar el logger principal para este módulo (service.main)
+log_cfg_main = ConfigManager.get_log_config()
+logger_name = "SAM.Lanzador.Core"
+logger = setup_logging(
+    log_config=log_cfg_main, 
+    logger_name=logger_name,
+    log_file_name_override=log_cfg_main.get("app_log_filename_lanzador")
+)
+
 
 class LanzadorRobots:
     def __init__(self):
-        self.config_lanzador = ConfigManager.get_lanzador_config()
+        self.cfg_lanzador = ConfigManager.get_lanzador_config()
         
         # Leer intervalos para schedule (en segundos)
-        self.intervalo_lanzador_seg = self.config_lanzador.get("intervalo_lanzador_seg", 30)
-        self.intervalo_conciliador_seg = self.config_lanzador.get("intervalo_conciliador_seg", 180)
-        self.intervalo_sync_tablas_seg = self.config_lanzador.get("intervalo_sync_tablas_seg", 3600)
+        self.intervalo_lanzador_seg = self.cfg_lanzador.get("intervalo_lanzador_seg", 30)
+        self.intervalo_conciliador_seg = self.cfg_lanzador.get("intervalo_conciliador_seg", 180)
+        self.intervalo_sync_tablas_seg = self.cfg_lanzador.get("intervalo_sync_tablas_seg", 3600)
 
         # Configuración de pausa
         try:
-            self.pausa_inicio_str = self.config_lanzador.get("pausa_lanzamiento_inicio_hhmm", "23:00")
-            self.pausa_fin_str = self.config_lanzador.get("pausa_lanzamiento_fin_hhmm", "05:00")
+            self.pausa_inicio_str = self.cfg_lanzador.get("pausa_lanzamiento_inicio_hhmm", "23:00")
+            self.pausa_fin_str = self.cfg_lanzador.get("pausa_lanzamiento_fin_hhmm", "05:00")
             self.pausa_lanzamiento_inicio = dt_time.fromisoformat(self.pausa_inicio_str)
             self.pausa_lanzamiento_fin = dt_time.fromisoformat(self.pausa_fin_str)
             self.pausa_activa_actualmente = False 
@@ -55,19 +78,20 @@ class LanzadorRobots:
         self.shutdown_event = threading.Event() # Evento para señalar al bucle principal que termine
 
         # --- Inicialización de Clientes ---
-        sql_cfg = ConfigManager.get_sql_server_config()
-        db_name_lanzador = sql_cfg.get("database_sam", sql_cfg.get("database"))
+        # SQL_SAM_CONFIG se usa para la BD principal del Lanzador
+        cfg_sql_sam_lanzador = ConfigManager.get_sql_server_config("SQL_SAM") 
+        db_name_lanzador = cfg_sql_sam_lanzador.get("database") # La clave es "database" en get_sql_server_config
+
         if not db_name_lanzador:
             crit_msg = "Nombre de base de datos para SAM-Lanzador no encontrado en configuración."
             logger.critical(crit_msg)
             raise ValueError(crit_msg)
 
         self.db_connector = DatabaseConnector(
-            servidor=sql_cfg["server"],
+            servidor=cfg_sql_sam_lanzador["server"],
             base_datos=db_name_lanzador,
-            usuario=sql_cfg["uid"],
-            contrasena=sql_cfg["pwd"],
-            timeout_conexion=sql_cfg.get("timeout_conexion_inicial", 30)
+            usuario=cfg_sql_sam_lanzador["uid"],
+            contrasena=cfg_sql_sam_lanzador["pwd"]
         )
 
         aa_cfg = ConfigManager.get_aa_config()
@@ -77,10 +101,10 @@ class LanzadorRobots:
             password=aa_cfg["pwd"],
             api_key=aa_cfg.get("apiKey"),
             callback_url_for_deploy=aa_cfg.get("url_callback"),
-            api_timeout_seconds=self.config_lanzador.get("api_timeout_seconds", 60),
-            token_refresh_buffer_sec=self.config_lanzador.get("token_ttl_refresh_buffer_sec", 1140),
-            default_page_size=self.config_lanzador.get("api_default_page_size", 100),
-            max_pagination_pages=self.config_lanzador.get("api_max_pagination_pages", 1000),
+            api_timeout_seconds=self.cfg_lanzador.get("api_timeout_seconds", 60),
+            token_refresh_buffer_sec=self.cfg_lanzador.get("token_ttl_refresh_buffer_sec", 1140),
+            default_page_size=self.cfg_lanzador.get("api_default_page_size", 100),
+            max_pagination_pages=self.cfg_lanzador.get("api_max_pagination_pages", 1000),
             logger_instance=logger
         )
 
@@ -192,10 +216,10 @@ class LanzadorRobots:
             logger.error(f"LanzadorRobots: Error al obtener robots ejecutables de la BD: {e_db_get}", exc_info=True)
             return
 
-        bot_input_plantilla = {"in_NumRepeticion": {"type": "NUMBER", "number": self.config_lanzador.get("vueltas", 5)}}
+        bot_input_plantilla = {"in_NumRepeticion": {"type": "NUMBER", "number": self.cfg_lanzador.get("vueltas", 5)}}
         robots_fallidos_para_notificar = []
         robots_para_reintentar_lista = []
-        max_workers = self.config_lanzador.get("max_lanzamientos_concurrentes", 5)
+        max_workers = self.cfg_lanzador.get("max_lanzamientos_concurrentes", 5)
 
         if robots_para_lanzar_inicialmente_tuplas and not self._is_shutting_down:
             logger.info(f"LanzadorRobots: Iniciando primer intento de lanzamiento para {len(robots_para_lanzar_inicialmente_tuplas)} robots usando {max_workers} hilos.")
@@ -207,7 +231,12 @@ class LanzadorRobots:
                 for futuro in concurrent.futures.as_completed(mapa_futuro_a_robot):
                     if self._is_shutting_down: break
                     robot_info_original = mapa_futuro_a_robot[futuro]
-                    db_robot_id, db_equipo_id, a360_user_id, _ = robot_info_original
+                    # db_robot_id, db_equipo_id, a360_user_id, _ = robot_info_original # Para logs/notificaciones
+                    # Usar .get() para evitar errores si la tupla no tiene 4 elementos por alguna razón inesperada
+                    db_robot_id = robot_info_original[0] if len(robot_info_original) > 0 else None
+                    db_equipo_id = robot_info_original[1] if len(robot_info_original) > 1 else None
+                    a360_user_id = robot_info_original[2] if len(robot_info_original) > 2 else None
+
                     try:
                         resultado = futuro.result()
                         if resultado["status"] == "success":
@@ -222,7 +251,7 @@ class LanzadorRobots:
             logger.info("LanzadorRobots: Finalizado primer intento de lanzamientos concurrentes.")
 
         if not self._is_shutting_down and robots_para_reintentar_lista:
-            delay_reintento = self.config_lanzador.get("reintento_lanzamiento_delay_seg", 10)
+            delay_reintento = self.cfg_lanzador.get("reintento_lanzamiento_delay_seg", 10)
             logger.info(f"LanzadorRobots: {len(robots_para_reintentar_lista)} robots para reintentar. Esperando {delay_reintento} segundos...")
             if self.shutdown_event.wait(timeout=delay_reintento): # Espera interrumpible
                  logger.info("Cierre solicitado durante espera para reintentos. No se realizarán.")
@@ -295,6 +324,7 @@ class LanzadorRobots:
                         "EquipoId": device.get("EquipoId"), "Equipo": device.get("Equipo"),
                         "UserId": a360_user_id_en_device, "UserName": device.get("UserName"),
                         "Licencia": licencia_final, "Activo_SAM": activo_calculado })
+                        
             if equipos_procesados_para_merge: self.db_connector.merge_equipos(equipos_procesados_para_merge)
             else: logger.info("Sincro Equipos: No se obtuvieron devices o usuarios válidos de la API para fusionar.")
 

@@ -1,7 +1,8 @@
 # SAM/Lanzador/service/callback_server.py
 import json
 import logging
-from logging.handlers import TimedRotatingFileHandler # Para el logger dedicado
+# Para el logger dedicado
+from common.utils.logging_setup import RobustTimedRotatingFileHandler
 import os
 import socket # Para autodetección de IP y validación de host
 import signal
@@ -15,9 +16,18 @@ SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(SAM_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(SAM_PROJECT_ROOT))
 
-from lanzador.utils.config import ConfigManager # Solo para leer la config de BD y del propio callback server
-from lanzador.database.sql_client import DatabaseConnector
+from common.utils.config_manager import ConfigManager # Solo para leer la config de BD y del propio callback server
+from common.database.sql_client import DatabaseConnector
 from typing import Optional, List, Dict, Any # Para type hints
+
+# from lanzador.utils.config import ConfigManager # Ya lo tienes
+# from common.utils.logging_setup import setup_logging # Si lo moviste a common
+
+# log_cfg = ConfigManager.get_log_config()
+# logger = setup_logging(log_config=log_cfg, logger_name="SAMCallbackServer", log_file_name_override=log_cfg["callback_log_filename"])
+# ...
+# sql_sam_config = ConfigManager.get_sql_server_config("SQL_SAM")
+# cb_server_config = ConfigManager.get_callback_server_config()
 
 # --- CONFIGURACIÓN DE LOGGING ESPECÍFICA PARA EL CALLBACK SERVER ---
 def setup_callback_logging(
@@ -30,7 +40,7 @@ def setup_callback_logging(
     ) -> logging.Logger:
     """Configura un logger dedicado para el callback_server."""
     
-    logger_name = "SAMCallbackServer"
+    logger_name = "SAM.Callback.Server"
     cb_logger = logging.getLogger(logger_name)
     
     # Evitar añadir handlers múltiples si el logger ya está configurado (ej. si se llama múltiples veces)
@@ -62,12 +72,14 @@ def setup_callback_logging(
     # Añadir handlers solo si no los tiene (o si se limpiaron arriba)
     if not cb_logger.handlers:
         try:
-            file_handler = TimedRotatingFileHandler(
+            file_handler = RobustTimedRotatingFileHandler(
                 log_file_path, 
                 when="midnight", 
                 interval=1, 
                 backupCount=backup_count,
-                encoding="utf-8"
+                encoding="utf-8",
+                max_retries=3,
+                retry_delay=0.5
             )
             formatter = logging.Formatter(fmt=log_format, datefmt=date_fmt)
             file_handler.setFormatter(formatter)
@@ -129,8 +141,7 @@ def initialize_db_connector():
                 servidor=sql_cfg["server"],
                 base_datos=db_name_sam,
                 usuario=sql_cfg["uid"],
-                contrasena=sql_cfg["pwd"],
-                timeout_conexion=timeout_cb_db_conn 
+                contrasena=sql_cfg["pwd"]
             )
             logger.info("DatabaseConnector (re)inicializado exitosamente para Callback Server.")
         except Exception as e:
