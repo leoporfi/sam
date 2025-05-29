@@ -6,7 +6,6 @@ import threading
 import time # Necesario para el sleep opcional en paginación
 import re
 
-
 from typing import Dict, Optional, List, Any
 from datetime import datetime, timedelta
 
@@ -49,13 +48,13 @@ class AutomationAnywhereClient: # Nombre original de tu clase en SAM
     _FIELD_ID = "id"
 
     def __init__(self, control_room_url: str, username: str, password: str,
-                 api_key: Optional[str] = None,
-                 callback_url_for_deploy: Optional[str] = None,
-                 api_timeout_seconds: int = 60,
-                 token_refresh_buffer_sec: int = 1140,
-                 default_page_size: int = 100,
-                 max_pagination_pages: int = 1000, # Salvaguarda para paginación
-                 logger_instance: Optional[logging.Logger] = None):
+                api_key: Optional[str] = None,
+                callback_url_for_deploy: Optional[str] = None,
+                api_timeout_seconds: int = 60,
+                token_refresh_buffer_sec: int = 1140,
+                default_page_size: int = 100,
+                max_pagination_pages: int = 1000, # Salvaguarda para paginación
+                logger_instance: Optional[logging.Logger] = None):
 
         if logger_instance:
             global logger # Usa el logger pasado por la aplicación
@@ -296,30 +295,29 @@ class AutomationAnywhereClient: # Nombre original de tu clase en SAM
             "runAsUserIds": run_as_user_ids,
         }
         if self.callback_url_for_deploy:
-             payload["callbackInfo"] = {"url": self.callback_url_for_deploy}
+            payload["callbackInfo"] = {"url": self.callback_url_for_deploy}
         if bot_input and isinstance(bot_input, dict):
             payload["botInput"] = bot_input
-        
+            
+        logger.debug(f"Preparando despliegue de bot con payload: {payload}")
         resultado = {"deploymentId": None, "error": None, "is_retriable": False, "status_code": None}
-
+        
         try:
             datos_respuesta = self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V3, json_payload=payload)
             deployment_id = datos_respuesta.get("deploymentId")
-            
-            if deployment_id:
-                logger.info(f"Bot (FileID: {file_id}) desplegado exitosamente. DeploymentId: {deployment_id}")
-                resultado["deploymentId"] = deployment_id
-            else:
-                 resultado["error"] = f"API de despliegue no devolvió deploymentId. Payload: {payload}, Respuesta: {str(datos_respuesta)[:500]}"
-                 logger.warning(resultado["error"])
-            # logger.info(f"payload: {payload}")
-            return resultado # Devuelve el diccionario incluso si no hay deploymentId
-            
+            if not deployment_id:
+                logger.warning(f"API de despliegue no devolvió deploymentId. Payload: {payload}, Respuesta: {str(datos_respuesta)[:500]}")
+                resultado["error"] = "No se obtuvo deploymentId"
+                return resultado
+            logger.info(f"Bot (FileID: {file_id}) desplegado exitosamente. DeploymentId: {deployment_id}")
+            resultado["deploymentId"] = deployment_id
+            return resultado
         except Exception as e:
-            logger.error(f"Fallo en el intento de desplegar bot (FileID: {file_id}, Usuarios: {run_as_user_ids}). Error: {e}")
+            logger.error(f"Fallo en el intento de desplegar bot (FileID: {file_id}, Usuarios: {run_as_user_ids}). Error: {e}", exc_info=True)
             resultado["error"] = str(e)
-            # Determinar si el error es reintentable basado en el mensaje o tipo de excepción
-            # Esto es una heurística; idealmente la API devolvería códigos de error específicos para esto.
+            # Intentar obtener el status_code si la excepción es de requests
+            if hasattr(e, 'response') and e.response is not None:
+                resultado["status_code"] = e.response.status_code
             error_lower = str(e).lower()
             # Errores comunes de A360 que podrían ser reintentables (ej. device ocupado, problema temporal de licencia)
             # El error "INVALID_ARGUMENT: Some or all users provided are either deleted or disabled" NO es reintentable.
@@ -330,15 +328,9 @@ class AutomationAnywhereClient: # Nombre original de tu clase en SAM
                "412 client error" in error_lower or \
                isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)): # Errores de red son reintentables
                 resultado["is_retriable"] = True
-            
-            # Intentar obtener el status_code si la excepción es de requests
-            if hasattr(e, 'response') and e.response is not None:
-                resultado["status_code"] = e.response.status_code
-            
+            logger.debug(f"Resultado completo del despliegue: {resultado}")
             return resultado
-        
-
-        
+                
     def desplegar_bot_old(self, file_id: int, run_as_user_ids: List[int], bot_input: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """Despliega un bot y devuelve el deploymentId."""
         payload = {
@@ -354,8 +346,8 @@ class AutomationAnywhereClient: # Nombre original de tu clase en SAM
             datos_respuesta = self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V3, json_payload=payload)
             deployment_id = datos_respuesta.get("deploymentId")
             if not deployment_id:
-                 logger.warning(f"API de despliegue no devolvió deploymentId. Payload: {payload}, Respuesta: {str(datos_respuesta)[:500]}")
-                 return None
+                logger.warning(f"API de despliegue no devolvió deploymentId. Payload: {payload}, Respuesta: {str(datos_respuesta)[:500]}")
+                return None
             logger.info(f"Bot (FileID: {file_id}) desplegado exitosamente. DeploymentId: {deployment_id}")
             return deployment_id
         except Exception as e:
@@ -493,11 +485,10 @@ class AutomationAnywhereClient: # Nombre original de tu clase en SAM
             })
         return usuarios_mapeados
 
-
     def obtener_robots(self, 
-                                filtro_path_base: str = "RPA", # Filtro para path que contenga "RPA"
-                                filtro_nombre_prefijo: str = "P" # Filtro para nombre que empiece con "P"
-                               ) -> List[Dict[str, Any]]:
+                            filtro_path_base: str = "RPA", # Filtro para path que contenga "RPA"
+                            filtro_nombre_prefijo: str = "P" # Filtro para nombre que empiece con "P"
+                            ) -> List[Dict[str, Any]]:
         """
         Obtiene la lista de robots (taskbots) de A360, con paginación y filtros específicos.
         Mapea campos para la tabla dbo.Robots de SAM.
