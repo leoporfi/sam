@@ -216,7 +216,7 @@ class LanzadorRobots:
             logger.error(f"LanzadorRobots: Error al obtener robots ejecutables de la BD: {e_db_get}", exc_info=True)
             return
 
-        bot_input_plantilla = {"in_NumRepeticion": {"type": "NUMBER", "number": self.cfg_lanzador.get("vueltas", 5)}}
+        bot_input_plantilla = {"in_NumRepeticion": {"type": "NUMBER", "number": self.cfg_lanzador.get("bot_input_vueltas", 5)}}
         robots_fallidos_para_notificar = []
         robots_para_reintentar_lista = []
         max_workers = self.cfg_lanzador.get("max_lanzamientos_concurrentes", 5)
