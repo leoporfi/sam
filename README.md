@@ -4,7 +4,7 @@
 
 **SAM (Sistema Automático de Robots)** es un proyecto integral diseñado para la **implementación, distribución y orquestación automática de robots RPA (Robotic Process Automation) en máquinas virtuales (VMs)**. El sistema se compone de dos servicios principales que operan en conjunto: el **Lanzador** y el **Balanceador**, ambos pensados para ejecutarse como servicios continuos (por ejemplo, mediante NSSM en Windows).
 
-SAM centraliza la gestión de robots, sincroniza información con **Automation Anywhere A360 (AA360)**, lanza ejecuciones de robots según la demanda y optimiza la asignación de recursos (VMs) basándose en la carga de trabajo pendiente.
+SAM centraliza la gestión de robots, sincroniza información con **Automation Anywhere A360 (AA360)**, lanza ejecuciones de robots según la demanda y optimiza la asignación de recursos (VMs) basándose en la carga de trabajo pendiente y una lógica de balanceo avanzada.
 
 ---
 ## 🚀 Servicios Principales
@@ -30,11 +30,22 @@ El servicio **Balanceador** se encarga de la gestión inteligente de la carga de
 * **Adquisición de Carga de Trabajo**: Determina la cantidad de "tickets" o tareas pendientes para cada robot. Esta información se obtiene de **dos fuentes de datos distintas** de forma concurrente:
     * Una base de datos **SQL Server (rpa360)**, a través del Stored Procedure `dbo.usp_obtener_tickets_pendientes_por_robot`.
     * Una base de datos **MySQL (clouders)**, accediendo a través de un túnel SSH y consultando las tablas `task_task` y `task_robot`. Utiliza un mapeo (`MAPA_ROBOTS` en la configuración) para conciliar los nombres de los robots de Clouders con los nombres en SAM.
-* **Asignación Dinámica de VMs**: Basándose en la carga de trabajo detectada y la configuración de cada robot **activo y online** (`Activo = 1 AND EsOnline = 1` en `dbo.Robots`), y considerando parámetros como `MinEquipos`, `MaxEquipos`, `TicketsPorEquipoAdicional`, asigna o desasigna dinámicamente equipos (VMs) a los robots.
-* **Lógica de Balanceo Avanzada**:
-    * Utiliza un **algoritmo de prioridades** (`PrioridadBalanceo` en `dbo.Robots`) para la asignación de VMs cuando los recursos son escasos.
-    * Implementa un **mecanismo de enfriamiento (`CoolingManager`)** para prevenir el "thrashing" (asignaciones y desasignaciones demasiado frecuentes de VMs para un mismo robot).
+* **Lógica de Balanceo Avanzada y Multifásica**:
+    * **Fase 0: Limpieza de Asignaciones a Robots Inactivos/Offline:**
+        * Antes de cualquier asignación o desasignación basada en carga, el sistema verifica si los robots que actualmente tienen equipos asignados dinámicamente siguen siendo candidatos para el balanceo (es decir, si son `Activo = 1 Y EsOnline = 1` en `dbo.Robots`).
+        * Si un robot ya no es candidato, se intentan desasignar todos sus equipos dinámicos, respetando el `CoolingManager` y registrando la acción. Esto libera equipos para el pool general.
+    * **Fase 1: Satisfacción de Mínimos (con Reasignación si es necesario):**
+        * Se prioriza asegurar que los robots candidatos (`Activo = 1 Y EsOnline = 1`) con carga de trabajo alcancen su `MinEquipos` funcional (mínimo 1 equipo si hay tickets).
+        * Los robots se ordenan por `PrioridadBalanceo` y luego por la cantidad de equipos que les faltan para su mínimo.
+        * Se intenta asignar equipos del pool libre. Si el pool está vacío y un robot aún necesita equipos para su mínimo:
+            * Se busca un robot "donante" que tenga equipos por encima de su propio mínimo y cuya `PrioridadBalanceo` sea inferior (mayor valor numérico) o, en caso de empate, que tenga más equipos por encima de su mínimo.
+            * Si se encuentra un donante y el `CoolingManager` lo permite para ambas partes (donante y receptor), se reasigna un equipo.
+    * **Fase 2: Desasignación de Excedentes Reales (Post-Mínimos):**
+        * Se evalúan los robots candidatos. Si un robot tiene más equipos asignados dinámicamente que su necesidad total calculada por la carga de tickets (sin bajar de su `MinEquipos` funcional si aún tiene tickets), el excedente se desasigna y devuelve al pool (respetando `CoolingManager`).
+    * **Fase 3: Asignación de Demanda Adicional (con Pool Libre Restante):**
+        * Los equipos que queden libres después de las fases anteriores se distribuyen entre los robots candidatos que aún pueden utilizar más recursos para su carga de trabajo (hasta su necesidad total calculada o `MaxEquipos`), ordenados por `PrioridadBalanceo` y luego por la magnitud de la necesidad restante.
 * **Gestión del Pool de VMs**: Identifica las VMs disponibles para asignación dinámica desde la tabla `dbo.Equipos` de la SAM DB, considerando su licencia (`ATTENDEDRUNTIME`), estado de actividad SAM y si permiten balanceo dinámico, además de no estar ya asignadas de forma fija (reservada o programada).
+* **Mecanismo de Enfriamiento (`CoolingManager`)**: Previene el "thrashing" (asignaciones y desasignaciones demasiado frecuentes para un mismo robot).
 * **Registro Histórico**: Todas las decisiones de asignación y desasignación tomadas por el Balanceador se registran en la tabla `dbo.HistoricoBalanceo` para auditoría y análisis.
 
 ---
@@ -44,9 +55,11 @@ El servicio **Balanceador** se encarga de la gestión inteligente de la carga de
 2.  **Sincronización (Lanzador)**: Periódicamente, el Lanzador consulta la API de AA360 para obtener la lista de robots y equipos (devices/usuarios). Actualiza las tablas `dbo.Robots` y `dbo.Equipos` en la SAM DB.
 3.  **Detección de Carga (Balanceador)**: El Balanceador consulta sus fuentes de datos (SQL Server rpa360 y MySQL clouders) para determinar la cantidad de tickets pendientes por cada robot.
 4.  **Balanceo de Carga (Balanceador)**:
-    * El Balanceador analiza la carga de trabajo y la disponibilidad de VMs para los robots que son `Activo = 1` y `EsOnline = 1`.
-    * Decide si necesita asignar más VMs a ciertos robots o desasignar VMs de robots con poca o ninguna carga, respetando las reglas de enfriamiento y prioridad.
-    * Actualiza la tabla `dbo.Asignaciones` en la SAM DB para reflejar los cambios (marcando las asignaciones como `AsignadoPor = 'Balanceador'`).
+    * **Fase 0 (Limpieza):** Libera equipos de robots con asignaciones dinámicas que se hayan vuelto `Activo=0` o `EsOnline=0`.
+    * **Fase 1 (Mínimos):** Asigna equipos para cubrir los `MinEquipos` de los robots elegibles (`Activo=1, EsOnline=1`) con carga, reasignando desde otros robots (donantes) si el pool libre es insuficiente y se cumplen las condiciones de donación y enfriamiento.
+    * **Fase 2 (Desasignación Excedentes):** Libera equipos de robots que tengan más de lo necesario para su carga total, sin bajar de su mínimo funcional.
+    * **Fase 3 (Asignación Adicional):** Distribuye los equipos restantes del pool a robots que aún pueden procesar más carga, según prioridad y necesidad.
+    * Todas las acciones actualizan `dbo.Asignaciones` y se registran en `dbo.HistoricoBalanceo`.
 5.  **Lanzamiento de Robots (Lanzador)**:
     * Periódicamente, el Lanzador consulta `dbo.ObtenerRobotsEjecutables` (que considera las asignaciones hechas por el Balanceador y otras programaciones, incluyendo robots `EsOnline` para ejecuciones no programadas) para obtener la lista de robots a ejecutar.
     * Si no está en período de pausa, lanza los robots de forma concurrente utilizando la API de AA360.
@@ -71,8 +84,7 @@ El servicio **Balanceador** se encarga de la gestión inteligente de la carga de
 * **Adquisición de Carga de Trabajo Multi-fuente (Balanceador)**:
     * Capacidad de conectarse a SQL Server y MySQL (vía túnel SSH con `paramiko`) para obtener datos de tickets.
 * **Algoritmo de Balanceo Dinámico (Balanceador)**:
-    * Toma decisiones basadas en la carga actual, configuración de robots (`MinEquipos`, `MaxEquipos`, `TicketsPorEquipoAdicional`, `PrioridadBalanceo`), y disponibilidad de VMs.
-    * Protección contra thrashing mediante `CoolingManager`.
+    * Implementa una lógica multifásica que incluye limpieza de asignaciones obsoletas, satisfacción de mínimos (con posible reasignación entre robots), desasignación de excedentes y asignación de demanda adicional, todo gobernado por prioridades y un `CoolingManager`.
 * **Gestión Centralizada de Configuración**:
     * Todas las configuraciones (credenciales, URLs, parámetros de API, intervalos, etc.) se gestionan a través de archivos `.env` y la clase `ConfigManager`.
 * **Logging y Notificaciones**:
@@ -85,7 +97,7 @@ El servicio **Balanceador** se encarga de la gestión inteligente de la carga de
     * El Servidor de Callbacks (`waitress` o `wsgiref.simple_server`) procesa actualizaciones de estado de AA360 en tiempo real.
     * El Conciliador asegura la consistencia de los estados de ejecución mediante polling periódico a la API de AA360, convirtiendo fechas UTC a la zona horaria local del servidor SAM con `pytz` y `dateutil`.
 * **Programación de Tareas con `schedule`**:
-    * Ambos servicios utilizan la biblioteca `schedule` para la gestión flexible de la ejecución periódica de sus ciclos principales (lanzamiento, conciliación, sincronización para el Lanzador; ciclo de balanceo para el Balanceador).
+    * Ambos servicios utilizan la biblioteca `schedule` para la gestión flexible de la ejecución periódica de sus ciclos principales.
 * **Cierre Controlado (Graceful Shutdown)**:
     * Ambos servicios manejan señales del sistema (`SIGINT`, `SIGTERM`) para finalizar tareas pendientes, limpiar jobs de `schedule` y cerrar conexiones de forma segura antes de detenerse.
 
@@ -125,7 +137,7 @@ El script `SAM.sql` define la estructura de la base de datos utilizada por el si
 * `dbo.Ejecuciones`: Historial y estado actual de cada ejecución de robot lanzada por SAM (incluye `DeploymentId` de AA360, `RobotId`, `EquipoId`, `Estado`, `FechaInicio`, `FechaFin`, `CallbackInfo`).
 * `dbo.Programaciones`: Define horarios programados para la ejecución de robots. El SP `ObtenerRobotsEjecutables` considera esta tabla para lanzamientos programados.
 * `dbo.HistoricoBalanceo`: Log de las decisiones tomadas por el servicio Balanceador (robot, tickets, equipos antes/después, acción, justificación).
-* `dbo.ErrorLog`: Tabla para registrar errores dentro de Stored Procedures (si está implementado en los SPs).
+* `dbo.ErrorLog`: Tabla para registrar errores dentro de Stored Procedures.
 
 Consulte `SAM.sql` para la definición detallada de todas las tablas, vistas, funciones y Stored Procedures.
 
