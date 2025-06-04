@@ -43,7 +43,7 @@ from lanzador.service.conciliador import ConciliadorImplementaciones
 
 # Configurar el logger principal para este módulo (service.main)
 log_cfg_main = ConfigManager.get_log_config()
-logger_name = __name__
+logger_name = "lanzador.service.main"
 logger = setup_logging(
     log_config=log_cfg_main, 
     logger_name=logger_name,

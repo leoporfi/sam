@@ -44,7 +44,7 @@ from balanceador.database.historico_client import HistoricoBalanceoClient
 
 # --- Configurar Logger para el Balanceador ---
 log_cfg_balanceador = ConfigManager.get_log_config()
-logger_name = "SAM.Balanceador.Main"
+logger_name = "balanceador.service.main"  # Nombre del logger para este módulo
 logger = setup_logging(
     log_config=log_cfg_balanceador,
     logger_name=logger_name,
