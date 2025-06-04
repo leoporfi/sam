@@ -40,15 +40,11 @@ def setup_callback_logging(
     ) -> logging.Logger:
     """Configura un logger dedicado para el callback_server."""
     
-    logger_name = "SAM.Callback.Server"
+    logger_name = __name__
     cb_logger = logging.getLogger(logger_name)
     
-    # Evitar añadir handlers múltiples si el logger ya está configurado (ej. si se llama múltiples veces)
     if cb_logger.hasHandlers():
-        # Podríamos optar por limpiar handlers existentes: cb_logger.handlers.clear()
-        # o simplemente no añadir más si ya los tiene.
-        # Por ahora, si ya tiene, asumimos que está bien o que fue configurado por el mismo código.
-        # Si queremos asegurar una reconfiguración, limpiar primero:
+        # Podríamos optar por limpiar handlers existentes: 
         # cb_logger.handlers.clear()
         pass # No añadir handlers duplicados
 
@@ -60,16 +56,11 @@ def setup_callback_logging(
     try:
         os.makedirs(callback_log_dir, exist_ok=True)
     except OSError as e_os:
-        # Si no podemos crear el directorio de logs, es un problema serio.
-        # Imprimir en consola y re-levantar o salir.
         print(f"Error CRÍTICO: No se pudo crear el directorio de logs '{callback_log_dir}': {e_os}", file=sys.stderr)
         # Podríamos usar un handler de consola como fallback aquí o simplemente fallar.
-        # Por ahora, si esto falla, el logging a archivo no funcionará.
-        # Considerar añadir un StreamHandler si el FileHandler falla.
         
     log_file_path = os.path.join(callback_log_dir, log_filename)
 
-    # Añadir handlers solo si no los tiene (o si se limpiaron arriba)
     if not cb_logger.handlers:
         try:
             file_handler = RobustTimedRotatingFileHandler(
@@ -99,7 +90,7 @@ def setup_callback_logging(
 # Inicializar logger dedicado
 # Idealmente, los parámetros de setup_callback_logging vendrían de ConfigManager
 try:
-    log_cfg = ConfigManager.get_log_config() # Asumiendo que esto devuelve un dict
+    log_cfg = ConfigManager.get_log_config()
     logger = setup_callback_logging(
         log_directory_base=log_cfg.get("directory", "C:/RPA/Logs/SAM_Lanzador"),
         log_filename=log_cfg.get("callback_log_filename", "sam_callback_server.log"),
@@ -109,7 +100,6 @@ try:
         date_fmt=log_cfg.get("datefmt", "%Y-%m-%d %H:%M:%S")
     )
 except Exception as e_log_init:
-    # Fallback a un logger de consola muy básico si la configuración de logging falla
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - SAMCallbackServer - %(levelname)s - %(message)s')
     logger = logging.getLogger("SAMCallbackServer_Fallback")
     logger.critical(f"Fallo al inicializar logging desde ConfigManager, usando fallback: {e_log_init}", exc_info=True)

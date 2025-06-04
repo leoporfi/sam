@@ -28,14 +28,14 @@ if str(SAM_PROJECT_ROOT) not in sys.path:
 # Ya no se importa nada de balanceador.utils.config
 
 # Configurar el nivel de log para Paramiko para reducir el ruido
-logging.getLogger('paramiko').setLevel(logging.WARNING)
+logging.getLogger('paramiko').setLevel(logging.WARNING) 
 
 class MySQLSSHClient:
     def __init__(self,
                  config_ssh_mysql: Dict[str, Any],
                  mapa_robots: Dict[str, str],
                  logger_instance: Optional[logging.Logger] = None):
-
+        
         if logger_instance:
             self.logger = logger_instance
         else:
@@ -47,7 +47,6 @@ class MySQLSSHClient:
             # self.logger.addHandler(logging.NullHandler())
 
         self.logger.debug(f"MySQLSSHClient inicializado para host SSH: {config_ssh_mysql.get('host_ssh')}")
-
         # Configuración SSH
         self.host_ssh = config_ssh_mysql.get("host_ssh")
         self.puerto_ssh = int(config_ssh_mysql.get("puerto_ssh", 22))

@@ -29,7 +29,7 @@ from common.database.sql_client import DatabaseConnector    # <-- LÍNEA NUEVA Y
 from common.utils.logging_setup import setup_logging
 from common.utils.config_manager import ConfigManager
 log_cfg = ConfigManager.get_log_config()
-logger_name = "SAM.Lanzador.Conciliador"
+logger_name = __name__
 logger = setup_logging(
     log_config=log_cfg, 
     logger_name=logger_name, 
