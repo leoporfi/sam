@@ -1,356 +1,654 @@
 # SAM/Lanzador/service/callback_server.py
+"""
+Servidor de callbacks optimizado para SAM - Recibe callbacks de Automation Anywhere A360.
+Este script implementa un servidor WSGI que escucha callbacks de A360 y actualiza la base de datos SAM.
+Incluye manejo robusto de errores, validación de payloads y logging detallado.
+"""
+
 import json
 import logging
-# Para el logger dedicado
-from common.utils.logging_setup import RobustTimedRotatingFileHandler
 import os
-import socket # Para autodetección de IP y validación de host
+import socket
 import signal
 import sys
-from wsgiref.simple_server import make_server # Fallback si waitress no está
-# from waitress import serve # Descomentar para producción
-
-# --- Configuración de Path ---
+import threading
+import time
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
-SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(SAM_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(SAM_PROJECT_ROOT))
+from dotenv import load_dotenv
+from wsgiref.simple_server import make_server
 
-from common.utils.config_manager import ConfigManager # Solo para leer la config de BD y del propio callback server
-from common.database.sql_client import DatabaseConnector
-from typing import Optional, List, Dict, Any # Para type hints
+try:
+    from waitress import serve
+    WAITRESS_DISPONIBLE = True
+except ImportError:
+    WAITRESS_DISPONIBLE = False
 
-# from lanzador.utils.config import ConfigManager # Ya lo tienes
-# from common.utils.logging_setup import setup_logging # Si lo moviste a common
+# --- Configuración de constantes ---
+@dataclass
+class ConfiguracionServidorCallback:
+    """Clase de datos para la configuración del servidor de callbacks."""
+    host: str = "0.0.0.0"
+    puerto: int = 8008
+    hilos: int = 8 # threads
+    tiempo_espera_canal: int = 120 # timeout (para waitress channel_timeout)
+    intervalo_limpieza_waitress: int = 30 # cleanup_interval (para waitress)
+    longitud_max_contenido: int = 1024 * 1024  # Límite de 1MB
+    log_payload_max_caracteres: int = 1000
 
-# log_cfg = ConfigManager.get_log_config()
-# logger = setup_logging(log_config=log_cfg, logger_name="SAMCallbackServer", log_file_name_override=log_cfg["callback_log_filename"])
-# ...
-# sql_sam_config = ConfigManager.get_sql_server_config("SQL_SAM")
-# cb_server_config = ConfigManager.get_callback_server_config()
+@dataclass
+class ConfiguracionLog:
+    """Clase de datos para la configuración de logging."""
+    directorio: str = "C:/RPA/Logs/SAM"
+    nombre_archivo: str = "sam_callback_server.log" # filename
+    nivel: str = "INFO" # level
+    num_respaldos: int = 7 # backup_count
+    formato: str = "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s" # format
+    formato_fecha: str = "%Y-%m-%d %H:%M:%S" # date_format
 
-# --- CONFIGURACIÓN DE LOGGING ESPECÍFICA PARA EL CALLBACK SERVER ---
-def setup_callback_logging(
-        log_directory_base: str = "C:/RPA/Logs/SAM_Lanzador", # Debería leerse de config si es posible
-        log_filename: str = "sam_callback_server.log",
-        log_level_str: str = "INFO",
-        backup_count: int = 7,
-        log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s",
-        date_fmt: str = "%Y-%m-%d %H:%M:%S"
-    ) -> logging.Logger:
-    """Configura un logger dedicado para el callback_server."""
+# --- Carga optimizada de configuración ---
+def cargar_configuracion_entorno() -> None:
+    """Carga la configuración del entorno con manejo de errores adecuado."""
+    raiz_proyecto_sam = Path(__file__).resolve().parent.parent.parent
+    ruta_env = raiz_proyecto_sam / '.env'
     
-    logger_name = __name__
-    cb_logger = logging.getLogger(logger_name)
+    if ruta_env.exists():
+        print(f"SERVIDOR_CALLBACK: Cargando .env desde {ruta_env}", file=sys.stderr)
+        load_dotenv(dotenv_path=ruta_env, override=True)
+    else:
+        print(f"SERVIDOR_CALLBACK: No se encontró .env en {ruta_env}, usando defaults del sistema", file=sys.stderr)
+        load_dotenv()
+
+# Cargar configuración temprano
+cargar_configuracion_entorno()
+
+# Imports que dependen de la configuración
+try:
+    from common.utils.config_manager import ConfigManager
+    from common.utils.logging_setup import RobustTimedRotatingFileHandler
+    from common.database.sql_client import DatabaseConnector
+except ImportError as e:
+    print(f"CRITICO: No se pueden importar los módulos requeridos: {e}", file=sys.stderr)
+    sys.exit(1)
+
+# --- Clase principal del servidor ---
+class ServidorCallback: # CallbackServer
+    """Clase principal del servidor de callbacks con gestión de recursos mejorada."""
     
-    if cb_logger.hasHandlers():
-        # Podríamos optar por limpiar handlers existentes: 
-        # cb_logger.handlers.clear()
-        pass # No añadir handlers duplicados
-
-    cb_logger.setLevel(getattr(logging, log_level_str.upper(), logging.INFO))
-    cb_logger.propagate = False # Evitar que los logs se propaguen al logger raíz si éste tiene otra config
-
-    # Crear directorio si no existe, dentro de un subdirectorio "callbacks"
-    callback_log_dir = os.path.join(log_directory_base, "callbacks")
-    try:
-        os.makedirs(callback_log_dir, exist_ok=True)
-    except OSError as e_os:
-        print(f"Error CRÍTICO: No se pudo crear el directorio de logs '{callback_log_dir}': {e_os}", file=sys.stderr)
-        # Podríamos usar un handler de consola como fallback aquí o simplemente fallar.
+    def __init__(self):
+        self.config = ConfiguracionServidorCallback()
+        self.config_log = ConfiguracionLog()
+        self.logger = self._configurar_logging() # _setup_logging
+        self.conector_bd: Optional[DatabaseConnector] = None # db_connector
+        self.instancia_servidor = None # server_instance
+        self._evento_parada = threading.Event() # _shutdown_event
+        self._estadisticas = { # _stats
+            'solicitudes_recibidas': 0,
+            'solicitudes_procesadas': 0,
+            'solicitudes_fallidas': 0,
+            'tiempo_inicio': time.time()
+        }
         
-    log_file_path = os.path.join(callback_log_dir, log_filename)
-
-    if not cb_logger.handlers:
+        # Cargar configuración
+        self._cargar_configuracion() # _load_configuration
+        
+        # Inicializar conexión a base de datos (no crítico para el inicio del servidor)
+        bd_inicializada = self._inicializar_base_datos() # db_initialized, _initialize_database
+        if not bd_inicializada:
+            self.logger.warning("Base de datos no inicializada al arrancar - se intentará conexión en la primera solicitud")
+        
+        # Configurar manejadores de señales
+        self._configurar_signal_handlers() # _setup_signal_handlers
+    
+    def _configurar_logging(self) -> logging.Logger: # _setup_logging
+        """Configura un logging dedicado para el servidor de callbacks."""
+        nombre_logger = "SAMServidorCallback" # logger_name
+        logger = logging.getLogger(nombre_logger)
+        
+        if logger.hasHandlers(): # Si ya tiene manejadores, no añadir más
+            return logger
+            
+        logger.setLevel(getattr(logging, self.config_log.nivel.upper(), logging.INFO))
+        logger.propagate = False # No propagar al logger raíz
+        
+        # Crear directorio de log si no existe
+        log_dir = Path(self.config_log.directorio) # log_dir
         try:
-            file_handler = RobustTimedRotatingFileHandler(
-                log_file_path, 
-                when="midnight", 
-                interval=1, 
-                backupCount=backup_count,
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e_os:
+            print(f"ERROR CRITICO: No se pudo crear el directorio de logs '{log_dir}': {e_os}", file=sys.stderr)
+
+        log_file_path = log_dir / self.config_log.nombre_archivo # log_file_path
+        
+        formateador = logging.Formatter( # formatter
+            fmt=self.config_log.formato,
+            datefmt=self.config_log.formato_fecha
+        )
+
+        try:
+            # Manejador de archivo
+            file_handler = RobustTimedRotatingFileHandler( # file_handler
+                str(log_file_path),
+                when="midnight",
+                interval=1,
+                backupCount=self.config_log.num_respaldos,
                 encoding="utf-8",
                 max_retries=3,
                 retry_delay=0.5
             )
-            formatter = logging.Formatter(fmt=log_format, datefmt=date_fmt)
-            file_handler.setFormatter(formatter)
-            cb_logger.addHandler(file_handler)
-        except Exception as e_fh:
-            print(f"Error CRÍTICO: No se pudo crear FileHandler para '{log_file_path}': {e_fh}", file=sys.stderr)
-
-
-        # Handler para consola (útil para debugging y si el logging a archivo falla)
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_formatter = logging.Formatter(fmt=log_format, datefmt=date_fmt) # Puede tener su propio formato
-        console_handler.setFormatter(console_formatter)
-        cb_logger.addHandler(console_handler)
+            file_handler.setFormatter(formateador)
+            logger.addHandler(file_handler)
             
-    return cb_logger
-
-# Inicializar logger dedicado
-# Idealmente, los parámetros de setup_callback_logging vendrían de ConfigManager
-try:
-    log_cfg = ConfigManager.get_log_config()
-    logger = setup_callback_logging(
-        log_directory_base=log_cfg.get("directory", "C:/RPA/Logs/SAM_Lanzador"),
-        log_filename=log_cfg.get("callback_log_filename", "sam_callback_server.log"),
-        log_level_str=log_cfg.get("level_str", "INFO"), # Asumiendo que tienes "level_str" en log_config
-        backup_count=log_cfg.get("backupCount", 7),
-        log_format=log_cfg.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s"),
-        date_fmt=log_cfg.get("datefmt", "%Y-%m-%d %H:%M:%S")
-    )
-except Exception as e_log_init:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - SAMCallbackServer - %(levelname)s - %(message)s')
-    logger = logging.getLogger("SAMCallbackServer_Fallback")
-    logger.critical(f"Fallo al inicializar logging desde ConfigManager, usando fallback: {e_log_init}", exc_info=True)
-
-
-# --- Variables Globales para el Servidor (se cargarán desde ConfigManager) ---
-CALLBACK_SERVER_HOST = "0.0.0.0"
-CALLBACK_SERVER_PORT = 8008
-CALLBACK_SERVER_THREADS = 8 # Para Waitress
-
-db_connector_instance: Optional[DatabaseConnector] = None
-
-def initialize_db_connector():
-    """Inicializa el conector de base de datos para el servidor de callbacks."""
-    global db_connector_instance
-    if db_connector_instance is None or not db_connector_instance.verificar_conexion():
-        logger.info("Inicializando o reconectando DatabaseConnector para Callback Server...")
-        try:
-            sql_cfg = ConfigManager.get_sql_server_config()
-            # El db_name para el lanzador y el callback server debe ser el mismo (SAM.dbo.Ejecuciones)
-            db_name_sam = sql_cfg.get("database_sam", sql_cfg.get("database")) 
-            if not db_name_sam:
-                 raise ValueError("Nombre de BD para SAM no encontrado en config para Callback Server.")
-
-            # Usar un timeout de conexión diferente/más corto para el callback server si se desea
-            timeout_cb_db_conn = sql_cfg.get("timeout_conexion_inicial_callback", 15)
-
-            db_connector_instance = DatabaseConnector(
-                servidor=sql_cfg["server"],
-                base_datos=db_name_sam,
-                usuario=sql_cfg["uid"],
-                contrasena=sql_cfg["pwd"]
-            )
-            logger.info("DatabaseConnector (re)inicializado exitosamente para Callback Server.")
         except Exception as e:
-            logger.critical(f"Error CRÍTICO al (re)inicializar DatabaseConnector para Callback Server: {e}", exc_info=True)
-            db_connector_instance = None
-    return db_connector_instance
+            # Si falla el manejador de archivo, al menos el de consola (añadido después) debería funcionar.
+            print(f"ERROR: No se pudo crear el manejador de archivo para '{log_file_path}': {e}", file=sys.stderr)
+        
+        # Manejador de consola (siempre añadir)
+        console_handler = logging.StreamHandler(sys.stdout) # console_handler
+        console_handler.setFormatter(formateador)
+        logger.addHandler(console_handler)
+        
+        return logger
+    
+    def _cargar_configuracion(self) -> None: # _load_configuration
+        """Carga la configuración desde ConfigManager con valores por defecto."""
+        try:
+            # Cargar configuración del servidor de callbacks
+            cb_config = ConfigManager.get_callback_server_config() # cb_config
+            self.config.host = cb_config.get("host", self.config.host)
+            self.config.puerto = cb_config.get("port", self.config.puerto)
+            self.config.hilos = cb_config.get("threads", self.config.hilos)
+            
+            # Cargar configuración de log (usando ConfigManager)
+            cfg_log_global = ConfigManager.get_log_config() # log_config
+            self.config_log.directorio = cfg_log_global.get("directory", self.config_log.directorio)
+            self.config_log.nombre_archivo = cfg_log_global.get("callback_log_filename", self.config_log.nombre_archivo)
+            self.config_log.nivel = cfg_log_global.get("level_str", self.config_log.nivel)
+            self.config_log.formato = cfg_log_global.get("format", self.config_log.formato)
+            self.config_log.formato_fecha = cfg_log_global.get("datefmt", self.config_log.formato_fecha)
+            self.config_log.num_respaldos = cfg_log_global.get("backupCount", self.config_log.num_respaldos)
 
+            # Re-configurar el logger si los valores de config_log cambiaron
+            self.logger = self._configurar_logging()
 
-def callback_receiver_app(environ: Dict[str, Any], start_response):
-    """Punto de entrada WSGI para cada petición de callback de A360."""
-    status_http = "200 OK"
-    # Especificar charset para asegurar correcta codificación de tildes, etc.
-    response_headers = [("Content-type", "application/json; charset=utf-8")]
-    response_body_dict = {"estado": "OK", "mensaje": "Callback recibido y procesado por SAM."}
-    body_bytes = b'' # Para el logging en caso de error de parseo JSON
-
-    try:
-        request_method = environ.get("REQUEST_METHOD", "GET")
-        path_info = environ.get("PATH_INFO", "/")
-        remote_addr = environ.get('REMOTE_ADDR', 'Desconocida')
-        logger.info(f"Callback entrante: {request_method} {path_info} desde {remote_addr}")
-
-        if request_method != "POST":
-            logger.warning(f"Método no permitido: {request_method}. Se esperaba POST.")
-            status_http = "405 Method Not Allowed"
-            response_body_dict = {"estado": "ERROR", "mensaje": "Método no permitido. Por favor, use POST."}
-            start_response(status_http, response_headers + [('Allow', 'POST')])
-            # ensure_ascii=False para que json.dumps respete los caracteres no ASCII
-            return [json.dumps(response_body_dict, ensure_ascii=False).encode('utf-8')]
-
-        content_length = int(environ.get("CONTENT_LENGTH", 0))
-        if content_length <= 0:
-            logger.warning("Callback POST sin cuerpo (Content-Length 0 o ausente).")
-            status_http = "400 Bad Request"
-            response_body_dict = {"estado": "ERROR", "mensaje": "El cuerpo de la solicitud está vacío o falta Content-Length."}
-        else:
+            self.logger.info("Configuración cargada/recargada exitosamente")
+            
+        except Exception as e:
+            self.logger.error(f"Error cargando configuración, usando valores por defecto: {e}", exc_info=True)
+    
+    def _inicializar_base_datos(self) -> bool: # _initialize_database
+        """Inicializa el conector de base de datos con lógica de reintento. Devuelve True si tuvo éxito."""
+        max_reintentos = 3 # max_retries
+        retraso_reintento = 2 # retry_delay
+        
+        for intento in range(max_reintentos): # attempt
             try:
-                body_bytes = environ["wsgi.input"].read(content_length)
-                body_str = body_bytes.decode("utf-8") # Asumir UTF-8
-                logger.debug(f"Callback POST payload (raw): {body_str[:1000]}...") # Loguear más del payload
+                cfg_sql = ConfigManager.get_sql_server_config("SQL_SAM") # sql_config
+                nombre_bd = cfg_sql.get("database") # db_name
                 
-                data_json = json.loads(body_str)
+                if not nombre_bd:
+                    # Este error es crítico para la operación, no debería continuar sin nombre de BD
+                    self.logger.error("Nombre de base de datos no encontrado en la configuración SQL_SAM.")
+                    raise ValueError("Nombre de base de datos no encontrado en la configuración SQL_SAM")
                 
-                deployment_id = data_json.get("deploymentId")
-                status_from_a360 = data_json.get("status")
-                # Opcional: extraer otros campos si son útiles para loguear o debuggear
-                # a360_user_id_cb = data_json.get("userId")
-                # a360_device_id_cb = data_json.get("deviceId")
-                # bot_output_cb = data_json.get("botOutput")
-
-                logger.info(f"Callback procesando: DeploymentId='{deployment_id}', Estado A360='{status_from_a360}'")
-
-                if deployment_id and status_from_a360:
-                    # Asegurar que db_connector_instance esté inicializado (debería estarlo si el server arrancó)
-                    if db_connector_instance or initialize_db_connector():
-                        actualizado_ok = db_connector_instance.actualizar_ejecucion_desde_callback(
-                            deployment_id, status_from_a360, body_str # Guardar el payload completo
-                        )
-                        if not actualizado_ok:
-                            status_http = "500 Internal Server Error"
-                            response_body_dict = {"estado": "ERROR", "mensaje": "Fallo al actualizar la base de datos desde el callback."}
-                            logger.error(f"Fallo al actualizar BD para DeploymentId {deployment_id} desde callback.")
+                self.conector_bd = DatabaseConnector(
+                    servidor=cfg_sql["server"],
+                    base_datos=nombre_bd,
+                    usuario=cfg_sql["uid"],
+                    contrasena=cfg_sql["pwd"]
+                )
+                
+                # Intento de verificación de conexión (no crítico para el inicio, se reintentará)
+                try:
+                    if self.conector_bd.verificar_conexion():
+                        self.logger.info("Conector de base de datos inicializado y verificado exitosamente.")
+                        return True # Éxito
                     else:
-                        logger.critical("Callback NO PUDO PROCESARSE: db_connector_instance no está inicializado después de intento.")
-                        status_http = "500 Internal Server Error"
-                        response_body_dict = {"estado": "ERROR", "mensaje": "El conector de base de datos del servidor de Callbacks no está disponible."}
+                        # No es un error fatal para el inicio, el context manager lo reintentará.
+                        self.logger.warning("Conector de BD creado, pero la verificación de conexión inicial falló.")
+                        return True # Consideramos la creación del objeto como un "éxito parcial" para iniciar el servidor.
+                except Exception as error_verificacion: # verify_error
+                    self.logger.warning(f"Falló la verificación inicial de conexión a BD: {error_verificacion}. Se reintentará en uso.")
+                    return True # Permitir que el servidor inicie, se reintentará en _obtener_conexion_bd
+
+            except Exception as e:
+                self.logger.warning(f"Intento de inicialización de base de datos {intento + 1}/{max_reintentos} fallido: {e}")
+                if intento < max_reintentos - 1:
+                    time.sleep(retraso_reintento)
                 else:
-                    logger.warning(f"Callback recibido con JSON incompleto: Falta deploymentId o status. Payload: {str(data_json)[:500]}")
-                    status_http = "400 Bad Request"
-                    response_body_dict = {"estado": "ERROR", "mensaje": "Payload JSON inválido: deploymentId y status son requeridos."}
-
-            except json.JSONDecodeError as e_json:
-                logger.error(f"Error decodificando JSON del callback: {e_json}. Body (bytes): {body_bytes[:200]}...", exc_info=True)
-                status_http = "400 Bad Request"
-                response_body_dict = {"estado": "ERROR", "mensaje": "Formato JSON inválido en el cuerpo de la solicitud."}
-            except Exception as e_proc_body: # Cualquier otro error procesando el cuerpo
-                logger.error(f"Error procesando cuerpo del request del callback: {e_proc_body}", exc_info=True)
-                status_http = "500 Internal Server Error"
-                response_body_dict = {"estado": "ERROR", "mensaje": "Error interno procesando el cuerpo de la solicitud."}
-    
-    except Exception as e_general_cb: # Error muy general en la app WSGI
-        logger.critical(f"Excepción crítica no manejada en callback_receiver_app: {e_general_cb}", exc_info=True)
-        status_http = "500 Internal Server Error"
-        response_body_dict = {"estado": "ERROR", "mensaje": "Ocurrió un error interno inesperado en la aplicación de callbacks."}
-
-    response_body_bytes = json.dumps(response_body_dict, ensure_ascii=False).encode('utf-8')
-    response_headers.append(('Content-Length', str(len(response_body_bytes))))
-    start_response(status_http, response_headers)
-    return [response_body_bytes]
-
-
-def determine_effective_host(configured_host: str, logger_instance: logging.Logger) -> str:
-    """Determina el host efectivo para el servidor."""
-    if configured_host and configured_host.strip() and configured_host not in ["0.0.0.0", "*"]:
-        effective_host = configured_host.strip()
-        logger_instance.info(f"Usando host especificado en config: '{effective_host}'")
-        try:
-            socket.getaddrinfo(effective_host, None) 
-        except socket.gaierror:
-            logger_instance.warning(f"Host configurado '{effective_host}' no parece ser resoluble o es inválido. Verifica la configuración.")
-        return effective_host
-    else: 
-        logger_instance.info(f"Host no especificado o como '0.0.0.0'/'*'. Usando '0.0.0.0' para escuchar en todas las interfaces.")
-        return "0.0.0.0"
-
-http_server_global_ref = None # Para poder cerrarlo desde el signal_handler si es wsgiref
-
-def signal_handler_callbacks(signum, frame):
-    global http_server_global_ref
-    logger.warning(f"Señal de cierre {signal.Signals(signum).name} recibida por SAM Callback Server (PID: {os.getpid()}).")
-    
-    if db_connector_instance:
-        logger.info("Cerrando conexión de BD del Callback Server...")
-        db_connector_instance.cerrar_conexion_hilo_actual() # Cierra la del hilo actual (principal)
-    
-    if http_server_global_ref and hasattr(http_server_global_ref, 'shutdown'): # Si es wsgiref
-        logger.info("Intentando detener servidor wsgiref...")
-        # Shutdown para wsgiref necesita ser llamado desde otro hilo, o no funcionará bien con serve_forever
-        # Una forma más simple es simplemente salir del proceso, y el finally lo manejará.
-        # threading.Thread(target=http_server_global_ref.shutdown).start() # Esto podría ser necesario para wsgiref
-        # O simplemente dejar que el script termine y el finally se ejecute.
-        pass # Dejar que el finally principal maneje esto.
-    
-    logger.info("Waitress (o wsgiref) debería manejar el cierre del servidor. El script finalizará después de que el servidor se detenga.")
-    # No llamar a sys.exit() aquí, permitir que el servidor WSGI se detenga y el script termine naturalmente.
-
-def start_callback_server_main():
-    global CALLBACK_SERVER_HOST, CALLBACK_SERVER_PORT, CALLBACK_SERVER_THREADS
-    global http_server_global_ref # Para wsgiref
-
-    try:
-        # Cargar configuración del callback server
-        cfg_cb_server = ConfigManager.get_callback_server_config()
-        CALLBACK_SERVER_HOST = cfg_cb_server.get("host", "0.0.0.0")
-        CALLBACK_SERVER_PORT = cfg_cb_server.get("port", 8008)
-        CALLBACK_SERVER_THREADS = cfg_cb_server.get("threads", 8)
+                    self.logger.error("Falló la inicialización de la base de datos después de todos los reintentos. El servidor operará sin BD hasta reconexión.")
+                    self.conector_bd = None # Asegurar que esté None si falla
+                    return False # Falló la inicialización
         
-        # Cargar configuración de logging (opcional, si setup_callback_logging no lo hace desde config)
-        # log_cfg = ConfigManager.get_log_config()
-        # logger = setup_callback_logging(log_filename=log_cfg.get("callback_log_filename", "sam_callback_server.log"))
-
-    except Exception as e_cfg:
-        logger.critical(f"Error fatal leyendo configuración para Callback Server: {e_cfg}. Usando defaults.", exc_info=True)
-
-    if not initialize_db_connector(): # Intenta inicializar/reconectar la BD
-        logger.critical("No se pudo inicializar el conector de BD. El servidor de Callbacks no se iniciará.")
-        return 
-
-    effective_host = determine_effective_host(CALLBACK_SERVER_HOST, logger)
+        return False # Si el bucle termina (no debería si hay raise o return antes)
     
-    # Registrar manejadores de señales
-    signal.signal(signal.SIGTERM, signal_handler_callbacks)
-    signal.signal(signal.SIGINT, signal_handler_callbacks)
-    if hasattr(signal, 'SIGBREAK'): 
-        signal.signal(signal.SIGBREAK, signal_handler_callbacks)
-
-    logger.info(f"====================================================================")
-    logger.info(f" Iniciando Servidor de Callbacks SAM (PID: {os.getpid()})")
-    logger.info(f" Escuchando en: http://{effective_host}:{CALLBACK_SERVER_PORT}")
-    logger.info(f" Usando Waitress con {CALLBACK_SERVER_THREADS} threads (si está instalada).")
-    logger.info(f" URL pública para callbacks de A360 (configurada en AA_URL_CALLBACK): {ConfigManager.get_aa_config().get('url_callback', 'NO CONFIGURADA')}")
-    logger.info(f"====================================================================")
-    
-    server_stopped_cleanly = False
-    try:
-        # Dar prioridad a Waitress para producción
-        from waitress import serve
-        serve(
-            callback_receiver_app,
-            host=effective_host,
-            port=CALLBACK_SERVER_PORT,
-            threads=CALLBACK_SERVER_THREADS,
-            channel_timeout=120, 
-            cleanup_interval=30  
-        )
-        server_stopped_cleanly = True # Si serve() retorna, es un cierre normal (ej. por señal)
-    except ImportError:
-        logger.warning("Waitress no está instalado. Iniciando con wsgiref.simple_server (SOLO PARA DESARROLLO).")
-        logger.warning("Para producción, por favor instale waitress: pip install waitress")
+    @contextmanager
+    def _obtener_conexion_bd(self): # _get_db_connection
+        """Gestor de contexto para operaciones de base de datos con reconexión automática."""
+        # Si no hay conector o la conexión no es buena, intentar (re)inicializar
+        if not self.conector_bd:
+            self.logger.info("Conector de BD no inicializado, intentando ahora...")
+            if not self._inicializar_base_datos(): # Intenta inicializar y verifica si tuvo éxito
+                self.logger.error("No se puede establecer conexión con la base de datos en _obtener_conexion_bd.")
+                raise ConnectionError("Conector de base de datos no disponible o falló la inicialización.")
+        
+        # Verificar conexión antes de usar (con reconexión automática si es necesario)
+        # Esto es un segundo nivel de verificación, por si se perdió la conexión después del init.
         try:
-            http_server_global_ref = make_server(effective_host, CALLBACK_SERVER_PORT, callback_receiver_app)
-            logger.info(f"Servidor de Callbacks (wsgiref) escuchando en http://{effective_host}:{CALLBACK_SERVER_PORT}")
-            http_server_global_ref.serve_forever() # Bloqueante
-            server_stopped_cleanly = True # Si serve_forever es interrumpido por KeyboardInterrupt y manejado
-        except KeyboardInterrupt:
-            logger.info("KeyboardInterrupt (Ctrl+C) recibido por wsgiref. Cerrando servidor...")
-            server_stopped_cleanly = True
-        except Exception as e_wsgiref:
-            logger.critical(f"Error fatal al intentar iniciar servidor wsgiref: {e_wsgiref}", exc_info=True)
-    except OSError as e_os_serve: # Ej. puerto en uso
-        logger.critical(
-            f"OSError al intentar iniciar el servidor (la dirección '{effective_host}:{CALLBACK_SERVER_PORT}' podría estar en uso): {e_os_serve}",
-            exc_info=True)
-    except SystemExit: # Capturar SystemExit si el signal handler lo llama
-        logger.info("SystemExit capturado, el servidor de callbacks está finalizando.")
-        server_stopped_cleanly = True
-    except Exception as e_serve: # Cualquier otra excepción al iniciar/correr el servidor
-        logger.critical(f"Error fatal durante la ejecución del servidor de Callbacks: {e_serve}", exc_info=True)
-    finally:
-        if server_stopped_cleanly:
-            logger.info("Servidor de Callbacks SAM ha finalizado limpiamente.")
-        else:
-            logger.warning("Servidor de Callbacks SAM ha finalizado de forma inesperada o no pudo iniciarse.")
+            if not self.conector_bd or not self.conector_bd.verificar_conexion(): # verificar_conexion ya loguea si falla
+                self.logger.info("Conexión a BD perdida, intentando reconectar dentro de _obtener_conexion_bd...")
+                if not self._inicializar_base_datos(): # Reintenta la inicialización completa
+                     raise ConnectionError("Falló la reconexión a la base de datos.")
+        except Exception as error_verificacion: # Captura cualquier error de la verificación o re-inicialización
+            self.logger.error(f"Error crítico durante la obtención/verificación de conexión BD: {error_verificacion}", exc_info=True)
+            # Marcar como None para forzar un nuevo intento completo la próxima vez.
+            if self.conector_bd: # Si el objeto existe pero falló, invalidarlo
+                self.conector_bd.cerrar_conexion_hilo_actual() # Intentar cerrar por si acaso
+                self.conector_bd = None
+            raise ConnectionError(f"Falló la conexión/verificación de la base de datos: {error_verificacion}")
+        
+        # Si llegamos aquí, self.conector_bd debería existir y estar (potencialmente) conectado.
+        try:
+            yield self.conector_bd
+        except Exception as e:
+            self.logger.error(f"Operación de base de datos fallida: {e}", exc_info=True)
+            # No invalidar self.conector_bd aquí, la lógica de reintento está al inicio del context manager.
+            raise # Relanzar la excepción de la operación de BD
+    
+    def _validar_payload_callback(self, datos: Dict[str, Any]) -> Tuple[bool, str, Optional[str], Optional[str]]: # _validate_callback_payload
+        """Valida el payload del callback y extrae los campos requeridos."""
+        try:
+            id_despliegue = datos.get("deploymentId") # deployment_id
+            estado = datos.get("status") # status
+            
+            if id_despliegue is None: # Chequear None explícitamente
+                return False, "Campo requerido faltante o nulo: deploymentId", None, None
+            
+            if estado is None: # Chequear None explícitamente
+                return False, "Campo requerido faltante o nulo: status", None, None
+            
+            # Validación adicional
+            if not isinstance(id_despliegue, str) or len(id_despliegue.strip()) == 0:
+                return False, "deploymentId debe ser una cadena no vacía", None, None
+            
+            if not isinstance(estado, str) or len(estado.strip()) == 0:
+                return False, "status debe ser una cadena no vacía", None, None
+            
+            return True, "Válido", id_despliegue.strip(), estado.strip()
+            
+        except AttributeError: # Si 'datos' no es un diccionario (ej. None)
+             return False, "Payload de callback inválido (no es un diccionario)", None, None
+        except Exception as e: # Otros errores inesperados durante la validación
+            self.logger.error(f"Excepción inesperada durante _validar_payload_callback: {e}", exc_info=True)
+            return False, f"Error de validación interno: {str(e)}", None, None
 
-        # Intentar cerrar el servidor wsgiref si fue usado y no se detuvo por KeyboardInterrupt
-        if http_server_global_ref and hasattr(http_server_global_ref, '_BaseServer__is_shut_down') and \
-           not http_server_global_ref._BaseServer__is_shut_down.is_set(): # Chequeo interno de wsgiref
+    def _procesar_callback(self, id_despliegue: str, estado: str, payload_crudo: str) -> Tuple[bool, str]: # _process_callback, raw_payload
+        """Procesa el callback con actualización en la base de datos."""
+        try:
+            with self._obtener_conexion_bd() as bd: # db
+                # Asumimos que bd es un DatabaseConnector válido aquí
+                if bd is None:
+                    self._estadisticas['solicitudes_fallidas'] += 1
+                    self.logger.error("El conector de base de datos es None al intentar procesar el callback.")
+                    return False, "Conector de base de datos no disponible."
+                exito = bd.actualizar_ejecucion_desde_callback(id_despliegue, estado, payload_crudo) # success
+                if exito:
+                    self._estadisticas['solicitudes_procesadas'] += 1
+                    return True, "Callback procesado y BD actualizada exitosamente"
+                else:
+                    self._estadisticas['solicitudes_fallidas'] += 1
+                    # El logger dentro de actualizar_ejecucion_desde_callback ya debería haber logueado el fallo.
+                    return False, "Falló la actualización en la base de datos (ver logs de BD para detalles)"
+                                        
+        except ConnectionError as e_conn: # Captura específica si _obtener_conexion_bd falla
+            self._estadisticas['solicitudes_fallidas'] += 1
+            self.logger.error(f"Error de conexión a BD procesando callback para {id_despliegue}: {e_conn}", exc_info=False) # No incluir exc_info si ya se logueó antes
+            return False, f"Error de conexión a BD: {str(e_conn)}"
+        except Exception as e: # Otros errores
+            self._estadisticas['solicitudes_fallidas'] += 1
+            self.logger.error(f"Error general procesando callback para {id_despliegue}: {e}", exc_info=True)
+            return False, f"Error de procesamiento general: {str(e)}"
+
+    def aplicacion_wsgi(self, entorno: Dict[str, Any], iniciar_respuesta): # wsgi_application, environ, start_response
+        """Aplicación WSGI con manejo de errores y validación mejorados."""
+        self._estadisticas['solicitudes_recibidas'] += 1
+        
+        # Respuesta por defecto
+        status = "200 OK" # status
+        cabeceras = [("Content-Type", "application/json; charset=utf-8")] # headers
+        response_data = {"estado": "OK", "mensaje": "Callback recibido y en procesamiento."} # response_data
+        
+        try:
+            metodo = entorno.get("REQUEST_METHOD", "GET") # method
+            ruta = entorno.get("PATH_INFO", "/") # path
+            direccion_remota = entorno.get("REMOTE_ADDR", "Desconocida") # remote_addr
+            
+            self.logger.info(f"Solicitud entrante: {metodo} {ruta} desde {direccion_remota}")
+            
+            # Validación del método
+            if metodo != "POST":
+                status = "405 Method Not Allowed"
+                cabeceras.append(("Allow", "POST"))
+                response_data = {
+                    "estado": "ERROR",
+                    "mensaje": "Solo se permite el método POST."
+                }
+                self.logger.warning(f"Método no permitido recibido: {metodo} desde {direccion_remota} para {ruta}.")
+                
+            else: # Método es POST
+                # Validación de longitud de contenido
+                try:
+                    longitud_contenido = int(entorno.get("CONTENT_LENGTH", 0)) # content_length
+                except (ValueError, TypeError):
+                    longitud_contenido = 0
+                    self.logger.warning(f"Content-Length inválido o ausente: {entorno.get('CONTENT_LENGTH')}")
+                
+                if longitud_contenido <= 0:
+                    status = "400 Bad Request"
+                    response_data = {
+                        "estado": "ERROR",
+                        "mensaje": "Cuerpo de la solicitud vacío o Content-Length inválido/ausente."
+                    }
+                    self.logger.warning("Solicitud POST con cuerpo vacío o Content-Length problemático.")
+                    
+                elif longitud_contenido > self.config.longitud_max_contenido:
+                    status = "413 Payload Too Large"
+                    response_data = {
+                        "estado": "ERROR",
+                        "mensaje": f"Payload demasiado grande (máximo {self.config.longitud_max_contenido} bytes)."
+                    }
+                    self.logger.warning(f"Solicitud POST con payload demasiado grande: {longitud_contenido} bytes.")
+                    
+                else: # Payload con tamaño aceptable
+                    # Leer y procesar payload
+                    try:
+                        bytes_cuerpo = entorno["wsgi.input"].read(longitud_contenido) # body_bytes
+                        try:
+                            body_str = bytes_cuerpo.decode("utf-8") # body_str
+                        except UnicodeDecodeError as e_unicode:
+                            self.logger.error(f"Error de decodificación UTF-8 del payload: {e_unicode}. Bytes (primeros 200): {bytes_cuerpo[:200]}", exc_info=True)
+                            status = "400 Bad Request"
+                            response_data = {"estado": "ERROR", "mensaje": "Codificación UTF-8 inválida en el cuerpo de la solicitud."}
+                            # Salir del else anidado, ya que no podemos procesar más.
+                            raise StopIteration() # Usar una excepción para romper el flujo normal
+
+                        # Loguear payload (truncado por seguridad)
+                        vista_previa_payload = body_str[:self.config.log_payload_max_caracteres] # payload_preview
+                        if len(body_str) > self.config.log_payload_max_caracteres:
+                            vista_previa_payload += "..."
+                        self.logger.debug(f"Payload recibido: {vista_previa_payload}")
+                        
+                        # Parsear JSON
+                        try:
+                            datos_payload = json.loads(body_str) # payload_data
+                        except json.JSONDecodeError as e_json:
+                            self.logger.error(f"Error de decodificación JSON del payload: {e_json}. Payload (str preview): {vista_previa_payload}", exc_info=True)
+                            status = "400 Bad Request"
+                            response_data = {"estado": "ERROR", "mensaje": "Formato JSON inválido en el cuerpo de la solicitud."}
+                            raise StopIteration() # Romper flujo
+
+                        # Validar payload parseado
+                        es_valido, msg_validacion, deployment_id, callback_status = self._validar_payload_callback(datos_payload) # is_valid, validation_msg, deployment_id, callback_status
+                        
+                        if not es_valido:
+                            status = "400 Bad Request"
+                            response_data = {"estado": "ERROR", "mensaje": msg_validacion}
+                            self.logger.warning(f"Payload de callback inválido: {msg_validacion}. Payload: {datos_payload}")
+                        elif deployment_id is None or callback_status is None:
+                            status = "400 Bad Request"
+                            response_data = {"estado": "ERROR", "mensaje": "deploymentId o status no pueden ser None."}
+                            self.logger.error(f"deploymentId o status son None tras validación. Payload: {datos_payload}")
+                        else:
+                            # Procesar callback (esta es la ruta de éxito principal)
+                            self.logger.info(f"Procesando callback validado: DeploymentId='{deployment_id}', Status='{callback_status}'")
+                            
+                            exito_proceso, msg_proceso_final = self._procesar_callback(deployment_id, callback_status, body_str) # success, process_msg
+                            
+                            if not exito_proceso:
+                                status = "500 Internal Server Error" # Podría ser 202 Accepted si el procesamiento es asíncrono y solo falló la BD
+                                response_data = {"estado": "ERROR_PROCESAMIENTO", "mensaje": msg_proceso_final}
+                                self.logger.error(f"Fallo en el procesamiento del callback para DeploymentId {deployment_id}: {msg_proceso_final}")
+                            else:
+                                # Si _procesar_callback fue exitoso, el estado_http 200 OK y mensaje por defecto son apropiados.
+                                response_data = {"estado": "OK", "mensaje": "Callback procesado y registrado exitosamente."}
+                                self.logger.info(f"Callback procesado y registrado exitosamente para DeploymentId: {deployment_id}")
+                                
+                    except StopIteration: # Para manejar las salidas tempranas por errores de decodificación/parseo
+                        pass # El estado_http y datos_respuesta ya están seteados.
+                    except Exception as e_lectura_payload:
+                        self.logger.error(f"Error leyendo o procesando el cuerpo del payload: {e_lectura_payload}", exc_info=True)
+                        status = "500 Internal Server Error"
+                        response_data = {"estado": "ERROR", "mensaje": "Error interno al procesar el cuerpo de la solicitud."}
+        
+        except Exception as e_general_wsgi: # Error muy general en la app WSGI
+            status = "500 Internal Server Error"
+            response_data = {"estado": "ERROR", "mensaje": "Ocurrió un error interno inesperado en la aplicación de callbacks."}
+            self.logger.critical(f"Excepción crítica no manejada en aplicacion_wsgi: {e_general_wsgi}", exc_info=True)
+        
+        # Preparar respuesta final
+        try:
+            cuerpo_respuesta_bytes = json.dumps(response_data, ensure_ascii=False).encode("utf-8") # response_body_bytes
+        except Exception as e_json_dump:
+            self.logger.critical(f"Error al convertir la respuesta a JSON: {e_json_dump}. Respuesta original: {response_data}", exc_info=True)
+            status = "500 Internal Server Error"
+            error_response = {"estado": "ERROR_SERVIDOR", "mensaje": "Error generando respuesta JSON."}
+            cuerpo_respuesta_bytes = json.dumps(error_response, ensure_ascii=False).encode("utf-8")
+
+        cabeceras.append(("Content-Length", str(len(cuerpo_respuesta_bytes))))
+        
+        iniciar_respuesta(status, cabeceras)
+        return [cuerpo_respuesta_bytes]
+    
+    def _determinar_direccion_enlace(self) -> str: # _determine_bind_address
+        """Determina la dirección de enlace efectiva con validación."""
+        host_cfg = self.config.host # host_configurado
+        if host_cfg and host_cfg.strip() and host_cfg not in ["0.0.0.0", "*"]:
+            host_efectivo = host_cfg.strip() # effective_host
+            self.logger.info(f"Usando host configurado para enlazar: '{host_efectivo}'")
+            
+            # Validar si el host es potencialmente resoluble (no garantiza que se pueda enlazar)
             try:
-                logger.info("Intentando shutdown final para servidor wsgiref...")
-                http_server_global_ref.shutdown()
-            except Exception as e_shutdown_final:
-                 logger.error(f"Error en el shutdown final del servidor wsgiref: {e_shutdown_final}")
+                socket.getaddrinfo(host_efectivo, None)
+            except socket.gaierror as e:
+                self.logger.warning(f"El host configurado '{host_efectivo}' podría no ser resoluble o válido para enlazar: {e}")
+            
+            return host_efectivo
+        else:
+            self.logger.info("Enlazando a '0.0.0.0' para escuchar en todas las interfaces de red disponibles.")
+            return "0.0.0.0"
+    
+    def _configurar_signal_handlers(self) -> None: # _setup_signal_handlers
+        """Configura manejadores de señales para una parada elegante."""
+        def manejador_signal_interno(signum, frame): # signal_handler_internal
+            try:
+                nombre_signal = signal.Signals(signum).name # signal_name
+            except (AttributeError, ValueError): # Para casos donde Signals(signum) no sea válido o .name no exista
+                nombre_signal = str(signum)
+            self.logger.warning(f"Recibida señal de parada '{nombre_signal}' (PID: {os.getpid()}). Iniciando parada del servidor...")
+            self._evento_parada.set()
+            # Si estamos usando wsgiref.simple_server con handle_request en un bucle,
+            # necesitamos una forma de interrumpir ese bucle.
+            # Para waitress, la propia librería maneja la señal y detiene el `serve()`.
+            if not WAITRESS_DISPONIBLE and self.instancia_servidor:
+                # Esto es un intento, pero puede no ser suficiente para un shutdown inmediato de handle_request
+                # La mejor forma es que el bucle principal de handle_request chequee self._evento_parada.
+                 self.logger.info("Intentando cerrar instancia de servidor wsgiref (puede requerir una solicitud final para desbloquear handle_request)...")
+                 # self.instancia_servidor.shutdown() # shutdown() no funciona bien si está en handle_request
         
-        # La conexión del hilo principal ya debería estar cerrada por el signal_handler o si el server terminó.
-        # Pero como doble chequeo:
-        if db_connector_instance:
-            db_connector_instance.cerrar_conexion_hilo_actual()
+        # Intentar registrar señales comunes
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                signal.signal(sig, manejador_signal_interno)
+            except (OSError, ValueError, AttributeError) as e: # Algunos sistemas/contextos no permiten todas las señales
+                 self.logger.warning(f"No se pudo registrar el manejador para la señal {sig}: {e}")
+
+        if hasattr(signal, 'SIGBREAK'): # SIGBREAK es específico de Windows
+            try:
+                signal.signal(signal.SIGBREAK, manejador_signal_interno)
+            except (OSError, ValueError, AttributeError) as e:
+                 self.logger.warning(f"No se pudo registrar el manejador para la señal SIGBREAK: {e}")
+    
+    def _log_estadisticas_servidor(self) -> None: # _log_server_stats
+        """Loguea las estadísticas del servidor."""
+        tiempo_activo_total = time.time() - self._estadisticas['tiempo_inicio'] # total_uptime
+        self.logger.info("=" * 70)
+        self.logger.info(f"Estadísticas Finales del Servidor de Callbacks:")
+        self.logger.info(f"  Tiempo activo total: {tiempo_activo_total:.2f} segundos")
+        self.logger.info(f"  Solicitudes totales recibidas: {self._estadisticas['solicitudes_recibidas']}")
+        self.logger.info(f"  Solicitudes procesadas exitosamente: {self._estadisticas['solicitudes_procesadas']}")
+        self.logger.info(f"  Solicitudes fallidas (procesamiento/BD): {self._estadisticas['solicitudes_fallidas']}")
+        if self._estadisticas['solicitudes_recibidas'] > 0:
+            tasa_exito_proc = (self._estadisticas['solicitudes_procesadas'] / self._estadisticas['solicitudes_recibidas']) * 100 # processing_success_rate
+            self.logger.info(f"  Tasa de éxito de procesamiento: {tasa_exito_proc:.2f}%")
+        self.logger.info("=" * 70)
+    
+    def iniciar(self) -> None: # start
+        """Inicia el servidor de callbacks."""
+        host_efectivo = self._determinar_direccion_enlace() # effective_host
         
-        logging.shutdown() # Limpiar todos los handlers de logging al final del todo
+        # Loguear información de inicio
+        self.logger.info("=" * 80)
+        self.logger.info(f" Iniciando Servidor de Callbacks SAM (PID: {os.getpid()})")
+        self.logger.info(f" Escuchando en: http://{host_efectivo}:{self.config.puerto}")
+        self.logger.info(f" Usando servidor: {'Waitress (recomendado para producción)' if WAITRESS_DISPONIBLE else 'wsgiref.simple_server (solo para desarrollo)'}")
+        if WAITRESS_DISPONIBLE:
+            self.logger.info(f" Hilos configurados para Waitress: {self.config.hilos}")
+        
+        # Obtener URL de callback de la configuración
+        try:
+            cfg_aa = ConfigManager.get_aa_config() # aa_config
+            url_callback_publica = cfg_aa.get('url_callback', 'NO CONFIGURADA EN .ENV') # public_callback_url
+            self.logger.info(f" URL pública esperada para callbacks de A360 (desde config): {url_callback_publica}")
+        except Exception as e_cfg_aa:
+            self.logger.warning(f"No se pudo obtener la URL de callback desde la configuración de AA: {e_cfg_aa}")
+        
+        self.logger.info("=" * 80)
+        
+        servidor_termino_correctamente = False # server_terminated_correctly
+        
+        try:
+            if WAITRESS_DISPONIBLE:
+                # Usar Waitress para producción
+                serve(
+                    self.aplicacion_wsgi,
+                    host=host_efectivo,
+                    port=self.config.puerto,
+                    threads=self.config.hilos,
+                    channel_timeout=self.config.tiempo_espera_canal,
+                    cleanup_interval=self.config.intervalo_limpieza_waitress
+                )
+                # Si serve() retorna, es porque fue detenido (usualmente por una señal)
+                servidor_termino_correctamente = True 
+            else:
+                # Fallback a wsgiref para desarrollo
+                self.logger.warning("Waitress no está instalado. Usando wsgiref.simple_server (NO RECOMENDADO PARA PRODUCCIÓN).")
+                self.logger.warning("Para un entorno de producción, por favor instale Waitress: pip install waitress")
+                
+                self.instancia_servidor = make_server(host_efectivo, self.config.puerto, self.aplicacion_wsgi)
+                self.logger.info(f"Servidor wsgiref (desarrollo) escuchando en http://{host_efectivo}:{self.config.puerto}")
+                
+                # Bucle para manejar solicitudes y permitir parada elegante con wsgiref
+                while not self._evento_parada.is_set():
+                    # handle_request() es bloqueante por una solicitud. Necesitamos un timeout
+                    # o una forma de interrumpirlo. Una solución simple es un timeout corto.
+                    # Sin embargo, handle_request no tiene un timeout directo.
+                    # server.serve_forever() es más común pero más difícil de parar limpiamente sin hilos.
+                    # Para este ejemplo, si no usamos waitress, el cierre podría no ser tan elegante.
+                    # Una forma más robusta con wsgiref sería usar server_forever en un hilo y llamar a shutdown desde otro.
+                    # Aquí, hacemos un bucle que podría ser menos eficiente pero más simple de parar.
+                    self.instancia_servidor.timeout = 0.5 # Poner un timeout al socket del servidor
+                    try:
+                        self.instancia_servidor.handle_request() # Manejar una solicitud
+                    except socket.timeout:
+                        continue # Continuar el bucle si es solo un timeout
+                    except Exception as e_handle:
+                         self.logger.error(f"Error en wsgiref handle_request: {e_handle}")
+                         break # Salir del bucle en otros errores
+                
+                servidor_termino_correctamente = True # Asumimos que si sale del bucle es por _evento_parada
+                
+        except OSError as e_os: # ej. puerto en uso
+            self.logger.critical(f"Error de OSError al intentar iniciar el servidor (la dirección '{host_efectivo}:{self.config.puerto}' podría estar en uso): {e_os}", exc_info=True)
+        except KeyboardInterrupt: # Capturar Ctrl+C
+            self.logger.info("KeyboardInterrupt (Ctrl+C) recibido. Parando el servidor de Callbacks...")
+            self._evento_parada.set() # Asegurar que el evento de parada esté activo
+            servidor_termino_correctamente = True
+        except SystemExit: # Capturar SystemExit si el manejador de señales lo llama
+             self.logger.info("SystemExit capturado, el servidor de callbacks está finalizando.")
+             servidor_termino_correctamente = True
+        except Exception as e_general_servidor: # Cualquier otra excepción al iniciar/correr el servidor
+            self.logger.critical(f"Error fatal durante la ejecución del servidor de Callbacks: {e_general_servidor}", exc_info=True)
+        finally:
+            self._limpiar_recursos_final(servidor_termino_correctamente) # _cleanup_final
+    
+    def _limpiar_recursos_final(self, termino_limpiamente: bool = True) -> None: # _cleanup_final, clean_shutdown
+        """Limpia recursos al finalizar el servidor."""
+        if termino_limpiamente:
+            self.logger.info("Servidor de Callbacks SAM finalizando operaciones limpiamente.")
+        else:
+            self.logger.warning("Servidor de Callbacks SAM finalizando de forma inesperada o no pudo iniciarse.")
+        
+        # Loguear estadísticas finales
+        self._log_estadisticas_servidor()
+        
+        # Parar la instancia del servidor wsgiref si existe y está activa
+        if self.instancia_servidor:
+            self.logger.info("Intentando cerrar la instancia del servidor wsgiref...")
+            try:
+                # Para wsgiref, cerrar el socket es una forma de intentar detenerlo si está en un bucle.
+                if hasattr(self.instancia_servidor, 'socket') and self.instancia_servidor.socket:
+                    self.instancia_servidor.socket.close()
+                if hasattr(self.instancia_servidor, 'server_close'):
+                     self.instancia_servidor.server_close()
+                self.logger.info("Instancia del servidor wsgiref cerrada (o intento realizado).")
+            except Exception as e_shutdown_wsgiref:
+                 self.logger.error(f"Error durante el cierre del servidor wsgiref: {e_shutdown_wsgiref}", exc_info=True)
+        
+        # Cerrar conexión a base de datos
+        if self.conector_bd:
+            self.logger.info("Cerrando conexión a la base de datos del servidor de Callbacks...")
+            try:
+                self.conector_bd.cerrar_conexion_hilo_actual() # Cierra la del hilo principal
+                self.logger.info("Conexión a BD cerrada.")
+            except Exception as e_db_close:
+                self.logger.error(f"Error al cerrar la conexión a la base de datos: {e_db_close}", exc_info=True)
+        
+        # Limpiar manejadores de logging y cerrar logging
+        self.logger.info("Finalizando sistema de logging del servidor de Callbacks...")
+        # logging.shutdown() # Llamar a logging.shutdown() puede ser muy agresivo si hay otros loggers.
+        # Es mejor limpiar los handlers del logger específico de este servidor.
+        if self.logger and hasattr(self.logger, 'handlers'):
+            for handler_item in self.logger.handlers[:]: # Iterar sobre una copia
+                try:
+                    handler_item.close()
+                    self.logger.removeHandler(handler_item)
+                except Exception as e_handler_close:
+                    print(f"Error cerrando handler de log: {e_handler_close}", file=sys.stderr) # Usar print si el logger ya no funciona
+        
+        print("Servidor de Callbacks SAM: Proceso de limpieza final completado.", file=sys.stderr)
+
+
+def start_callback_server_main(): # main_entry_point
+    """Punto de entrada principal para iniciar el servidor."""
+    servidor_app = None
+    try:
+        servidor_app = ServidorCallback()
+        servidor_app.iniciar()
+    except Exception as e_inicio_fatal:
+        # Este log podría no funcionar si el logger falló en inicializarse.
+        # Usar print para asegurar visibilidad del error crítico.
+        mensaje_error = f"CRITICO: Falló el inicio del servidor de callbacks de forma fatal: {e_inicio_fatal}"
+        print(mensaje_error, file=sys.stderr)
+        # Intentar loguear también, por si acaso
+        if servidor_app and servidor_app.logger:
+            servidor_app.logger.critical(mensaje_error, exc_info=True)
+        else: # Logger no disponible, usar logging básico si es posible
+            logging.critical(mensaje_error, exc_info=True)
+        sys.exit(1) # Salir con código de error
 
 if __name__ == "__main__":
+    # Esto permite ejecutar el servidor directamente con: python lanzador/service/callback_server.py
+    # (asumiendo que SAM_PROJECT_ROOT está en PYTHONPATH o se ejecuta desde la raíz con -m)
     start_callback_server_main()
