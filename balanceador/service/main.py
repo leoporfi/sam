@@ -143,21 +143,25 @@ class Balanceador:
         query = """
         SELECT E.EquipoId, E.Equipo, E.UserId, E.UserName, E.Licencia, E.PermiteBalanceoDinamico
         FROM dbo.Equipos E
-        WHERE E.Licencia = 'ATTENDEDRUNTIME'  -- Solo licencias ATTENDEDRUNTIME
-          AND E.Activo_SAM = 1                -- Equipos y usuarios A360 activos
-          AND E.PermiteBalanceoDinamico = 1   -- Solo equipos que permiten balanceo dinámico
-          AND NOT EXISTS (                    -- No asignados actualmente a ningún robot
-            SELECT 1 FROM dbo.Asignaciones A
-            WHERE A.EquipoId = E.EquipoId
-          )
-          -- O si están asignados, solo los que no están reservados ni programados
-          OR EXISTS (
-            SELECT 1 FROM dbo.Asignaciones A
-            WHERE A.EquipoId = E.EquipoId
-              AND A.Reservado = 0             -- No está reservado (asignación manual fija)
-              AND A.EsProgramado = 0          -- No es programado (asignación por horario)
-          )
-        ORDER BY E.Equipo; 
+        WHERE
+            E.Licencia = 'ATTENDEDRUNTIME'
+            AND E.Activo_SAM = 1
+            AND E.PermiteBalanceoDinamico = 1
+            AND (
+                NOT EXISTS (
+                    SELECT 1
+                    FROM dbo.Asignaciones A_any
+                    WHERE A_any.EquipoId = E.EquipoId
+                )
+                OR
+                NOT EXISTS (
+                    SELECT 1
+                    FROM dbo.Asignaciones A_fixed
+                    WHERE A_fixed.EquipoId = E.EquipoId
+                      AND (A_fixed.Reservado = 1 OR A_fixed.EsProgramado = 1)
+                )
+            )
+        ORDER BY E.Equipo;
         """
         try:
             equipos_disponibles = self.db_sam.ejecutar_consulta(query, es_select=True)

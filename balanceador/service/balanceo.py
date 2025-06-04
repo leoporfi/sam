@@ -1,9 +1,8 @@
 # SAM/balanceador/service/balanceo.py
 
-import math
 import logging
 import threading
-from typing import Dict, List, Any, Optional, Tuple, Set
+from typing import Dict, List, Any, Tuple, Set
 
 from balanceador.database.historico_client import HistoricoBalanceoClient
 from balanceador.service.cooling_manager import CoolingManager
@@ -158,10 +157,23 @@ class Balanceo:
                 all_fixed_assigned_equipo_ids = set() 
 
                 for asignacion in asignaciones_actuales_list:
+                    robot_id_asignacion = asignacion.get("RobotId") # Obtener RobotId
+                    # MODIFICACIÓN AQUÍ: Ignorar si RobotId es None para asignaciones dinámicas
+                    if robot_id_asignacion is None and (not asignacion.get("Reservado") and not asignacion.get("EsProgramado")):
+                        logger.warning(
+                            f"Balanceo: Encontrada asignación dinámica en dbo.Asignaciones con RobotId NULL para EquipoId {asignacion.get('EquipoId')}. "
+                            "Esta asignación será ignorada por el ciclo de balanceo."
+                        )
+                        continue # Saltar esta asignación
                     if not asignacion.get("Reservado") and not asignacion.get("EsProgramado"):
-                        mapa_equipos_asignados_dinamicamente.setdefault(asignacion["RobotId"], []).append(asignacion["EquipoId"])
+                        # Asegurarse de que robot_id_asignacion no es None aquí antes de usarlo como clave
+                        if robot_id_asignacion is not None:
+                            mapa_equipos_asignados_dinamicamente.setdefault(robot_id_asignacion, []).append(asignacion["EquipoId"])
                     else:
-                        all_fixed_assigned_equipo_ids.add(asignacion["EquipoId"])
+                        # Las asignaciones fijas (reservadas o programadas) pueden o no tener RobotId,
+                        # pero nos interesa el EquipoId para saber que no está en el pool dinámico.
+                        if asignacion.get("EquipoId") is not None:
+                            all_fixed_assigned_equipo_ids.add(asignacion["EquipoId"])
 
                 query_ejecuciones_activas = "SELECT RobotId, EquipoId FROM dbo.Ejecuciones WHERE Estado IN ('PENDING_EXECUTION', 'DEPLOYED', 'RUNNING', 'UPDATE', 'RUN_PAUSED', 'QUEUED');"
                 ejecuciones_activas_list = self.db_sam.ejecutar_consulta(query_ejecuciones_activas, es_select=True) or []
