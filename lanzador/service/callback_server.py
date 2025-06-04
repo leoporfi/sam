@@ -95,7 +95,7 @@ class ServidorCallback: # CallbackServer
         self._cargar_configuracion() # _load_configuration
         
         # Inicializar conexión a base de datos (no crítico para el inicio del servidor)
-        bd_inicializada = self._inicializar_base_datos() # db_initialized, _initialize_database
+        bd_inicializada = self._inicializar_objeto_conector_bd() # db_initialized, _initialize_database
         if not bd_inicializada:
             self.logger.warning("Base de datos no inicializada al arrancar - se intentará conexión en la primera solicitud")
         
@@ -178,85 +178,103 @@ class ServidorCallback: # CallbackServer
         except Exception as e:
             self.logger.error(f"Error cargando configuración, usando valores por defecto: {e}", exc_info=True)
     
-    def _inicializar_base_datos(self) -> bool: # _initialize_database
-        """Inicializa el conector de base de datos con lógica de reintento. Devuelve True si tuvo éxito."""
-        max_reintentos = 3 # max_retries
-        retraso_reintento = 2 # retry_delay
+    def _inicializar_objeto_conector_bd(self) -> bool: # Renombrado para claridad
+        """
+        Intenta crear o recrear la instancia de DatabaseConnector.
+        Retorna True si el objeto fue creado, False si la creación del objeto falló.
+        No garantiza que la conexión esté viva, solo que el objeto existe.
+        """
+        max_reintentos = 2 
+        retraso_reintento_seg = 2
         
-        for intento in range(max_reintentos): # attempt
+        # Si ya existe un conector, intentar cerrarlo antes de crear uno nuevo.
+        if self.conector_bd and hasattr(self.conector_bd, 'cerrar_conexion_hilo_actual'):
             try:
-                cfg_sql = ConfigManager.get_sql_server_config("SQL_SAM") # sql_config
-                nombre_bd = cfg_sql.get("database") # db_name
+                self.conector_bd.cerrar_conexion_hilo_actual()
+            except Exception as e_close:
+                self.logger.debug(f"Error menor al cerrar conector BD previo: {e_close}")
+        self.conector_bd = None # Asegurar que empezamos desde None para recrear
+
+        for intento in range(1, max_reintentos + 1):
+            try:
+                cfg_sql = ConfigManager.get_sql_server_config("SQL_SAM")
+                nombre_bd_sam = cfg_sql.get("database")
                 
-                if not nombre_bd:
-                    # Este error es crítico para la operación, no debería continuar sin nombre de BD
-                    self.logger.error("Nombre de base de datos no encontrado en la configuración SQL_SAM.")
-                    raise ValueError("Nombre de base de datos no encontrado en la configuración SQL_SAM")
-                
-                self.conector_bd = DatabaseConnector(
+                if not nombre_bd_sam:
+                    self.logger.error("Config BD: 'database' (SQL_SAM_DB_NAME) no encontrada.")
+                    return False # No se puede crear sin nombre de BD
+                if not all(cfg_sql.get(k) for k in ["server", "uid", "pwd"]):
+                    self.logger.error("Config BD incompleta (falta server, uid o pwd para SQL_SAM).")
+                    return False
+
+                self.conector_bd = DatabaseConnector( # Crea la nueva instancia
                     servidor=cfg_sql["server"],
-                    base_datos=nombre_bd,
+                    base_datos=nombre_bd_sam,
                     usuario=cfg_sql["uid"],
                     contrasena=cfg_sql["pwd"]
                 )
-                
-                # Intento de verificación de conexión (no crítico para el inicio, se reintentará)
-                try:
-                    if self.conector_bd.verificar_conexion():
-                        self.logger.info("Conector de base de datos inicializado y verificado exitosamente.")
-                        return True # Éxito
-                    else:
-                        # No es un error fatal para el inicio, el context manager lo reintentará.
-                        self.logger.warning("Conector de BD creado, pero la verificación de conexión inicial falló.")
-                        return True # Consideramos la creación del objeto como un "éxito parcial" para iniciar el servidor.
-                except Exception as error_verificacion: # verify_error
-                    self.logger.warning(f"Falló la verificación inicial de conexión a BD: {error_verificacion}. Se reintentará en uso.")
-                    return True # Permitir que el servidor inicie, se reintentará en _obtener_conexion_bd
-
-            except Exception as e:
-                self.logger.warning(f"Intento de inicialización de base de datos {intento + 1}/{max_reintentos} fallido: {e}")
-                if intento < max_reintentos - 1:
-                    time.sleep(retraso_reintento)
+                self.logger.info(f"Objeto DatabaseConnector (re)creado exitosamente (intento {intento}).")
+                return True # Objeto creado
+            except Exception as e_init_obj:
+                self.logger.warning(f"Intento {intento}/{max_reintentos} de creación de objeto DatabaseConnector fallido: {e_init_obj}")
+                if intento < max_reintentos:
+                    time.sleep(retraso_reintento_seg)
                 else:
-                    self.logger.error("Falló la inicialización de la base de datos después de todos los reintentos. El servidor operará sin BD hasta reconexión.")
-                    self.conector_bd = None # Asegurar que esté None si falla
-                    return False # Falló la inicialización
-        
-        return False # Si el bucle termina (no debería si hay raise o return antes)
-    
+                    self.logger.error("Falló la creación del objeto DatabaseConnector después de todos los reintentos.")
+                    self.conector_bd = None
+                    return False
+        return False # No debería llegar si el bucle se completa
+
     @contextmanager
-    def _obtener_conexion_bd(self): # _get_db_connection
-        """Gestor de contexto para operaciones de base de datos con reconexión automática."""
-        # Si no hay conector o la conexión no es buena, intentar (re)inicializar
+    def _obtener_conexion_bd(self):
+        """
+        Gestor de contexto que asegura que self.conector_bd exista y tenga una conexión verificada.
+        Lanza ConnectionError si no se puede establecer una conexión válida.
+        """
+        # Paso 1: Asegurar que el objeto self.conector_bd exista.
         if not self.conector_bd:
-            self.logger.info("Conector de BD no inicializado, intentando ahora...")
-            if not self._inicializar_base_datos(): # Intenta inicializar y verifica si tuvo éxito
-                self.logger.error("No se puede establecer conexión con la base de datos en _obtener_conexion_bd.")
-                raise ConnectionError("Conector de base de datos no disponible o falló la inicialización.")
+            self.logger.info("Objeto conector BD es None. Intentando creación inicial del objeto.")
+            if not self._inicializar_objeto_conector_bd():
+                self.logger.error("Fallo crítico: No se pudo crear el objeto DatabaseConnector.")
+                raise ConnectionError("Fallo crítico al crear el objeto DatabaseConnector.")
         
-        # Verificar conexión antes de usar (con reconexión automática si es necesario)
-        # Esto es un segundo nivel de verificación, por si se perdió la conexión después del init.
-        try:
-            if not self.conector_bd or not self.conector_bd.verificar_conexion(): # verificar_conexion ya loguea si falla
-                self.logger.info("Conexión a BD perdida, intentando reconectar dentro de _obtener_conexion_bd...")
-                if not self._inicializar_base_datos(): # Reintenta la inicialización completa
-                     raise ConnectionError("Falló la reconexión a la base de datos.")
-        except Exception as error_verificacion: # Captura cualquier error de la verificación o re-inicialización
-            self.logger.error(f"Error crítico durante la obtención/verificación de conexión BD: {error_verificacion}", exc_info=True)
-            # Marcar como None para forzar un nuevo intento completo la próxima vez.
-            if self.conector_bd: # Si el objeto existe pero falló, invalidarlo
-                self.conector_bd.cerrar_conexion_hilo_actual() # Intentar cerrar por si acaso
-                self.conector_bd = None
-            raise ConnectionError(f"Falló la conexión/verificación de la base de datos: {error_verificacion}")
-        
-        # Si llegamos aquí, self.conector_bd debería existir y estar (potencialmente) conectado.
-        try:
-            yield self.conector_bd
-        except Exception as e:
-            self.logger.error(f"Operación de base de datos fallida: {e}", exc_info=True)
-            # No invalidar self.conector_bd aquí, la lógica de reintento está al inicio del context manager.
-            raise # Relanzar la excepción de la operación de BD
-    
+        # Paso 2: Verificar la conexión del objeto existente. Reintentar si falla.
+        # Permitimos un número limitado de reintentos de verificación/recreación aquí.
+        max_intentos_verificacion = 2
+        for intento_verif in range(1, max_intentos_verificacion + 1):
+            try:
+                if self.conector_bd and self.conector_bd.verificar_conexion():
+                    self.logger.debug("Conexión BD verificada exitosamente en _obtener_conexion_bd.")
+                    yield self.conector_bd # Conexión buena, ceder el conector.
+                    return # Salir del generador y del bucle.
+                else:
+                    self.logger.warning(f"Verificación de conexión BD falló (intento {intento_verif}/{max_intentos_verificacion}).")
+                    # Si la verificación falla, el objeto conector podría estar mal o la conexión caída.
+                    # Intentar recrear el objeto conector.
+                    if not self._inicializar_objeto_conector_bd(): # Recrea self.conector_bd
+                        # Si la recreación del objeto falla, es un error grave.
+                        msg_error = "Fallo crítico al recrear el objeto DatabaseConnector durante reintento de conexión."
+                        self.logger.error(msg_error)
+                        raise ConnectionError(msg_error)
+                    # Si se recreó el objeto, el bucle continuará y volverá a verificar.
+                    
+            except Exception as e_verif_reint:
+                self.logger.error(f"Excepción durante intento {intento_verif} de conexión/verificación BD: {e_verif_reint}", exc_info=True)
+                # Si hay una excepción, también es una falla. Intentar recrear el objeto por si acaso.
+                if not self._inicializar_objeto_conector_bd():
+                    msg_error = "Fallo crítico al recrear objeto DB tras excepción en verificación."
+                    self.logger.error(msg_error)
+                    raise ConnectionError(msg_error)
+
+            if intento_verif < max_intentos_verificacion:
+                self.logger.info(f"Pausa antes del siguiente intento de verificación/recreación de conexión BD.")
+                time.sleep(1 + intento_verif) # Pequeña pausa incremental
+            
+        # Si el bucle termina, todos los intentos de obtener una conexión verificada fallaron.
+        msg_final_fallo = "No se pudo obtener una conexión de BD válida después de múltiples intentos y recreaciones."
+        self.logger.error(msg_final_fallo)
+        raise ConnectionError(msg_final_fallo)
+
     def _validar_payload_callback(self, datos: Dict[str, Any]) -> Tuple[bool, str, Optional[str], Optional[str]]: # _validate_callback_payload
         """Valida el payload del callback y extrae los campos requeridos."""
         try:
