@@ -56,7 +56,7 @@ def setup_logging(
     target_logger_name = logger_name if logger_name else logging.getLogger().name # '' para raíz, o el nombre
 
     if _loggers_configured.get(target_logger_name):
-        # logger.debug(f"Logger '{target_logger_name}' ya configurado, devolviendo instancia existente.")
+        logger.debug(f"Logger '{target_logger_name}' ya configurado, devolviendo instancia existente.")
         return logging.getLogger(target_logger_name) # Devolver instancia existente si ya se configuró
 
     log_level_str = log_config.get("level_str", "INFO").upper()
@@ -66,7 +66,7 @@ def setup_logging(
     target_logger.setLevel(log_level)
     # Evitar que los loggers nombrados propaguen al raíz si el raíz ya tiene handlers o si no queremos duplicados
     if target_logger_name != logging.getLogger().name : # Si es un logger nombrado
-         target_logger.propagate = True
+         target_logger.propagate = False
 
 
     # Determinar nombre de archivo
@@ -115,7 +115,7 @@ def setup_logging(
         console_handler.setFormatter(console_formatter)
         target_logger.addHandler(console_handler)
         
-        # print(f"Logger '{target_logger_name}' configurado con handlers. Path: {log_file_path}")
+        print(f"Logger '{target_logger_name}' configurado con handlers. Path: {log_file_path}")
 
     _loggers_configured[target_logger_name] = True
     return target_logger

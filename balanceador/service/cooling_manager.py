@@ -5,7 +5,7 @@ import logging
 from typing import Dict, Set, Tuple, Any
 from threading import RLock
 
-logger = logging.getLogger("SAM.Balanceador.CoolingManager")
+logger = logging.getLogger(__name__)
 
 class CoolingManager:
     """
@@ -27,14 +27,14 @@ class CoolingManager:
         
         # Mapas para registrar las últimas operaciones
         # {robot_id: (timestamp, operación, cantidad)}
-        self._last_scale_up: Dict[int, Tuple[float, str, int]] = {}
-        self._last_scale_down: Dict[int, Tuple[float, str, int]] = {}
+        self._ultima_ampliacion: Dict[int, Tuple[float, str, int]] = {}
+        self._ultima_reduccion: Dict[int, Tuple[float, str, int]] = {}
         
         # Umbrales para considerar un cambio significativo
-        self.scale_up_threshold = 0.3  # 30% más tickets justifica escalar
-        self.scale_down_threshold = 0.4  # 40% menos tickets justifica desescalar
+        self.umbral_de_ampliacion = 0.3  # 30% más tickets justifica escalar
+        self.umbral_de_reduccion = 0.4  # 40% menos tickets justifica desescalar
         
-    def can_scale_up(self, robot_id: int, current_tickets: int, current_equipos: int) -> Tuple[bool, str]:
+    def puede_ampliarse(self, robot_id: int, current_tickets: int, current_equipos: int) -> Tuple[bool, str]:
         """
         Determina si un robot puede escalar hacia arriba (asignar más equipos).
         
@@ -54,20 +54,20 @@ class CoolingManager:
                 return True, "No hay equipos asignados y existen tickets pendientes"
             
             # Verificar si está en período de enfriamiento tras una asignación reciente
-            if robot_id in self._last_scale_up:
-                last_time, _, last_tickets = self._last_scale_up[robot_id]
+            if robot_id in self._ultima_ampliacion:
+                last_time, _, last_tickets = self._ultima_ampliacion[robot_id]
                 time_elapsed = now - last_time
                 
                 if time_elapsed < self.cooling_period:
                     # Verificar si el aumento de tickets justifica ignorar el enfriamiento
-                    if last_tickets > 0 and current_tickets / last_tickets >= (1 + self.scale_up_threshold):
+                    if last_tickets > 0 and current_tickets / last_tickets >= (1 + self.umbral_de_ampliacion):
                         return True, f"Aumento significativo de tickets ({last_tickets} -> {current_tickets})"
                     
                     return False, f"En período de enfriamiento tras asignación reciente ({int(time_elapsed)}s < {self.cooling_period}s)"
             
             # Verificar si está en período de enfriamiento tras una desasignación reciente
-            if robot_id in self._last_scale_down:
-                last_time, _, _ = self._last_scale_down[robot_id]
+            if robot_id in self._ultima_reduccion:
+                last_time, _, _ = self._ultima_reduccion[robot_id]
                 time_elapsed = now - last_time
                 
                 if time_elapsed < self.cooling_period:
@@ -75,9 +75,9 @@ class CoolingManager:
             
             return True, "Fuera de período de enfriamiento"
     
-    def can_scale_down(self, robot_id: int, current_tickets: int, current_equipos: int) -> Tuple[bool, str]:
+    def puede_reducirse(self, robot_id: int, current_tickets: int, current_equipos: int) -> Tuple[bool, str]:
         """
-        Determina si un robot puede escalar hacia abajo (desasignar equipos).
+        Determina si un robot puede reducir la escala (desasignar equipos).
         
         Args:
             robot_id: ID del robot
@@ -95,20 +95,20 @@ class CoolingManager:
                 return True, "No hay tickets pendientes"
             
             # Verificar si está en período de enfriamiento tras una desasignación reciente
-            if robot_id in self._last_scale_down:
-                last_time, _, last_tickets = self._last_scale_down[robot_id]
+            if robot_id in self._ultima_reduccion:
+                last_time, _, last_tickets = self._ultima_reduccion[robot_id]
                 time_elapsed = now - last_time
                 
                 if time_elapsed < self.cooling_period:
                     # Verificar si la disminución de tickets justifica ignorar el enfriamiento
-                    if last_tickets > 0 and current_tickets / last_tickets <= (1 - self.scale_down_threshold):
+                    if last_tickets > 0 and current_tickets / last_tickets <= (1 - self.umbral_de_reduccion):
                         return True, f"Disminución significativa de tickets ({last_tickets} -> {current_tickets})"
                     
                     return False, f"En período de enfriamiento tras desasignación reciente ({int(time_elapsed)}s < {self.cooling_period}s)"
             
             # Verificar si está en período de enfriamiento tras una asignación reciente
-            if robot_id in self._last_scale_up:
-                last_time, _, _ = self._last_scale_up[robot_id]
+            if robot_id in self._ultima_ampliacion:
+                last_time, _, _ = self._ultima_ampliacion[robot_id]
                 time_elapsed = now - last_time
                 
                 if time_elapsed < self.cooling_period:
@@ -116,7 +116,7 @@ class CoolingManager:
             
             return True, "Fuera de período de enfriamiento"
     
-    def register_scale_up(self, robot_id: int, tickets: int, equipos_asignados: int) -> None:
+    def registrar_ampliacion(self, robot_id: int, tickets: int, equipos_asignados: int) -> None:
         """
         Registra una operación de escalado hacia arriba.
         
@@ -126,10 +126,10 @@ class CoolingManager:
             equipos_asignados: Cantidad de equipos asignados
         """
         with self._lock:
-            self._last_scale_up[robot_id] = (time.time(), "ASIGNAR", tickets)
-            logger.debug(f"Registrada operación de escalado UP para RobotId {robot_id}: {tickets} tickets, {equipos_asignados} equipos")
+            self._ultima_ampliacion[robot_id] = (time.time(), "ASIGNAR", tickets)
+            logger.debug(f"Registrada operación de ampliación para RobotId {robot_id}: {tickets} tickets, {equipos_asignados} equipos")
     
-    def register_scale_down(self, robot_id: int, tickets: int, equipos_desasignados: int) -> None:
+    def registrar_reduccion(self, robot_id: int, tickets: int, equipos_desasignados: int) -> None:
         """
         Registra una operación de escalado hacia abajo.
         
@@ -139,5 +139,5 @@ class CoolingManager:
             equipos_desasignados: Cantidad de equipos desasignados
         """
         with self._lock:
-            self._last_scale_down[robot_id] = (time.time(), "DESASIGNAR", tickets)
-            logger.debug(f"Registrada operación de escalado DOWN para RobotId {robot_id}: {tickets} tickets, {equipos_desasignados} equipos")
+            self._ultima_reduccion[robot_id] = (time.time(), "DESASIGNAR", tickets)
+            logger.debug(f"Registrada operación de reducción para RobotId {robot_id}: {tickets} tickets, {equipos_desasignados} equipos")
