@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Any, Optional
 from common.database.sql_client import DatabaseConnector
 
-logger = logging.getLogger("SAM.Balanceador.HistoricoClient")
+logger = logging.getLogger(__name__)
 
 class HistoricoBalanceoClient:
     """
