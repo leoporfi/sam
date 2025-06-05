@@ -1,9 +1,9 @@
 # Configuraciones
 $NSSMPath = "C:\Tools\nssm\nssm.exe"
-$ServiceName = "SAM Lanzador"
-$PythonPath = "C:\RPA\rpa_sam\venv\Scripts\python.exe"
-$ScriptPath = "C:\RPA\rpa_sam\lanzador\service\main.py"
-$WorkingDir = "C:\RPA\rpa_sam\lanzador"
+$ServiceName = "SAMBalanceadorService"
+$PythonPath = "C:\RPA\sam\.venv\Scripts\python.exe"
+$ScriptPath = "-m balanceador.service.main"
+$WorkingDir = "C:\RPA\sam"
 
 # Verifica que NSSM exista
 if (-Not (Test-Path $NSSMPath)) {
@@ -14,6 +14,10 @@ if (-Not (Test-Path $NSSMPath)) {
 # Crea el servicio
 & $NSSMPath install $ServiceName $PythonPath $ScriptPath
 & $NSSMPath set $ServiceName AppDirectory $WorkingDir
+# & $NSSMPath set $ServiceName AppStdout C:\RPA\sam\logs\balanceador_service.log
+# & $NSSMPath set $ServiceName AppStderr C:\RPA\sam\logs\balanceador_service_error.log
+& $NSSMPath set $ServiceName Description "Servicio para el balanceador de carga de SAM"
+& $NSSMPath set $ServiceName DisplayName "SAM Balanceador Service"
 & $NSSMPath set $ServiceName Start SERVICE_AUTO_START
 
 # Inicia el servicio
