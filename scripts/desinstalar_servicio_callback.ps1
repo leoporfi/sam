@@ -1,5 +1,5 @@
 $NSSMPath = "C:\Tools\nssm\nssm.exe"
-$ServiceName = "SAM Lanzador"
+$ServiceName = "SAMCallbackServer"
 
 if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
     Stop-Service $ServiceName -Force
