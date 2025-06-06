@@ -147,7 +147,7 @@ class AutomationAnywhereClient: # Nombre original de tu clase en SAM
             self._manejar_excepcion_api(e, response_obj, payload)
             return None # No se alcanza si _manejar_excepcion_api siempre relanza
 
-    def _is_token_still_valid_by_time(self) -> bool:
+    def _es_valido_el_token(self) -> bool:
         """Verifica si el token actual es probablemente válido según su tiempo de vida."""
         if not self._token_auth or not self._ts_inicio_token:
             return False
@@ -159,10 +159,10 @@ class AutomationAnywhereClient: # Nombre original de tu clase en SAM
             logger.info("Token existente ha superado el buffer de refresco por tiempo. Necesita ser renovado.")
             return False
 
-    def _ensure_token_valid(self) -> None:
+    def _asegurar_validez_del_token(self) -> None:
         """Asegura que haya un token válido. Obtiene/refresca si es necesario."""
         with self._token_lock:
-            if self._is_token_still_valid_by_time():
+            if self._es_valido_el_token():
                 return
             logger.info("Token no válido o necesita refresco. Obteniendo nuevo token (dentro de lock)...")
             if not self._obtener_token():
@@ -174,7 +174,7 @@ class AutomationAnywhereClient: # Nombre original de tu clase en SAM
                                data_payload: Any = None,
                                headers_extra: Optional[Dict] = None) -> Dict[str, Any]:
         """Método centralizado para realizar peticiones API."""
-        self._ensure_token_valid()
+        self._asegurar_validez_del_token()
         url = f"{self.url_base}{endpoint}"
         final_headers = {}
         if json_payload is not None and (method.upper() in ["POST", "PUT", "PATCH"]):

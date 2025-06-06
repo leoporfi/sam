@@ -1,7 +1,7 @@
 # SAM/balanceador/database/historico_client.py
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Optional
 from common.database.sql_client import DatabaseConnector
 
 logger = logging.getLogger(__name__)
