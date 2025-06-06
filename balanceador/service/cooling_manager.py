@@ -2,7 +2,7 @@
 
 import time
 import logging
-from typing import Dict, Set, Tuple, Any
+from typing import Dict, Tuple
 from threading import RLock
 
 logger = logging.getLogger(__name__)
