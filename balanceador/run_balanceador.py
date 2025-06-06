@@ -11,7 +11,6 @@ Fecha: 2025
 
 # SAM/balanceador/run_balanceador.py
 
-import os
 import sys
 from pathlib import Path
 
@@ -22,7 +21,7 @@ SAM_PROJECT_ROOT = BALANCEADOR_MODULE_ROOT.parent
 if str(SAM_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(SAM_PROJECT_ROOT))
 
-from balanceador.service.main import main_for_run_script as main
+from balanceador.service.main import start_balanceador as main
 
 if __name__ == "__main__":
     main()

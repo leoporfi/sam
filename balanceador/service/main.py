@@ -115,7 +115,7 @@ class Balanceador:
         self._lock = RLock()
         
         # Registrar handlers de salida
-        atexit.register(self.cleanup_on_exit)
+        atexit.register(self.limpiar_al_salir)
         
         # Configurar tarea programada
         self.configurar_tarea_programada()
@@ -215,7 +215,6 @@ class Balanceador:
                     GROUP BY tr.name;
                 """
                 
-                self.mysql_clouders.conectar_ssh()
                 tickets_clouders_raw = self.mysql_clouders.ejecutar_consulta_mysql(db_name_clouders, query_clouders)
                 logger.info(f"Carga obtenida de clouders: {len(tickets_clouders_raw or [])} registros procesados.")
                 return tickets_clouders_raw or []
@@ -366,7 +365,7 @@ class Balanceador:
         # Usar el algoritmo de balanceo
         self.balanceo.ejecutar_balanceo()
 
-    def cleanup_on_exit(self):
+    def limpiar_al_salir(self):
         """
         Realiza limpieza de recursos al salir.
         """
@@ -404,7 +403,7 @@ class Balanceador:
         if hasattr(self, 'db_rpa360') and self.db_rpa360:
             self.db_rpa360.cerrar_conexion_hilo_actual()
         if hasattr(self, 'mysql_clouders') and self.mysql_clouders:
-            self.mysql_clouders.cerrar_ssh()
+            self.mysql_clouders.cerrar_conexion()
         
         logger.info("SAM Balanceador: Finalización de servicio completada.")
 
@@ -412,7 +411,7 @@ class Balanceador:
 # --- Funciones de Nivel de Módulo para el Punto de Entrada ---
 app_instance_balanceador: Optional[Balanceador] = None
 
-def main_service_logic():
+def main():
     """
     Lógica principal del servicio.
     """
@@ -442,7 +441,7 @@ def signal_handler_main(sig, frame):
         app_instance_balanceador.finalizar_servicio()
 
 
-def main_for_run_script():
+def start_balanceador():
     """
     Punto de entrada principal del script.
     """
@@ -452,7 +451,7 @@ def main_for_run_script():
         signal.signal(signal.SIGBREAK, signal_handler_main)
     
     try:
-        main_service_logic()
+        main()
     except Exception as e:
         logger.critical(f"Error fatal en la lógica principal del servicio SAM Balanceador: {e}", exc_info=True)
         if app_instance_balanceador:
@@ -462,5 +461,4 @@ def main_for_run_script():
 
 
 if __name__ == "__main__":
-    logger.info("Ejecutando main_mejorado.py directamente para pruebas...")
-    main_for_run_script()
+    start_balanceador()
