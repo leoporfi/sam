@@ -331,29 +331,6 @@ class AutomationAnywhereClient: # Nombre original de tu clase en SAM
             logger.debug(f"Resultado completo del despliegue: {resultado}")
             return resultado
                 
-    def desplegar_bot_old(self, file_id: int, run_as_user_ids: List[int], bot_input: Optional[Dict[str, Any]] = None) -> Optional[str]:
-        """Despliega un bot y devuelve el deploymentId."""
-        payload = {
-            "fileId": file_id,
-            "runAsUserIds": run_as_user_ids,
-        }
-        if self.callback_url_for_deploy:
-             payload["callbackInfo"] = {"url": self.callback_url_for_deploy}
-        if bot_input and isinstance(bot_input, dict): # Solo añadir si es un dict y no está vacío
-            payload["botInput"] = bot_input
-        
-        try:
-            datos_respuesta = self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V3, json_payload=payload)
-            deployment_id = datos_respuesta.get("deploymentId")
-            if not deployment_id:
-                logger.warning(f"API de despliegue no devolvió deploymentId. Payload: {payload}, Respuesta: {str(datos_respuesta)[:500]}")
-                return None
-            logger.info(f"Bot (FileID: {file_id}) desplegado exitosamente. DeploymentId: {deployment_id}")
-            return deployment_id
-        except Exception as e:
-            logger.error(f"Fallo en el intento de desplegar bot (FileID: {file_id}, Usuarios: {run_as_user_ids}). Error: {e}")
-            return None
-
     def _crear_filtro_deployment_ids(self, deployment_ids: List[str], operador: str = "or") -> Dict[str, Any]:
         """Crea el payload de filtro para buscar por deployment IDs."""
         return {
