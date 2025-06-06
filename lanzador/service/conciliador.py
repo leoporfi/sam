@@ -50,7 +50,6 @@ class ConciliadorImplementaciones:
             "RUN_TIMED_OUT", "UNKNOWN",
         }
 
-
     def _convertir_utc_a_local_sam(self, fecha_utc_str: Optional[str]) -> Optional[datetime]:
         if not fecha_utc_str or fecha_utc_str in ["1970-01-01T00:00:00Z", ""]:
             return None
@@ -81,7 +80,6 @@ class ConciliadorImplementaciones:
         except Exception as ex: # Otras excepciones como pytz.UnknownTimeZoneError
              logger.error(f"Error al convertir fecha UTC a local SAM para '{fecha_utc_str}': {ex}", exc_info=True)
              return None
-
 
     def conciliar_implementaciones(self):
         """Actualiza estados de ejecuciones con la información obtenida desde AA."""
@@ -124,7 +122,6 @@ class ConciliadorImplementaciones:
 
         except Exception as e:
             logger.error(f"Error en conciliar_implementaciones: {e}", exc_info=True) # exc_info=True para traceback completo
-
 
     def actualizar_estados_encontrados_db(self, detalles_api: list):
         """Actualiza la BD SAM con los estados de los deployments encontrados en la API."""
@@ -181,7 +178,6 @@ class ConciliadorImplementaciones:
                 logger.info(f"Conciliador: Actualizados {affected_count} registros de ejecuciones desde API con fechas locales.")
             except Exception as e_db_update:
                  logger.error(f"Conciliador: Error de BD al actualizar estados encontrados con fechas locales: {e_db_update}", exc_info=True)
-
 
     def actualizar_estados_encontrados_db_old(self, detalles_api: list):
         """Actualiza la BD SAM con los estados de los deployments encontrados en la API."""
@@ -269,7 +265,6 @@ class ConciliadorImplementaciones:
                 logger.info(f"Conciliador: Actualizados {affected_count} registros de ejecuciones desde API.")
             except Exception as e_db_update:
                  logger.error(f"Conciliador: Error de BD al actualizar estados encontrados: {e_db_update}", exc_info=True)
-
 
     def actualizar_estados_perdidos_db(self, deployment_ids_en_db: list, detalles_api: list):
         """Marca como UNKNOWN los deployments que estaban en BD pero no se encontraron en la API."""

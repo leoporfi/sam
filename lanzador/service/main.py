@@ -111,7 +111,7 @@ class LanzadorRobots:
         self.notificador = EmailAlertClient()
         self.conciliador = ConciliadorImplementaciones(self.db_connector, self.aa_client)
 
-        atexit.register(self.cleanup_on_exit)
+        atexit.register(self.limpiar_al_salir)
         self.configurar_tareas_programadas() # Configurar los schedules aquí
         logger.info("LanzadorRobots inicializado y tareas programadas con 'schedule'.")
 
@@ -351,7 +351,7 @@ class LanzadorRobots:
         logger.info("LanzadorRobots: Limpiando todas las tareas programadas con 'schedule'...")
         schedule.clear() 
 
-    def cleanup_on_exit(self):
+    def limpiar_al_salir(self):
         logger.info("LanzadorRobots: Realizando limpieza de recursos al salir (atexit)...")
         self.finalizar_servicio()
 
@@ -381,7 +381,7 @@ class LanzadorRobots:
 # --- Funciones de Nivel de Módulo para el Punto de Entrada ---
 app_instance: Optional[LanzadorRobots] = None
 
-def main_service_logic():
+def main():
     global app_instance
     app_instance = LanzadorRobots()
     # configurar_tareas_programadas() ya se llama en __init__ de LanzadorRobots
@@ -402,14 +402,14 @@ def signal_handler_main(sig, frame):
     if app_instance:
         app_instance.finalizar_servicio() # Esto setea _is_shutting_down y shutdown_event
 
-def main_for_run_script():
+def start_lanzador():
     signal.signal(signal.SIGINT, signal_handler_main)
     signal.signal(signal.SIGTERM, signal_handler_main)
     if hasattr(signal, 'SIGBREAK'):
         signal.signal(signal.SIGBREAK, signal_handler_main)
 
     try:
-        main_service_logic()
+        main()
     except Exception as e:
         logger.critical(f"Error fatal en la lógica principal del servicio Lanzador: {e}", exc_info=True)
         if app_instance: # Intentar limpiar si la instancia existe
@@ -418,5 +418,4 @@ def main_for_run_script():
         logger.info("LanzadorRobots: Script principal (main_for_run_script) ha finalizado.")
 
 if __name__ == "__main__":
-    logger.info("Ejecutando service/main.py directamente para pruebas...")
-    main_for_run_script()
+    start_lanzador()
