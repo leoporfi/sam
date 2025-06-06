@@ -685,8 +685,9 @@ class ServidorCallback: # CallbackServer
                         else:
                             # Procesar callback (esta es la ruta de éxito principal)
                             self.logger.info(f"Procesando callback validado: DeploymentId='{deployment_id}', Status='{callback_status}'")
-                            
-                            exito_proceso, msg_proceso_final = self._procesar_callback(deployment_id, callback_status, body_str) # success, process_msg
+                            # RE-SERIALIZAR EL PAYLOAD A UN STRING COMPACTO ANTES DE GUARDARLO
+                            payload_compacto = json.dumps(datos_payload, separators=(',', ':'))
+                            exito_proceso, msg_proceso_final = self._procesar_callback(deployment_id, callback_status, payload_compacto) # success, process_msg
                             
                             if not exito_proceso:
                                 status = "500 Internal Server Error" # Podría ser 202 Accepted si el procesamiento es asíncrono y solo falló la BD
