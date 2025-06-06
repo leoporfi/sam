@@ -2,7 +2,7 @@
 $NSSMPath = "C:\Tools\nssm\nssm.exe"
 $ServiceName = "SAMCallbackServer"
 $PythonPath = "C:\RPA\sam\.venv\Scripts\python.exe"
-$ScriptPath = "-m lanzador.service.callback_server"
+$ScriptPath = "-m callback.service.main"
 $WorkingDir = "C:\RPA\sam"
 
 # Verifica que NSSM exista
