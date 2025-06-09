@@ -108,6 +108,11 @@ def setup_logging(
 
         # Handler para consola
         console_handler = logging.StreamHandler(sys.stdout)
+        # --- INICIO DE LA MODIFICACIÓN ---
+        console_log_level_str = log_config.get("console_level_str", log_level_str)
+        console_log_level = getattr(logging, console_log_level_str, log_level)
+        console_handler.setLevel(console_log_level)
+        # --- FIN DE LA MODIFICACIÓN ---
         console_formatter = logging.Formatter( # Mismo formato o uno más simple para consola
              fmt=log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"),
              datefmt=log_config.get("datefmt", "%Y-%m-%d %H:%M:%S")
@@ -115,7 +120,7 @@ def setup_logging(
         console_handler.setFormatter(console_formatter)
         target_logger.addHandler(console_handler)
         
-        print(f"Logger '{target_logger_name}' configurado con handlers. Path: {log_file_path}")
+        print(f"Logger '{target_logger_name}' configurado. Nivel Archivo: {log_level_str}, Nivel Consola: {console_log_level_str}")
 
     _loggers_configured[target_logger_name] = True
     return target_logger

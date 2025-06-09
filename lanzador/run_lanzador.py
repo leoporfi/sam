@@ -21,7 +21,7 @@ SAM_PROJECT_ROOT = LANZADOR_MODULE_ROOT.parent
 if str(SAM_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(SAM_PROJECT_ROOT))
 
-from lanzador.service.main import start_lanzador as start_lanzador
+from lanzador.service.main import start_lanzador
 
 if __name__ == "__main__":
     start_lanzador()

@@ -14,14 +14,14 @@ from pathlib import Path
 from threading import RLock
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
+from dotenv import load_dotenv
 
 # --- Configuración de Path ---
-BALANCEADOR_MODULE_ROOT = Path(__file__).resolve().parent.parent
+BALANCEADOR_MODULE_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(BALANCEADOR_MODULE_ROOT) not in sys.path:
     sys.path.insert(0, str(BALANCEADOR_MODULE_ROOT))
 
 # --- Carga de .env específica del Balanceador ---
-from dotenv import load_dotenv
 env_path_balanceador = BALANCEADOR_MODULE_ROOT / 'balanceador' / '.env'
 if os.path.exists(env_path_balanceador):
     load_dotenv(dotenv_path=env_path_balanceador)
@@ -35,35 +35,26 @@ else:  # O carga un .env general del proyecto SAM si existe
 # --- Importaciones de Módulos Comunes y Específicos ---
 from common.utils.config_manager import ConfigManager
 from common.utils.logging_setup import setup_logging
-from common.database.sql_client import DatabaseConnector
 from common.utils.mail_client import EmailAlertClient
+from common.database.sql_client import DatabaseConnector
 
 from balanceador.clients.mysql_client import MySQLSSHClient
 from balanceador.service.balanceo import Balanceo
 from balanceador.database.historico_client import HistoricoBalanceoClient
 
 # --- Configurar Logger para el Balanceador ---
-log_cfg_balanceador = ConfigManager.get_log_config()
-logger_name = "balanceador.service.main"  # Nombre del logger para este módulo
+log_cfg_main = ConfigManager.get_log_config()
+logger_name = "balanceador.service.main"
 logger = setup_logging(
-    log_config=log_cfg_balanceador,
+    log_config=log_cfg_main,
     logger_name=logger_name,
-    log_file_name_override=log_cfg_balanceador.get("app_log_filename_balanceador")
+    log_file_name_override=log_cfg_main.get("app_log_filename_balanceador")
 )
 
 
 class Balanceador:
-    """
-    Versión mejorada del Balanceador SAM con protección contra thrashing,
-    sistema de prioridades, concurrencia y registro histórico.
-    """
-    
     def __init__(self):
-        """
-        Inicializa el Balanceador SAM.
-        """
         logger.info("Inicializando SAM Balanceador...")
-        
         self.cfg_balanceador_specifics = ConfigManager.get_balanceador_config()
         self.cfg_email_balanceador = ConfigManager.get_email_config("EMAIL")
         
@@ -412,9 +403,6 @@ class Balanceador:
 app_instance_balanceador: Optional[Balanceador] = None
 
 def main():
-    """
-    Lógica principal del servicio.
-    """
     global app_instance_balanceador
     app_instance_balanceador = Balanceador()
     
