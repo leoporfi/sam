@@ -913,7 +913,7 @@ class ServidorCallback: # CallbackServer
         print("Servidor de Callbacks SAM: Proceso de limpieza final completado.", file=sys.stderr)
 
 
-def start_callback_server_main(): # main_entry_point
+def start_callback_server():
     """Punto de entrada principal para iniciar el servidor."""
     servidor_app = None
     try:
@@ -932,6 +932,4 @@ def start_callback_server_main(): # main_entry_point
         sys.exit(1) # Salir con código de error
 
 if __name__ == "__main__":
-    # Esto permite ejecutar el servidor directamente con: python lanzador/service/callback_server.py
-    # (asumiendo que SAM_PROJECT_ROOT está en PYTHONPATH o se ejecuta desde la raíz con -m)
-    start_callback_server_main()
+    start_callback_server()

@@ -14,6 +14,7 @@ from threading import RLock # RLock para locks reentrantes si es necesario
 from datetime import datetime, time as dt_time
 from pathlib import Path
 from typing import Any, Dict, Optional
+from dotenv import load_dotenv
 
 # --- Configuración de Path ---
 LANZADOR_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -21,7 +22,6 @@ if str(LANZADOR_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(LANZADOR_PROJECT_ROOT))
 
 # --- Carga de .env específica del Lanzador ---
-from dotenv import load_dotenv
 env_path_lanzador = LANZADOR_PROJECT_ROOT / "lanzador" / '.env'
 if os.path.exists(env_path_lanzador):
     load_dotenv(dotenv_path=env_path_lanzador)
@@ -35,8 +35,8 @@ else: # O carga un .env general del proyecto SAM si existe
 # --- Importaciones de Módulos Comunes y Específicos ---
 from common.utils.config_manager import ConfigManager
 from common.utils.logging_setup import setup_logging
-from common.database.sql_client import DatabaseConnector
 from common.utils.mail_client import EmailAlertClient
+from common.database.sql_client import DatabaseConnector
 
 from lanzador.clients.aa_client import AutomationAnywhereClient 
 from lanzador.service.conciliador import ConciliadorImplementaciones
@@ -53,6 +53,7 @@ logger = setup_logging(
 
 class LanzadorRobots:
     def __init__(self):
+        logger.info("Inicializando SAM Lanzador...")
         self.cfg_lanzador = ConfigManager.get_lanzador_config()
         
         # Leer intervalos para schedule (en segundos)
@@ -183,22 +184,22 @@ class LanzadorRobots:
 
     def ejecutar_ciclo_lanzamiento(self):
         if self._is_shutting_down:
-            logger.info("LanzadorRobots: Ciclo de lanzamiento abortado (cierre general).")
+            logger.info("SAM Lanzador: Ciclo de lanzamiento abortado (cierre general).")
             return
 
         if self._esta_en_periodo_de_pausa():
             if not self.pausa_activa_actualmente:
-                logger.info(f"LanzadorRobots: En período de pausa de lanzamiento ({self.pausa_lanzamiento_inicio.strftime('%H:%M')} - {self.pausa_lanzamiento_fin.strftime('%H:%M')}). No se lanzarán robots.")
+                logger.info(f"SAM Lanzador: En período de pausa de lanzamiento ({self.pausa_lanzamiento_inicio.strftime('%H:%M')} - {self.pausa_lanzamiento_fin.strftime('%H:%M')}). No se lanzarán robots.")
                 self.pausa_activa_actualmente = True
             else:
-                logger.debug(f"LanzadorRobots: Ciclo de lanzamiento omitido debido a pausa programada.")
+                logger.debug(f"SAM Lanzador: Ciclo de lanzamiento omitido debido a pausa programada.")
             return
 
         if self.pausa_activa_actualmente:
-            logger.info("LanzadorRobots: Finalizado período de pausa de lanzamiento. Reanudando operaciones.")
+            logger.info("SAM Lanzador: Finalizado período de pausa de lanzamiento. Reanudando operaciones.")
             self.pausa_activa_actualmente = False
             
-        logger.info("LanzadorRobots: Iniciando ciclo de lanzamiento de robots (concurrente)...")
+        logger.info("SAM Lanzador: Iniciando ciclo de lanzamiento de robots (concurrente)...")
         
         robots_para_lanzar_inicialmente_tuplas = []
         try:
@@ -208,12 +209,12 @@ class LanzadorRobots:
                     (r.get("RobotId"), r.get("EquipoId"), r.get("UserId"), r.get("Hora"))
                     for r in lista_robots_data_dict
                 ]
-                logger.info(f"LanzadorRobots: {len(robots_para_lanzar_inicialmente_tuplas)} robots obtenidos para posible ejecución.")
+                logger.info(f"SAM Lanzador: {len(robots_para_lanzar_inicialmente_tuplas)} robots obtenidos para posible ejecución.")
             else:
-                logger.info("LanzadorRobots: No hay robots para ejecutar en este ciclo (según SP).")
+                logger.info("SAM Lanzador: No hay robots para ejecutar en este ciclo (según SP).")
                 return
         except Exception as e_db_get:
-            logger.error(f"LanzadorRobots: Error al obtener robots ejecutables de la BD: {e_db_get}", exc_info=True)
+            logger.error(f"SAM Lanzador: Error al obtener robots ejecutables de la BD: {e_db_get}", exc_info=True)
             return
 
         bot_input_plantilla = {"in_NumRepeticion": {"type": "NUMBER", "number": self.cfg_lanzador.get("bot_input_vueltas", 5)}}
@@ -222,7 +223,7 @@ class LanzadorRobots:
         max_workers = self.cfg_lanzador.get("max_lanzamientos_concurrentes", 5)
 
         if robots_para_lanzar_inicialmente_tuplas and not self._is_shutting_down:
-            logger.info(f"LanzadorRobots: Iniciando primer intento de lanzamiento para {len(robots_para_lanzar_inicialmente_tuplas)} robots usando {max_workers} hilos.")
+            logger.info(f"SAM Lanzador: Iniciando primer intento de lanzamiento para {len(robots_para_lanzar_inicialmente_tuplas)} robots usando {max_workers} hilos.")
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 mapa_futuro_a_robot = {
                     executor.submit(self._lanzar_robot_individualmente_y_registrar, robot_info, bot_input_plantilla): robot_info
@@ -246,17 +247,17 @@ class LanzadorRobots:
                         elif resultado["status"] in ["failed_api_permanent", "failed_db_insert", "failed_data"]:
                             robots_fallidos_para_notificar.append({"robot_id": db_robot_id, "equipo_id": db_equipo_id, "user_id": a360_user_id, "error": resultado.get("error", "Error desconocido")})
                     except Exception as exc_futuro:
-                        logger.error(f"LanzadorRobots: Excepción al procesar futuro para RobotID(SAM):{db_robot_id}: {exc_futuro}", exc_info=True)
+                        logger.error(f"SAM Lanzador: Excepción al procesar futuro para RobotID(SAM):{db_robot_id}: {exc_futuro}", exc_info=True)
                         robots_fallidos_para_notificar.append({"robot_id": db_robot_id, "equipo_id": db_equipo_id, "user_id": a360_user_id, "error": f"Excepción en ThreadPool: {exc_futuro}"})
-            logger.info("LanzadorRobots: Finalizado primer intento de lanzamientos concurrentes.")
+            logger.info("SAM Lanzador: Finalizado primer intento de lanzamientos concurrentes.")
 
         if not self._is_shutting_down and robots_para_reintentar_lista:
             delay_reintento = self.cfg_lanzador.get("reintento_lanzamiento_delay_seg", 10)
-            logger.info(f"LanzadorRobots: {len(robots_para_reintentar_lista)} robots para reintentar. Esperando {delay_reintento} segundos...")
+            logger.info(f"SAM Lanzador: {len(robots_para_reintentar_lista)} robots para reintentar. Esperando {delay_reintento} segundos...")
             if self.shutdown_event.wait(timeout=delay_reintento): # Espera interrumpible
                  logger.info("Cierre solicitado durante espera para reintentos. No se realizarán.")
             elif not self._is_shutting_down: # Re-chequear después del wait
-                logger.info(f"LanzadorRobots: Iniciando SEGUNDO intento para {len(robots_para_reintentar_lista)} robots.")
+                logger.info(f"SAM Lanzador: Iniciando SEGUNDO intento para {len(robots_para_reintentar_lista)} robots.")
                 with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor_reintento:
                     mapa_futuro_reintento_a_robot = {
                         executor_reintento.submit(self._lanzar_robot_individualmente_y_registrar, robot_info, bot_input_plantilla): robot_info
@@ -274,30 +275,30 @@ class LanzadorRobots:
                                 logger.error(f"Fallo en SEGUNDO intento para RobotID(SAM):{db_robot_id_re}. Error: {resultado_re.get('error')}")
                                 robots_fallidos_para_notificar.append({"robot_id": db_robot_id_re, "equipo_id": db_equipo_id_re, "user_id": a360_user_id_re, "error": f"Fallo tras reintento: {resultado_re.get('error')}"})
                         except Exception as exc_futuro_re:
-                            logger.error(f"LanzadorRobots: Excepción al procesar futuro de REINTENTO para RobotID(SAM):{db_robot_id_re}: {exc_futuro_re}", exc_info=True)
+                            logger.error(f"SAM Lanzador: Excepción al procesar futuro de REINTENTO para RobotID(SAM):{db_robot_id_re}: {exc_futuro_re}", exc_info=True)
                             robots_fallidos_para_notificar.append({"robot_id": db_robot_id_re, "equipo_id": db_equipo_id_re, "user_id": a360_user_id_re, "error": f"Excepción en ThreadPool (Reintento): {exc_futuro_re}"})
-                logger.info("LanzadorRobots: Finalizado segundo intento de lanzamientos (reintentos).")
+                logger.info("SAM Lanzador: Finalizado segundo intento de lanzamientos (reintentos).")
 
         if robots_fallidos_para_notificar:
             self.notificar_robots_fallidos(robots_fallidos_para_notificar)
-        logger.info("LanzadorRobots: Ciclo de lanzamiento (concurrente) completado.")
+        logger.info("SAM Lanzador: Ciclo de lanzamiento (concurrente) completado.")
 
     def ejecutar_ciclo_conciliacion(self):
         if self._is_shutting_down:
-            logger.info("LanzadorRobots: Ciclo de conciliación abortado (cierre solicitado).")
+            logger.info("SAM Lanzador: Ciclo de conciliación abortado (cierre solicitado).")
             return
-        logger.info("LanzadorRobots: Iniciando ciclo de conciliación de implementaciones...")
+        logger.info("SAM Lanzador: Iniciando ciclo de conciliación de implementaciones...")
         try:
             self.conciliador.conciliar_implementaciones()
         except Exception as e:
-            logger.error(f"LanzadorRobots: Error en ciclo de conciliación: {e}", exc_info=True)
-        logger.info("LanzadorRobots: Ciclo de conciliación completado.")
+            logger.error(f"SAM Lanzador: Error en ciclo de conciliación: {e}", exc_info=True)
+        logger.info("SAM Lanzador: Ciclo de conciliación completado.")
 
     def ejecutar_ciclo_sincronizacion_tablas(self):
         if self._is_shutting_down:
-            logger.info("LanzadorRobots: Ciclo de sincronización de tablas abortado (cierre solicitado).")
+            logger.info("SAM Lanzador: Ciclo de sincronización de tablas abortado (cierre solicitado).")
             return
-        logger.info("LanzadorRobots: Iniciando ciclo de sincronización de tablas maestras (Equipos, Robots)...")
+        logger.info("SAM Lanzador: Iniciando ciclo de sincronización de tablas maestras (Equipos, Robots)...")
         try:
             logger.info("Sincronizando tabla Equipos...")
             lista_devices_api = self.aa_client.obtener_devices(status_filtro="CONNECTED")
@@ -335,36 +336,36 @@ class LanzadorRobots:
                 self.db_connector.merge_robots(robots_para_merge)
             else: logger.info("Sincro Robots: No se obtuvieron robots (o ninguno pasó los filtros) de la API para fusionar.")
         except Exception as e:
-            logger.error(f"LanzadorRobots: Error durante el ciclo de sincronización de tablas: {e}", exc_info=True)
+            logger.error(f"SAM Lanzador: Error durante el ciclo de sincronización de tablas: {e}", exc_info=True)
             try:
                 self.notificador.send_alert("Error CRÍTICO en Sincronización de Tablas SAM", f"Error: {e}\n\nTraceback:\n{traceback.format_exc()}", is_critical=True)
-            except Exception as email_ex: logger.error(f"LanzadorRobots: Fallo también al enviar email de notificación de error de sincronización: {email_ex}")
-        logger.info("LanzadorRobots: Ciclo de sincronización de tablas maestras completado.")
+            except Exception as email_ex: logger.error(f"SAM Lanzador: Fallo también al enviar email de notificación de error de sincronización: {email_ex}")
+        logger.info("SAM Lanzador: Ciclo de sincronización de tablas maestras completado.")
 
     def notificar_robots_fallidos(self, robots_fallidos_con_detalle: list):
         if robots_fallidos_con_detalle:
-            logger.info(f"LanzadorRobots: Generando notificación para {len(robots_fallidos_con_detalle)} robots con fallos.")
+            logger.info(f"SAM Lanzador: Generando notificación para {len(robots_fallidos_con_detalle)} robots con fallos.")
             mensaje = self.db_connector.generar_mensaje_notificacion(robots_fallidos_con_detalle)
             self.notificador.send_alert(subject="Lanzador SAM: Robots con Fallo en Despliegue o Registro", message=mensaje, is_critical=False)
 
     def detener_tareas_programadas(self):
-        logger.info("LanzadorRobots: Limpiando todas las tareas programadas con 'schedule'...")
+        logger.info("SAM Lanzador: Limpiando todas las tareas programadas con 'schedule'...")
         schedule.clear() 
 
     def limpiar_al_salir(self):
-        logger.info("LanzadorRobots: Realizando limpieza de recursos al salir (atexit)...")
+        logger.info("SAM Lanzador: Realizando limpieza de recursos al salir (atexit)...")
         self.finalizar_servicio()
 
     def finalizar_servicio(self):
-        logger.info("LanzadorRobots: Iniciando proceso de finalización del servicio...")
+        logger.info("SAM Lanzador: Iniciando proceso de finalización del servicio...")
         with self._lock:
             if self._is_shutting_down:
-                logger.info("LanzadorRobots: El servicio ya está en proceso de finalización.")
+                logger.info("SAM Lanzador: El servicio ya está en proceso de finalización.")
                 return
             self._is_shutting_down = True
         
         self.shutdown_event.set() # Señalar al bucle principal de schedule que termine
-        logger.info("LanzadorRobots: Evento de cierre (shutdown_event) activado.")
+        logger.info("SAM Lanzador: Evento de cierre (shutdown_event) activado.")
         
         self.detener_tareas_programadas()
         
@@ -376,7 +377,7 @@ class LanzadorRobots:
 
         if self.db_connector:
             self.db_connector.cerrar_conexion_hilo_actual() # Cierra la conexión del hilo principal
-        logger.info("LanzadorRobots: Finalización de servicio completada.")
+        logger.info("SAM Lanzador: Finalización de servicio completada.")
 
 # --- Funciones de Nivel de Módulo para el Punto de Entrada ---
 app_instance: Optional[LanzadorRobots] = None
@@ -384,18 +385,17 @@ app_instance: Optional[LanzadorRobots] = None
 def main():
     global app_instance
     app_instance = LanzadorRobots()
-    # configurar_tareas_programadas() ya se llama en __init__ de LanzadorRobots
 
-    logger.info("LanzadorRobots: Ejecutando tareas iniciales una vez (si no está en cierre)...")
+    logger.info("SAM Lanzador: Ejecutando tareas iniciales una vez (si no está en cierre)...")
     if not app_instance.shutdown_event.is_set(): app_instance.ejecutar_ciclo_sincronizacion_tablas() 
     if not app_instance.shutdown_event.is_set(): app_instance.ejecutar_ciclo_conciliacion()
     if not app_instance.shutdown_event.is_set(): app_instance.ejecutar_ciclo_lanzamiento()
 
-    logger.info("LanzadorRobots: Iniciando bucle principal de 'schedule'. El servicio está corriendo.")
+    logger.info("SAM Lanzador: Iniciando bucle principal de 'schedule'. El servicio está corriendo.")
     while not app_instance.shutdown_event.is_set():
         schedule.run_pending()
         app_instance.shutdown_event.wait(timeout=1) # Espera interrumpible de 1 segundo
-    logger.info("LanzadorRobots: Bucle principal de 'schedule' terminado.")
+    logger.info("SAM Lanzador: Bucle principal de 'schedule' terminado.")
 
 def signal_handler_main(sig, frame):
     logger.warning(f"Señal de terminación {signal.Signals(sig).name} recibida. Cerrando LanzadorRobots...")
@@ -415,7 +415,7 @@ def start_lanzador():
         if app_instance: # Intentar limpiar si la instancia existe
             app_instance.finalizar_servicio()
     finally:
-        logger.info("LanzadorRobots: Script principal (main_for_run_script) ha finalizado.")
+        logger.info("SAM Lanzador: Script principal (main_for_run_script) ha finalizado.")
 
 if __name__ == "__main__":
     start_lanzador()

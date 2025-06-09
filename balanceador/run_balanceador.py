@@ -21,7 +21,7 @@ SAM_PROJECT_ROOT = BALANCEADOR_MODULE_ROOT.parent
 if str(SAM_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(SAM_PROJECT_ROOT))
 
-from balanceador.service.main import start_balanceador as main
+from balanceador.service.main import start_balanceador
 
 if __name__ == "__main__":
-    main()
+    start_balanceador()
