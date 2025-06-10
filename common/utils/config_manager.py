@@ -45,6 +45,7 @@ class ConfigManager:
             "app_log_filename_balanceador": os.getenv("APP_LOG_FILENAME_BALANCEADOR", "sam_balanceador_app.log"),
             "callback_log_filename": os.getenv("CALLBACK_LOG_FILENAME", "sam_callback_server.log"),
             "level_str": os.getenv("LOG_LEVEL", "INFO").upper(),
+            "console_level_str": os.getenv("CONSOLE_LOG_LEVEL", "INFO").upper(),
             "when": "midnight",
             "interval": 1,
             "backupCount": int(os.getenv("LOG_BACKUP_COUNT", 7)),
