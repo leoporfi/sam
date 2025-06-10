@@ -1,10 +1,10 @@
 # SAM/Lanzador/tests/test_sql_client_merge_methods.py (Nuevo archivo)
 
+import datetime  # Para el objeto time
 import logging
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
-import datetime # Para el objeto time
+from typing import Any, Dict, List
 
 # --- Configuración de Path para encontrar los módulos de SAM ---
 SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -40,10 +40,10 @@ def run_merge_tests():
             if not db_name_for_lanzador:
                 logger.error("No se encontró el nombre de la base de datos para SAM Lanzador en la configuración.")
                 return
-        
+
         db_connector = DatabaseConnector(
             servidor=sql_cfg["server"],
-            base_datos=db_name_for_lanzador, 
+            base_datos=db_name_for_lanzador,
             usuario=sql_cfg["uid"],
             contrasena=sql_cfg["pwd"]
         )
@@ -59,11 +59,11 @@ def run_merge_tests():
     # Campos clave: "EquipoId" (A360 DeviceID), "Equipo", "UserId" (A360 UserID), "UserName", "Licencia", "Activo_SAM"
     lista_equipos_ficticios: List[Dict[str, Any]] = [
         { # Caso 1: Equipo existente que podría necesitar actualización
-            "EquipoId": 101, "Equipo": "RPA-VM01-PROD-ACTUALIZADO", "UserId": 701, 
-            "UserName": "runner01prod", "Licencia": "Unattended", "Activo_SAM": True 
+            "EquipoId": 101, "Equipo": "RPA-VM01-PROD-ACTUALIZADO", "UserId": 701,
+            "UserName": "runner01prod", "Licencia": "Unattended", "Activo_SAM": True
         },
         { # Caso 2: Nuevo equipo para insertar
-            "EquipoId": 105, "Equipo": "RPA-VM05-NUEVO", "UserId": 705, 
+            "EquipoId": 105, "Equipo": "RPA-VM05-NUEVO", "UserId": 705,
             "UserName": "runner05new", "Licencia": "Attended", "Activo_SAM": True
         },
         { # Caso 3: Equipo existente, pero ahora inactivo
@@ -71,17 +71,17 @@ def run_merge_tests():
             "UserName": "runner02off", "Licencia": "Unattended", "Activo_SAM": False # Asumiendo que la columna Activo existe
         },
         { # Caso 4: Device sin usuario asignado
-            "EquipoId": 106, "Equipo": "RPA-VM06-SIN-USUARIO", "UserId": None, 
+            "EquipoId": 106, "Equipo": "RPA-VM06-SIN-USUARIO", "UserId": None,
             "UserName": None, "Licencia": "NO_APLICA", "Activo_SAM": False
         },
         { # Caso 5: Mismo EquipoId que el caso 1, para ver si actualiza (el último debería ganar si hay duplicados en la lista)
           # Esto prueba la lógica del MERGE, no la deduplicación en la lista de entrada, que debe hacerse antes.
           # En una lista real, no debería haber EquipoId duplicados.
-            "EquipoId": 101, "Equipo": "RPA-VM01-PROD-FINAL", "UserId": 701, 
-            "UserName": "runner01final", "Licencia": "SuperUnattended", "Activo_SAM": True 
+            "EquipoId": 101, "Equipo": "RPA-VM01-PROD-FINAL", "UserId": 701,
+            "UserName": "runner01final", "Licencia": "SuperUnattended", "Activo_SAM": True
         }
     ]
-    
+
     # Antes de ejecutar, podrías querer insertar/actualizar manualmente algunos registros en tu BD SAM
     # para verificar los casos de MATCHED e INSERT.
     # Por ejemplo, asegúrate que un Equipo con EquipoId=101 exista, y uno con EquipoId=105 no.
@@ -148,10 +148,10 @@ if __name__ == "__main__":
     # SQL_SERVER_DB_SAM=SAM # O el nombre de tu BD SAM para el Lanzador
     # SQL_SERVER_UID=tu_usuario_sql
     # SQL_SERVER_PWD=tu_contraseña_sql
-    
+
     print("**************************************************************************")
     print("ATENCIÓN: Esta prueba realizará operaciones MERGE en tu base de datos SAM.")
-    print(f"Asegúrate de que la configuración en .env apunte a una BD DE PRUEBAS.")
+    print("Asegúrate de que la configuración en .env apunte a una BD DE PRUEBAS.")
     print("Se recomienda tener un backup si trabajas sobre datos importantes.")
     print("**************************************************************************")
     confirm = input("¿Estás seguro de que quieres continuar con la prueba de MERGE? (s/N): ")

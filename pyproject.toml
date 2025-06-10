@@ -27,3 +27,49 @@ dependencies = [
     "urllib3==2.2.3",
     "waitress==3.0.0",
 ]
+
+[tool.ruff]
+# Directorios comunes a excluir
+exclude = [
+  ".git",
+  "__pycache__",
+  ".venv",
+  "env",
+  "venv",
+  ".mypy_cache",
+  ".ruff_cache",
+  "build",
+  "dist",
+  "migrations"
+]
+
+# Archivos a analizar (por defecto todos los .py)
+include = ["*.py"]
+
+# Ignorar reglas específicas
+extend-ignore = [
+  "E402", # importaciones no al inicio del archivo
+  "F401", # imports sin usar (útil en __init__.py)
+  "F841"  # variables asignadas pero no usadas
+]
+
+# Estilo y formato
+line-length = 150
+indent-width = 4
+
+# Selección de linter (esto ya está activado por defecto en versiones nuevas)                                                                   
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes
+  "W",    # warnings
+  "I",    # isort
+  "UP",   # pyupgrade
+  "C90",  # mccabe
+]
+
+# Ordenar imports al guardar si usas ruff-format
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
