@@ -1,10 +1,10 @@
 # SAM/Lanzador/tests/manual_integration_test_aa_client.py
 
+import json  # Para imprimir diccionarios de forma legible
 import logging
-from pathlib import Path
-import sys
 import os
-import json # Para imprimir diccionarios de forma legible
+import sys
+from pathlib import Path
 
 # --- Configuración de Path para encontrar los módulos de SAM ---
 SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -22,9 +22,9 @@ def get_input(prompt_message, default_value=None, data_type=str):
     """Función auxiliar para obtener entrada del usuario con un valor por defecto."""
     if default_value is not None:
         prompt_message += f" (default: {default_value})"
-    
+
     user_input_str = input(f"{prompt_message}: ").strip()
-    
+
     if not user_input_str and default_value is not None:
         return default_value
     if not user_input_str and data_type is not list and data_type is not dict: # Para listas y dicts, un string vacío no es None
@@ -66,7 +66,7 @@ def run_manual_test():
     password = get_input("Contraseña del Usuario API", "****") # Pedir siempre, no mostrar default
     api_key = get_input("API Key (opcional, dejar vacío si no se usa)", None)
     callback_url = get_input("URL de Callback para despliegues (opcional)", "http://localhost:8000/callback")
-    
+
     timeout = get_input("Timeout para peticiones API (segundos)", 60, int)
     buffer_token = get_input("Buffer de refresco de token (segundos)", 1140, int)
     page_size = get_input("Tamaño de página por defecto para listados", 5, int)
@@ -105,7 +105,7 @@ def run_manual_test():
                 file_id = get_input("File ID del bot a desplegar", None, int)
                 user_ids_str = get_input("Run As User ID(s) (separados por coma si son varios)", None, str)
                 run_as_user_ids = [int(uid.strip()) for uid in user_ids_str.split(',') if uid.strip()] if user_ids_str else []
-                
+
                 bot_input_str = get_input("Bot Input (JSON string, ej: {\"nombre_var\":{\"type\":\"STRING\",\"string\":\"valor\"}}, o dejar vacío)", "{}", str)
                 bot_input = json.loads(bot_input_str) if bot_input_str and bot_input_str !="{}" else None
 
@@ -144,7 +144,7 @@ def run_manual_test():
                 desc_filter = get_input("Filtrar por descripción de usuario que contiene (opcional)", None)
                 user_ids_filter_str = get_input("Filtrar por User IDs específicos (separados por coma, opcional)", None)
                 user_ids_list = [int(uid.strip()) for uid in user_ids_filter_str.split(',') if uid.strip()] if user_ids_filter_str else None
-                
+
                 logger.info(f"Llamando a obtener_usuarios_detallados_para_sam(filtro_descripcion_contiene='{desc_filter}', user_ids={user_ids_list})")
                 usuarios = client.obtener_usuarios_detallados_para_sam(
                     filtro_descripcion_contiene=desc_filter,
@@ -169,7 +169,7 @@ def run_manual_test():
                 break
             else:
                 print("Opción no válida.")
-        
+
         except Exception as e:
             logger.error(f"Ocurrió un error durante la prueba del método: {e}", exc_info=True)
             print(f"ERROR: {e}")
