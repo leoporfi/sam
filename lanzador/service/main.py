@@ -1,19 +1,21 @@
 # SAM/Lanzador/service/main.py
 
-import os
-import sys
-import time
 import atexit
-import signal
-import logging
-import threading
 import concurrent.futures
+import logging
+import os
+import signal
+import sys
+import threading
+import time
 import traceback
-import schedule
-from threading import RLock # RLock para locks reentrantes si es necesario
-from datetime import datetime, time as dt_time
+from datetime import datetime
+from datetime import time as dt_time
 from pathlib import Path
+from threading import RLock  # RLock para locks reentrantes si es necesario
 from typing import Any, Dict, Optional
+
+import schedule
 
 # --- Configuración de Path ---
 LANZADOR_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -22,6 +24,7 @@ if str(LANZADOR_PROJECT_ROOT) not in sys.path:
 
 # --- Carga de .env específica del Lanzador ---
 from dotenv import load_dotenv
+
 env_path_lanzador = LANZADOR_PROJECT_ROOT / "lanzador" / '.env'
 if os.path.exists(env_path_lanzador):
     load_dotenv(dotenv_path=env_path_lanzador)
@@ -33,19 +36,18 @@ else: # O carga un .env general del proyecto SAM si existe
         load_dotenv()
 
 # --- Importaciones de Módulos Comunes y Específicos ---
+from common.database.sql_client import DatabaseConnector
 from common.utils.config_manager import ConfigManager
 from common.utils.logging_setup import setup_logging
-from common.database.sql_client import DatabaseConnector
 from common.utils.mail_client import EmailAlertClient
-
-from lanzador.clients.aa_client import AutomationAnywhereClient 
+from lanzador.clients.aa_client import AutomationAnywhereClient
 from lanzador.service.conciliador import ConciliadorImplementaciones
 
 # Configurar el logger principal para este módulo (service.main)
 log_cfg_main = ConfigManager.get_log_config()
 logger_name = "lanzador.service.main"
 logger = setup_logging(
-    log_config=log_cfg_main, 
+    log_config=log_cfg_main,
     logger_name=logger_name,
     log_file_name_override=log_cfg_main.get("app_log_filename_lanzador")
 )
@@ -54,7 +56,7 @@ logger = setup_logging(
 class LanzadorRobots:
     def __init__(self):
         self.cfg_lanzador = ConfigManager.get_lanzador_config()
-        
+
         # Leer intervalos para schedule (en segundos)
         self.intervalo_lanzador_seg = self.cfg_lanzador.get("intervalo_lanzador_seg", 30)
         self.intervalo_conciliador_seg = self.cfg_lanzador.get("intervalo_conciliador_seg", 180)
@@ -66,20 +68,20 @@ class LanzadorRobots:
             self.pausa_fin_str = self.cfg_lanzador.get("pausa_lanzamiento_fin_hhmm", "05:00")
             self.pausa_lanzamiento_inicio = dt_time.fromisoformat(self.pausa_inicio_str)
             self.pausa_lanzamiento_fin = dt_time.fromisoformat(self.pausa_fin_str)
-            self.pausa_activa_actualmente = False 
+            self.pausa_activa_actualmente = False
             logger.info(f"Pausa de lanzamiento configurada de {self.pausa_lanzamiento_inicio.strftime('%H:%M')} a {self.pausa_lanzamiento_fin.strftime('%H:%M')}")
         except ValueError:
             logger.error(f"Formato de PAUSA_LANZAMIENTO_INICIO_HHMM ('{self.pausa_inicio_str}') o PAUSA_LANZAMIENTO_FIN_HHMM ('{self.pausa_fin_str}') inválido. La pausa no funcionará.")
             self.pausa_lanzamiento_inicio = None
             self.pausa_lanzamiento_fin = None
-        
+
         self._lock = RLock() # Lock general para operaciones críticas si es necesario
         self._is_shutting_down = False # Flag para indicar cierre del servicio
         self.shutdown_event = threading.Event() # Evento para señalar al bucle principal que termine
 
         # --- Inicialización de Clientes ---
         # SQL_SAM_CONFIG se usa para la BD principal del Lanzador
-        cfg_sql_sam_lanzador = ConfigManager.get_sql_server_config("SQL_SAM") 
+        cfg_sql_sam_lanzador = ConfigManager.get_sql_server_config("SQL_SAM")
         db_name_lanzador = cfg_sql_sam_lanzador.get("database") # La clave es "database" en get_sql_server_config
 
         if not db_name_lanzador:
@@ -95,7 +97,7 @@ class LanzadorRobots:
         )
 
         aa_cfg = ConfigManager.get_aa_config()
-        self.aa_client = AutomationAnywhereClient( 
+        self.aa_client = AutomationAnywhereClient(
             control_room_url=aa_cfg["url"],
             username=aa_cfg["user"],
             password=aa_cfg["pwd"],
@@ -118,7 +120,7 @@ class LanzadorRobots:
     def configurar_tareas_programadas(self):
         """Configura todas las tareas periódicas usando la biblioteca schedule."""
         logger.info("Configurando tareas programadas con 'schedule'...")
-        
+
         lanzador_interval = max(1, self.intervalo_lanzador_seg)
         schedule.every(lanzador_interval).seconds.do(self.ejecutar_ciclo_lanzamiento).tag('lanzamiento_robots')
         logger.info(f"Ciclo de lanzamiento programado para ejecutarse cada {lanzador_interval} segundos.")
@@ -133,18 +135,18 @@ class LanzadorRobots:
 
     def _esta_en_periodo_de_pausa(self) -> bool:
         if not self.pausa_lanzamiento_inicio or not self.pausa_lanzamiento_fin:
-            return False 
+            return False
         hora_actual = datetime.now().time()
         if self.pausa_lanzamiento_inicio <= self.pausa_lanzamiento_fin:
             return self.pausa_lanzamiento_inicio <= hora_actual < self.pausa_lanzamiento_fin
-        else: 
+        else:
             return hora_actual >= self.pausa_lanzamiento_inicio or hora_actual < self.pausa_lanzamiento_fin
 
     def _lanzar_robot_individualmente_y_registrar(self, robot_info_tupla: tuple, bot_input_plantilla: Optional[dict]) -> Dict[str, Any]:
         """Intenta lanzar un solo robot y registrar su ejecución. Devuelve un diccionario con el estado."""
         db_robot_id, db_equipo_id, a360_user_id, hora_programada_obj = robot_info_tupla
         robot_data_log = f"RobotID(SAM):{db_robot_id}, EquipoID(SAM):{db_equipo_id}, UserID(A360):{a360_user_id}"
-        
+
         if self._is_shutting_down: # Chequeo al inicio de la tarea del worker
             logger.info(f"Lanzamiento para {robot_data_log} abortado (cierre solicitado).")
             return {"status": "skipped_shutdown", "error": "Servicio en cierre", "robot_info_original": robot_info_tupla}
@@ -191,15 +193,15 @@ class LanzadorRobots:
                 logger.info(f"LanzadorRobots: En período de pausa de lanzamiento ({self.pausa_lanzamiento_inicio.strftime('%H:%M')} - {self.pausa_lanzamiento_fin.strftime('%H:%M')}). No se lanzarán robots.")
                 self.pausa_activa_actualmente = True
             else:
-                logger.debug(f"LanzadorRobots: Ciclo de lanzamiento omitido debido a pausa programada.")
+                logger.debug("LanzadorRobots: Ciclo de lanzamiento omitido debido a pausa programada.")
             return
 
         if self.pausa_activa_actualmente:
             logger.info("LanzadorRobots: Finalizado período de pausa de lanzamiento. Reanudando operaciones.")
             self.pausa_activa_actualmente = False
-            
+
         logger.info("LanzadorRobots: Iniciando ciclo de lanzamiento de robots (concurrente)...")
-        
+
         robots_para_lanzar_inicialmente_tuplas = []
         try:
             lista_robots_data_dict = self.db_connector.obtener_robots_ejecutables()
@@ -317,14 +319,14 @@ class LanzadorRobots:
                         if not usuario_detalle.get("Activo_Usuario_A360", True): activo_calculado = False
                     elif a360_user_id_en_device is not None:
                         logger.warning(f"Sincro Equipos: No se encontraron detalles para Usuario A360 ID {a360_user_id_en_device} asignado al DeviceId {device.get('EquipoId')}")
-                        activo_calculado = False 
-                    else: activo_calculado = False 
+                        activo_calculado = False
+                    else: activo_calculado = False
                     if device.get("Status_A360") != "CONNECTED": activo_calculado = False
                     equipos_procesados_para_merge.append({
                         "EquipoId": device.get("EquipoId"), "Equipo": device.get("Equipo"),
                         "UserId": a360_user_id_en_device, "UserName": device.get("UserName"),
                         "Licencia": licencia_final, "Activo_SAM": activo_calculado })
-                        
+
             if equipos_procesados_para_merge: self.db_connector.merge_equipos(equipos_procesados_para_merge)
             else: logger.info("Sincro Equipos: No se obtuvieron devices o usuarios válidos de la API para fusionar.")
 
@@ -349,7 +351,7 @@ class LanzadorRobots:
 
     def detener_tareas_programadas(self):
         logger.info("LanzadorRobots: Limpiando todas las tareas programadas con 'schedule'...")
-        schedule.clear() 
+        schedule.clear()
 
     def limpiar_al_salir(self):
         logger.info("LanzadorRobots: Realizando limpieza de recursos al salir (atexit)...")
@@ -362,12 +364,12 @@ class LanzadorRobots:
                 logger.info("LanzadorRobots: El servicio ya está en proceso de finalización.")
                 return
             self._is_shutting_down = True
-        
+
         self.shutdown_event.set() # Señalar al bucle principal de schedule que termine
         logger.info("LanzadorRobots: Evento de cierre (shutdown_event) activado.")
-        
+
         self.detener_tareas_programadas()
-        
+
         # Dar un pequeño margen para que los hilos del ThreadPoolExecutor (si están activos) puedan notar el cierre
         # Esto es una heurística, un manejo más robusto de ThreadPoolExecutor implicaría .shutdown(wait=True)
         # pero debe hacerse en el lugar correcto (donde se creó y usó).
@@ -387,7 +389,7 @@ def main():
     # configurar_tareas_programadas() ya se llama en __init__ de LanzadorRobots
 
     logger.info("LanzadorRobots: Ejecutando tareas iniciales una vez (si no está en cierre)...")
-    if not app_instance.shutdown_event.is_set(): app_instance.ejecutar_ciclo_sincronizacion_tablas() 
+    if not app_instance.shutdown_event.is_set(): app_instance.ejecutar_ciclo_sincronizacion_tablas()
     if not app_instance.shutdown_event.is_set(): app_instance.ejecutar_ciclo_conciliacion()
     if not app_instance.shutdown_event.is_set(): app_instance.ejecutar_ciclo_lanzamiento()
 
