@@ -187,3 +187,22 @@ button:active {
     justify-content: flex-end;
     gap: 12px; /* Space between buttons */
 }
+
+/* Search Input Styling */
+.search-input {
+    padding: 10px 12px;
+    font-size: 1em;
+    width: 100%;
+    max-width: 500px; /* Limits width on larger screens */
+    margin-bottom: 25px; /* More space below */
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    box-sizing: border-box; /* Ensures padding and border are included in the width/height */
+    display: block; /* Takes up its own line */
+}
+
+.search-input:focus {
+    border-color: #3498db; /* Highlight focus like other inputs */
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+    outline: none;
+}
