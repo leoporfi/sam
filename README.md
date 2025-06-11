@@ -2,208 +2,159 @@
 
 ## 📜 Visión General
 
-**SAM (Sistema Automático de Robots)** es un proyecto integral diseñado para la **implementación, distribución y orquestación automática de robots RPA (Robotic Process Automation) en máquinas virtuales (VMs)**. El sistema se compone de dos servicios principales que operan en conjunto: el **Lanzador** y el **Balanceador**, ambos pensados para ejecutarse como servicios continuos (por ejemplo, mediante NSSM en Windows).
+**SAM (Sistema Automático de Robots)** es un proyecto integral diseñado para la **implementación, distribución y orquestación automática de robots RPA (Robotic Process Automation) en máquinas virtuales (VMs)**. El sistema se compone de servicios independientes que operan en conjunto y se ejecutan de forma continua (por ejemplo, mediante NSSM en Windows).
 
-SAM centraliza la gestión de robots, sincroniza información con **Automation Anywhere A360 (AA360)**, lanza ejecuciones de robots según la demanda y optimiza la asignación de recursos (VMs) basándose en la carga de trabajo pendiente y una lógica de balanceo avanzada.
+SAM centraliza la gestión de robots, sincroniza información con **Automation Anywhere A360 (AA360)**, lanza ejecuciones de robots según la demanda, y optimiza la asignación de recursos (VMs) basándose en la carga de trabajo pendiente. Adicionalmente, cuenta con una **interfaz web de mantenimiento** para gestionar la configuración y las programaciones directamente desde un navegador.
 
 ---
 ## 🚀 Servicios Principales
 
-El proyecto SAM se articula en torno a dos servicios fundamentales:
+El proyecto SAM se articula en torno a los siguientes servicios independientes:
 
 ### 🤖 Servicio Lanzador
 
-El servicio **Lanzador** actúa como el brazo ejecutor y el punto de sincronización con el Control Room de AA360. Sus responsabilidades clave son:
-
-* **Sincronización con AA360**: Mantiene actualizada la base de datos de SAM (SAM DB) con la información más reciente sobre robots (`dbo.Robots`) y equipos/máquinas virtuales (`dbo.Equipos`, incluyendo sus usuarios A360 asociados y licencias) existentes en el Control Room de AA360. Esto se realiza mediante operaciones `MERGE` que comparan y actualizan los datos locales con los obtenidos de la API de AA360. `EquipoId` en SAM DB corresponde al `deviceId` de A360, y `RobotId` en SAM DB es el `fileId` de A360.
-* **Ejecución de Robots**: Lanza los robots RPA asignados haciendo uso de la API de AA360. Selecciona los robots candidatos para ejecución basándose en la lógica definida en el Stored Procedure `dbo.ObtenerRobotsEjecutables` de la SAM DB.
-* **Gestión de Ejecuciones**: Registra cada intento de lanzamiento y su `deploymentId` (si es exitoso) en la tabla `dbo.Ejecuciones` de la SAM DB.
-* **Monitorización de Estado**:
-    * **Servidor de Callbacks**: Un componente WSGI que recibe notificaciones (callbacks) en tiempo real desde AA360 cuando un robot finaliza su ejecución, actualizando inmediatamente el estado en `dbo.Ejecuciones`.
-    * **Conciliador**: Un proceso periódico que verifica el estado de las ejecuciones que aún figuran como activas en la SAM DB consultando la API de AA360, sirviendo como respaldo o complemento a los callbacks.
-* **Pausa Programada**: Permite definir una ventana de tiempo durante la cual el servicio no lanzará nuevos robots, útil para mantenimientos.
+Actúa como el brazo ejecutor y el punto de sincronización con el Control Room de AA360. Sus responsabilidades clave son la sincronización de tablas maestras (`Robots`, `Equipos`), la ejecución de robots basada en la lógica de `dbo.ObtenerRobotsEjecutables`, y la monitorización de los estados de ejecución a través del `Conciliador`.
 
 ### ⚖️ Servicio Balanceador
 
-El servicio **Balanceador** se encarga de la gestión inteligente de la carga de trabajo y la asignación de recursos (VMs) a los diferentes robots. Sus funciones principales son:
+El servicio **Balanceador** se encarga de la gestión estratégica e inteligente de los recursos (VMs), asignándolos dinámicamente a los robots en función de la carga de trabajo real. Su objetivo es maximizar la eficiencia y el rendimiento del clúster de RPA.
 
-* **Adquisición de Carga de Trabajo**: Determina la cantidad de "tickets" o tareas pendientes para cada robot. Esta información se obtiene de **dos fuentes de datos distintas** de forma concurrente:
-    * Una base de datos **SQL Server (rpa360)**, a través del Stored Procedure `dbo.usp_obtener_tickets_pendientes_por_robot`.
-    * Una base de datos **MySQL (clouders)**, accediendo a través de un túnel SSH y consultando las tablas `task_task` y `task_robot`. Utiliza un mapeo (`MAPA_ROBOTS` en la configuración) para conciliar los nombres de los robots de Clouders con los nombres en SAM.
-* **Lógica de Balanceo Avanzada y Multifásica**:
-    * **Fase 0: Limpieza de Asignaciones a Robots Inactivos/Offline:**
-        * Antes de cualquier asignación o desasignación basada en carga, el sistema verifica si los robots que actualmente tienen equipos asignados dinámicamente siguen siendo candidatos para el balanceo (es decir, si son `Activo = 1 Y EsOnline = 1` en `dbo.Robots`).
-        * Si un robot ya no es candidato, se intentan desasignar todos sus equipos dinámicos, respetando el `CoolingManager` y registrando la acción. Esto libera equipos para el pool general.
-    * **Fase 1: Satisfacción de Mínimos (con Reasignación si es necesario):**
-        * Se prioriza asegurar que los robots candidatos (`Activo = 1 Y EsOnline = 1`) con carga de trabajo alcancen su `MinEquipos` funcional (mínimo 1 equipo si hay tickets).
-        * Los robots se ordenan por `PrioridadBalanceo` y luego por la cantidad de equipos que les faltan para su mínimo.
-        * Se intenta asignar equipos del pool libre. Si el pool está vacío y un robot aún necesita equipos para su mínimo:
-            * Se busca un robot "donante" que tenga equipos por encima de su propio mínimo y cuya `PrioridadBalanceo` sea inferior (mayor valor numérico) o, en caso de empate, que tenga más equipos por encima de su mínimo.
-            * Si se encuentra un donante y el `CoolingManager` lo permite para ambas partes (donante y receptor), se reasigna un equipo.
-    * **Fase 2: Desasignación de Excedentes Reales (Post-Mínimos):**
-        * Se evalúan los robots candidatos. Si un robot tiene más equipos asignados dinámicamente que su necesidad total calculada por la carga de tickets (sin bajar de su `MinEquipos` funcional si aún tiene tickets), el excedente se desasigna y devuelve al pool (respetando `CoolingManager`).
-    * **Fase 3: Asignación de Demanda Adicional (con Pool Libre Restante):**
-        * Los equipos que queden libres después de las fases anteriores se distribuyen entre los robots candidatos que aún pueden utilizar más recursos para su carga de trabajo (hasta su necesidad total calculada o `MaxEquipos`), ordenados por `PrioridadBalanceo` y luego por la magnitud de la necesidad restante.
-* **Gestión del Pool de VMs**: Identifica las VMs disponibles para asignación dinámica desde la tabla `dbo.Equipos` de la SAM DB, considerando su licencia (`ATTENDEDRUNTIME`), estado de actividad SAM y si permiten balanceo dinámico, además de no estar ya asignadas de forma fija (reservada o programada).
-* **Mecanismo de Enfriamiento (`CoolingManager`)**: Previene el "thrashing" (asignaciones y desasignaciones demasiado frecuentes para un mismo robot).
-* **Registro Histórico**: Todas las decisiones de asignación y desasignación tomadas por el Balanceador se registran en la tabla `dbo.HistoricoBalanceo` para auditoría y análisis.
+#### Adquisición de Carga y Pool de Recursos
+Para tomar decisiones, el Balanceador primero recopila toda la información necesaria sobre los recursos disponibles y la demanda existente:
 
----
-## ⚙️ Arquitectura y Flujo de Trabajo del Sistema
+* **Gestión del Pool de VMs**: Identifica las máquinas virtuales disponibles para asignación dinámica consultando la tabla `dbo.Equipos`. Un equipo se considera parte del pool dinámico solo si cumple con todos estos criterios:
+    * Tiene una licencia de tipo `ATTENDEDRUNTIME`.
+    * Está marcado como `Activo_SAM = 1`.
+    * Tiene el flag `PermiteBalanceoDinamico = 1`.
+    * No tiene asignaciones fijas (es decir, ni `Reservado = 1` ni `EsProgramado = 1` en `dbo.Asignaciones`).
+* **Adquisición de Carga de Trabajo Concurrente**: Determina la cantidad de "tickets" o tareas pendientes para cada robot. Para ser eficiente, obtiene esta información de **dos fuentes de datos distintas de forma paralela** usando un `ThreadPoolExecutor`:
+    * **SQL Server (rpa360)**: Ejecuta el Stored Procedure `dbo.usp_obtener_tickets_pendientes_por_robot` en una base de datos externa.
+    * **MySQL (clouders)**: Utiliza un cliente SSH (`paramiko`) para crear un túnel seguro y ejecutar una consulta en una base de datos MySQL remota.
+* **Mapeo de Nombres de Robots**: Utiliza un diccionario de mapeo definido en la variable de entorno `MAPA_ROBOTS` para conciliar los nombres de los robots que vienen de la base de datos "clouders" con los nombres estándar utilizados en SAM, asegurando la consistencia.
 
-1.  **Inicio de Servicios**: Tanto el Lanzador como el Balanceador (y el Servidor de Callbacks del Lanzador) se inician como servicios independientes.
-2.  **Sincronización (Lanzador)**: Periódicamente, el Lanzador consulta la API de AA360 para obtener la lista de robots y equipos (devices/usuarios). Actualiza las tablas `dbo.Robots` y `dbo.Equipos` en la SAM DB.
-3.  **Detección de Carga (Balanceador)**: El Balanceador consulta sus fuentes de datos (SQL Server rpa360 y MySQL clouders) para determinar la cantidad de tickets pendientes por cada robot.
-4.  **Balanceo de Carga (Balanceador)**:
-    * **Fase 0 (Limpieza):** Libera equipos de robots con asignaciones dinámicas que se hayan vuelto `Activo=0` o `EsOnline=0`.
-    * **Fase 1 (Mínimos):** Asigna equipos para cubrir los `MinEquipos` de los robots elegibles (`Activo=1, EsOnline=1`) con carga, reasignando desde otros robots (donantes) si el pool libre es insuficiente y se cumplen las condiciones de donación y enfriamiento.
-    * **Fase 2 (Desasignación Excedentes):** Libera equipos de robots que tengan más de lo necesario para su carga total, sin bajar de su mínimo funcional.
-    * **Fase 3 (Asignación Adicional):** Distribuye los equipos restantes del pool a robots que aún pueden procesar más carga, según prioridad y necesidad.
-    * Todas las acciones actualizan `dbo.Asignaciones` y se registran en `dbo.HistoricoBalanceo`.
-5.  **Lanzamiento de Robots (Lanzador)**:
-    * Periódicamente, el Lanzador consulta `dbo.ObtenerRobotsEjecutables` (que considera las asignaciones hechas por el Balanceador y otras programaciones, incluyendo robots `EsOnline` para ejecuciones no programadas) para obtener la lista de robots a ejecutar.
-    * Si no está en período de pausa, lanza los robots de forma concurrente utilizando la API de AA360.
-    * Registra el inicio de la ejecución en `dbo.Ejecuciones`.
-6.  **Procesamiento y Callback (Lanzador/AA360)**:
-    * El robot se ejecuta en la VM asignada a través de AA360.
-    * Al finalizar, AA360 envía un callback HTTP POST al Servidor de Callbacks del Lanzador.
-    * El Servidor de Callbacks actualiza el estado final y `FechaFin` en `dbo.Ejecuciones`.
-7.  **Conciliación (Lanzador)**: Periódicamente, el Conciliador del Lanzador revisa las ejecuciones que aún figuran "en curso" en la SAM DB pero no han recibido callback, consulta su estado real en AA360 y actualiza la SAM DB.
-8.  **Notificaciones**: Ambos servicios envían alertas por email en caso de errores críticos o fallos significativos.
+#### Lógica de Balanceo Avanzada y Multifásica
+El núcleo del servicio es su algoritmo de balanceo, encapsulado en la clase `Balanceo`, que se ejecuta en varias fases secuenciales para garantizar un orden lógico en la toma de decisiones.
+
+* **Pre-Fase: Validación de Asignaciones**: Antes de cualquier cálculo, el sistema verifica que todos los equipos asignados dinámicamente en ciclos anteriores sigan siendo válidos (es decir, que aún pertenezcan al pool dinámico). Si un equipo ya no es válido (p. ej., su licencia cambió), se intenta desasignar.
+* **Fase 0: Limpieza de Robots No Candidatos**: Libera todos los equipos asignados dinámicamente a robots que han sido marcados como `Activo = 0` o `EsOnline = 0` en la tabla `dbo.Robots`. Esto asegura que los recursos no queden bloqueados por robots que no están operativos.
+* **Fase 1: Satisfacción de Mínimos (con Reasignación)**:
+    * Asegura que cada robot candidato con carga de trabajo alcance su `MinEquipos` funcional.
+    * Primero intenta usar equipos del pool libre.
+    * Si el pool se agota, el sistema puede **reasignar** un equipo de un robot "donante". Un donante es un robot de menor prioridad que tiene más equipos que su propio mínimo requerido. Esta reasignación solo ocurre si el `CoolingManager` lo permite para ambas partes.
+* **Fase 2: Desasignación de Excedentes Reales**: Evalúa los robots que, tras la Fase 1, tienen más equipos de los que necesitan para su carga de trabajo actual. Los equipos sobrantes se desasignan y devuelven al pool libre.
+* **Fase 3: Asignación de Demanda Adicional**: Los equipos que queden en el pool libre se distribuyen entre los robots que todavía tienen demanda de trabajo, ordenados por prioridad y necesidad, hasta alcanzar su necesidad calculada o su `MaxEquipos`.
+
+#### Mecanismos de Control y Auditoría
+Para garantizar un funcionamiento estable y transparente, el Balanceador implementa dos mecanismos clave:
+
+* **Mecanismo de Enfriamiento (`CoolingManager`)**: Previene el "thrashing" (asignar y desasignar recursos a un mismo robot de forma repetida y frecuente). Impone un período de enfriamiento después de una operación de ampliación o reducción para un robot. Este enfriamiento puede ser ignorado si se detecta una variación drástica en la carga de tickets (por defecto, >30% de aumento o >40% de disminución), permitiendo una reacción rápida ante cambios significativos.
+* **Registro Histórico (`HistoricoBalanceoClient`)**: Cada decisión de asignación o desasignación, junto con su justificación (ej. `ASIGNAR_MIN_POOL`, `DESASIGNAR_EXC_REAL`, `DESASIGNAR_PARA_MIN_AJENO`), se registra en la tabla `dbo.HistoricoBalanceo`. Esto proporciona una trazabilidad completa de todas las acciones del Balanceador para fines de auditoría y análisis de rendimiento.
+
+### 📞 Servicio de Callbacks
+
+Un servidor web ligero y dedicado cuya única responsabilidad es escuchar notificaciones (callbacks) en tiempo real enviadas por AA360 cuando un robot finaliza su ejecución. Al recibir un callback, actualiza inmediatamente el estado de la ejecución en la base de datos SAM.
+
+### 🖥️ Interfaz Web de Mantenimiento
+
+Una aplicación web desarrollada con **ReactPy** y **FastAPI** que provee una interfaz de usuario para la administración del sistema. Permite a los operadores:
+* Visualizar y modificar la configuración de los robots (ej. `Activo`, `EsOnline`, `PrioridadBalanceo`).
+* Crear, ver y eliminar programaciones de ejecución para los robots.
+* Asignar equipos (VMs) de forma exclusiva para ejecuciones programadas o reservadas.
+* Gestionar el pool de equipos disponibles para el balanceo.
 
 ---
 ## 🛠️ Características Técnicas Clave
-
-* **Integración con Automation Anywhere A360**:
-    * Cliente API (`AutomationAnywhereClient`) robusto para interactuar con AA360, incluyendo gestión avanzada de tokens, paginación automática de resultados, y despliegue de bots con parámetros de entrada.
-* **Base de Datos SAM (SQL Server)**:
-    * Utiliza `pyodbc` para la conexión a SQL Server.
-    * Conexiones gestionadas por hilo (`threading.local`) para seguridad en entornos concurrentes.
-    * Manejo de transacciones (commit/rollback) y lógica de reintentos para queries.
-    * Stored Procedures para encapsular lógica de negocio (ej. `dbo.ObtenerRobotsEjecutables`).
-* **Adquisición de Carga de Trabajo Multi-fuente (Balanceador)**:
-    * Capacidad de conectarse a SQL Server y MySQL (vía túnel SSH con `paramiko`) para obtener datos de tickets.
-* **Algoritmo de Balanceo Dinámico (Balanceador)**:
-    * Implementa una lógica multifásica que incluye limpieza de asignaciones obsoletas, satisfacción de mínimos (con posible reasignación entre robots), desasignación de excedentes y asignación de demanda adicional, todo gobernado por prioridades y un `CoolingManager`.
-* **Gestión Centralizada de Configuración**:
-    * Todas las configuraciones (credenciales, URLs, parámetros de API, intervalos, etc.) se gestionan a través de archivos `.env` y la clase `ConfigManager`.
-* **Logging y Notificaciones**:
-    * Logging detallado en archivos con rotación (`TimedRotatingFileHandler`) para cada servicio y componente principal (como el Callback Server).
-    * Alertas por email (`EmailAlertClient`) para eventos críticos y fallos.
-* **Procesamiento Concurrente**:
-    * El Lanzador utiliza `concurrent.futures.ThreadPoolExecutor` para el despliegue paralelo de múltiples robots.
-    * El Balanceador también usa `concurrent.futures.ThreadPoolExecutor` para la obtención concurrente de la carga de trabajo de sus diferentes fuentes.
-* **Manejo de Callbacks y Conciliación de Estados (Lanzador)**:
-    * El Servidor de Callbacks (`waitress` o `wsgiref.simple_server`) procesa actualizaciones de estado de AA360 en tiempo real.
-    * El Conciliador asegura la consistencia de los estados de ejecución mediante polling periódico a la API de AA360, convirtiendo fechas UTC a la zona horaria local del servidor SAM con `pytz` y `dateutil`.
-* **Programación de Tareas con `schedule`**:
-    * Ambos servicios utilizan la biblioteca `schedule` para la gestión flexible de la ejecución periódica de sus ciclos principales.
-* **Cierre Controlado (Graceful Shutdown)**:
-    * Ambos servicios manejan señales del sistema (`SIGINT`, `SIGTERM`) para finalizar tareas pendientes, limpiar jobs de `schedule` y cerrar conexiones de forma segura antes de detenerse.
+* **Integración con Automation Anywhere A360**: Cliente API (`AutomationAnywhereClient`) robusto con gestión de tokens, paginación y despliegue de bots.
+* **Base de Datos SAM (SQL Server)**: Conexiones gestionadas por hilo con `pyodbc` y lógica de negocio encapsulada en Stored Procedures.
+* **Algoritmo de Balanceo Dinámico**: Lógica multifásica que incluye limpieza, satisfacción de mínimos, desasignación de excedentes y asignación de demanda, gobernado por un `CoolingManager` para evitar thrashing.
+* **Gestión Centralizada de Configuración**: A través de archivos `.env` y la clase `ConfigManager`.
+* **Procesamiento Concurrente**: Uso de `ThreadPoolExecutor` en el Lanzador y Balanceador para tareas de I/O.
+* **Interfaz Web Reactiva**: Panel de administración construido con **ReactPy** y **FastAPI**, permitiendo la gestión de la base de datos SAM sin necesidad de escribir código JavaScript.
+* **Cierre Controlado (Graceful Shutdown)**: Manejo de señales del sistema para finalizar tareas y cerrar conexiones de forma segura.
 
 ---
 ## 📂 Estructura del Proyecto
 
 ```
 SAM_PROJECT_ROOT/
-├── balanceador/             # Código específico del Servicio Balanceador
-│   ├── clients/             # Clientes para fuentes de datos externas (ej. mysql_client.py)
-│   ├── database/            # Lógica de BD específica del Balanceador (ej. historico_client.py)
-│   ├── service/             # Lógica principal del Balanceador (main.py, balanceo.py, cooling_manager.py)
-│   ├── run_balanceador.py   # Punto de entrada del Balanceador
-│   └── .env                 # (Opcional) Configuración específica del Balanceador si no se usa el general
-├── lanzador/                # Código específico del Servicio Lanzador
-│   ├── clients/             # Cliente para AA360 (aa_client.py)
-│   ├── service/             # Lógica principal del Lanzador (main.py, conciliador.py, callback_server.py)
-│   ├── run_lanzador.py      # Punto de entrada del Lanzador
-│   └── .env                 # (Opcional) Configuración específica del Lanzador si no se usa el general
-├── common/                  # Módulos compartidos por ambos servicios
-│   ├── database/            # Cliente SQL Server genérico (sql_client.py)
-│   └── utils/               # Utilidades comunes (config_manager.py, logging_setup.py, mail_client.py)
-├── .env                     # Archivo principal de configuración para variables de entorno
-├── requirements.txt         # Dependencias Python del proyecto
+├── balanceador/             # Código del Servicio Balanceador
+│   ├── clients/
+│   ├── database/
+│   ├── service/
+│   └── run_balanceador.py
+├── callback/                # Código del Servicio de Callbacks
+│   ├── service/
+│   └── run_callback.py
+├── interfaz_web/            # Código de la Interfaz Web de Mantenimiento
+│   ├── service/
+│   └── run_interfaz_web.py
+├── lanzador/                # Código del Servicio Lanzador
+│   ├── clients/
+│   ├── service/
+│   └── run_lanzador.py
+├── common/                  # Módulos compartidos por todos los servicios
+│   ├── database/
+│   └── utils/
+├── .env                     # Archivo principal de configuración
+├── requirements.txt         # Dependencias Python
 ├── SAM.sql                  # Script DDL para la base de datos SAM
 └── README.md                # Este archivo
 ```
 
 ---
-## 🗃️ Esquema de la Base de Datos SAM
-
-El script `SAM.sql` define la estructura de la base de datos utilizada por el sistema, incluyendo tablas clave como:
-
-* `dbo.Robots`: Información sobre los robots RPA sincronizados desde AA360 (ID, nombre, descripción, configuración de balanceo como `MinEquipos`, `MaxEquipos`, `PrioridadBalanceo`, `TicketsPorEquipoAdicional`, y flags `Activo`, `EsOnline`).
-* `dbo.Equipos`: Información sobre las máquinas virtuales/dispositivos y sus usuarios A360 asociados (ID, nombre, `UserId` de A360, licencia, estado de actividad para SAM (`Activo_SAM`), si permite balanceo dinámico (`PermiteBalanceoDinamico`)).
-* `dbo.Asignaciones`: Registra qué robots están asignados a qué equipos (ya sea por programación, manualmente (`Reservado = 1`) o dinámicamente por el Balanceador (`AsignadoPor = 'Balanceador'`)).
-* `dbo.Ejecuciones`: Historial y estado actual de cada ejecución de robot lanzada por SAM (incluye `DeploymentId` de AA360, `RobotId`, `EquipoId`, `Estado`, `FechaInicio`, `FechaFin`, `CallbackInfo`).
-* `dbo.Programaciones`: Define horarios programados para la ejecución de robots. El SP `ObtenerRobotsEjecutables` considera esta tabla para lanzamientos programados.
-* `dbo.HistoricoBalanceo`: Log de las decisiones tomadas por el servicio Balanceador (robot, tickets, equipos antes/después, acción, justificación).
-* `dbo.ErrorLog`: Tabla para registrar errores dentro de Stored Procedures.
-
-Consulte `SAM.sql` para la definición detallada de todas las tablas, vistas, funciones y Stored Procedures.
-
----
 ## 📋 Prerrequisitos
 
 * Python 3.8 o superior.
-* Acceso a una instancia de Automation Anywhere A360 Control Room (On-Premise o Cloud) con credenciales de API.
-* Una base de datos SQL Server con el esquema de `SAM.sql` aplicado y credenciales de acceso.
-* (Para el Balanceador) Acceso a las bases de datos de origen de tickets (SQL Server rpa360 y MySQL clouders, esta última vía SSH).
-* Un servidor SMTP accesible para el envío de notificaciones por email.
-* **NSSM (Non-Sucking Service Manager)** o un gestor de servicios similar para ejecutar los servicios en producción.
-* (Para el `callback_server.py` en producción) **Waitress** (`pip install waitress`).
+* Acceso a una instancia de Automation Anywhere A360 Control Room.
+* Una base de datos SQL Server con el esquema de `SAM.sql` aplicado.
+* Un servidor SMTP accesible.
+* **NSSM (Non-Sucking Service Manager)** para ejecutar los servicios en producción.
 
 ---
-## ⚙️ Configuración (`.env`)
+## ⚙️ Configuración e Instalación
 
-1.  **Clonar el Repositorio / Descomprimir Archivos.**
-2.  **Crear y Activar un Entorno Virtual Python (Recomendado).**
+1.  **Clonar/Descomprimir** el repositorio.
+2.  **Crear y activar un entorno virtual** de Python.
 3.  **Instalar Dependencias:**
     ```bash
     pip install -r requirements.txt
     ```
-    Asegúrate de que `requirements.txt` incluya: `requests`, `pyodbc`, `python-dotenv`, `schedule`, `paramiko` (para Balanceador), `pytz`, `python-dateutil`, y `waitress` (para Lanzador).
-4.  **Crear y Configurar el Archivo `.env`:**
-    * Crea un archivo llamado `.env` en la raíz del proyecto SAM (`SAM_PROJECT_ROOT`). Cada módulo (`lanzador`, `balanceador`) también puede tener su propio `.env` que tomaría precedencia si existe y es cargado explícitamente por el `run_...py` respectivo.
-    * Completa **TODAS** las variables de entorno necesarias según lo definido en `common/utils/config_manager.py`. Esto incluye:
-        * **Configuración de Logging Común** (`LOG_DIRECTORY`, `LOG_LEVEL`, `APP_LOG_FILENAME_LANZADOR`, `APP_LOG_FILENAME_BALANCEADOR`, `CALLBACK_LOG_FILENAME`, etc.).
-        * **Configuración de SQL Server para SAM DB** (`SQL_SAM_HOST`, `SQL_SAM_DB_NAME`, `SQL_SAM_UID`, `SQL_SAM_PWD`, etc.).
-        * **Configuración de la API de AA360** (`AA_URL`, `AA_USER`, `AA_PWD`, `AA_API_KEY` (opcional)).
-        * **Configuración del Servidor de Callbacks del Lanzador** (`CALLBACK_SERVER_HOST`, `CALLBACK_SERVER_PORT`, `CALLBACK_SERVER_PUBLIC_HOST`, `CALLBACK_ENDPOINT_PATH`, `AA_URL_CALLBACK` - esta última se construye dinámicamente si no se provee, pero debe ser la URL pública/accesible de tu `callback_server.py`).
-        * **Configuración de Email** (`EMAIL_SMTP_SERVER`, `EMAIL_FROM`, `EMAIL_RECIPIENTS`, etc.).
-        * **Configuración Específica del Lanzador** (`LANZADOR_INTERVALO_LANZADOR_SEG`, `LANZADOR_PAUSA_INICIO_HHMM`, `LANZADOR_MAX_LANZAMIENTOS_CONCURRENTES`, etc.).
-        * **Configuración de SQL Server para RPA360 DB (Balanceador)** (`SQL_RPA360_HOST`, `SQL_RPA360_DB_NAME`, etc.).
-        * **Configuración SSH y MySQL para Clouders (Balanceador)** (`CLOUDERS_SSH_HOST`, `CLOUDERS_MYSQL_DB_NAME`, `CLOUDERS_SSH_USER`, `CLOUDERS_SSH_PASS`, `CLOUDERS_MYSQL_USER`, `CLOUDERS_MYSQL_PASS`, `MAPA_ROBOTS` en formato JSON string, etc.).
-        * **Configuración Específica del Balanceador** (`BALANCEADOR_INTERVALO_CICLO_SEG`, `BALANCEADOR_DEFAULT_TICKETS_POR_EQUIPO`, `COOLING_PERIOD_SEG`, etc.).
-5.  **Base de Datos SAM:**
-    * Asegúrate de que la base de datos SAM exista en SQL Server y que el esquema de `SAM.sql` se haya aplicado correctamente.
-    * Verifica la conectividad de red y los permisos de usuario para SQL Server.
-6.  **Bases de Datos de Origen de Tickets (para Balanceador):**
-    * Asegura la conectividad a la base de datos SQL Server rpa360.
-    * Configura el acceso SSH y MySQL para la base de datos "clouders". El usuario SSH debe tener permisos para ejecutar el comando `mysql` en el servidor remoto.
-7.  **Firewall para Callback Server (Lanzador):**
-    * El firewall de la máquina host y cualquier firewall de red deben permitir conexiones entrantes en el `CALLBACK_SERVER_PORT` desde las IPs del Control Room de A360.
+    Asegúrate de que `requirements.txt` incluya: `requests`, `pyodbc`, `python-dotenv`, `schedule`, `paramiko`, `pytz`, `python-dateutil`, `waitress`, **`reactpy`**, **`fastapi`**, y **`"uvicorn[standard]"`**.
+4.  **Configurar `.env`**: Crea un archivo `.env` en la raíz del proyecto y completa todas las variables de entorno necesarias definidas en `common/utils/config_manager.py`.
+5.  **Base de Datos**: Aplica el script `SAM.sql` a tu instancia de SQL Server.
+6.  **Firewall**: Asegura que el puerto del `Servicio de Callbacks` (ej. 8008) y el de la `Interfaz Web` (ej. 8000) estén abiertos para las conexiones necesarias.
 
 ---
 ## ▶️ Despliegue y Ejecución (NSSM)
 
-Para un entorno de producción, se recomienda ejecutar los servicios Lanzador, Callback Server (del Lanzador) y Balanceador como servicios Windows utilizando **NSSM**.
+Para un entorno de producción, se recomienda ejecutar los **cuatro servicios** como servicios de Windows utilizando NSSM.
 
-Deberás configurar **tres servicios separados**:
+1.  **Servicio SAM-Lanzador:**
+    * **Aplicación:** `python.exe` (ruta completa).
+    * **Argumentos:** `C:\ruta\a\SAM_PROJECT_ROOT\lanzador\run_lanzador.py`.
+    * **Directorio de Inicio:** `C:\ruta\a\SAM_PROJECT_ROOT\`.
 
-1.  **Servicio SAM-Lanzador-Principal:**
-    * **Aplicación:** `python.exe` (ruta completa al `python.exe` de tu entorno virtual).
-    * **Argumentos:** `C:\ruta\completa\a\SAM_PROJECT_ROOT\lanzador\run_lanzador.py`.
-    * **Directorio de Inicio:** `C:\ruta\completa\a\SAM_PROJECT_ROOT\`.
-2.  **Servicio SAM-Lanzador-Callback-Server:**
-    * **Aplicación:** `python.exe` (ruta completa al `python.exe` de tu entorno virtual).
-    * **Argumentos:** `C:\ruta\completa\a\SAM_PROJECT_ROOT\lanzador\service\callback_server.py`.
-    * **Directorio de Inicio:** `C:\ruta\completa\a\SAM_PROJECT_ROOT\`.
-3.  **Servicio SAM-Balanceador:**
-    * **Aplicación:** `python.exe` (ruta completa al `python.exe` de tu entorno virtual).
-    * **Argumentos:** `C:\ruta\completa\a\SAM_PROJECT_ROOT\balanceador\run_balanceador.py`.
-    * **Directorio de Inicio:** `C:\ruta\completa\a\SAM_PROJECT_ROOT\`.
+2.  **Servicio SAM-Balanceador:**
+    * **Aplicación:** `python.exe`.
+    * **Argumentos:** `C:\ruta\a\SAM_PROJECT_ROOT\balanceador\run_balanceador.py`.
+    * **Directorio de Inicio:** `C:\ruta\a\SAM_PROJECT_ROOT\`.
 
-Configura NSSM para que los servicios se reinicien en caso de fallo y para un cierre adecuado.
+3.  **Servicio SAM-Callback:**
+    * **Aplicación:** `python.exe`.
+    * **Argumentos:** `C:\ruta\a\SAM_PROJECT_ROOT\callback\run_callback.py`.
+    * **Directorio de Inicio:** `C:\ruta\a\SAM_PROJECT_ROOT\`.
+
+4.  **Servicio SAM-InterfazWeb:**
+    * **Aplicación:** `python.exe`.
+    * **Argumentos:** `C:\ruta\a\SAM_PROJECT_ROOT\interfaz_web\run_interfaz_web.py`.
+    * **Directorio de Inicio:** `C:\ruta\a\SAM_PROJECT_ROOT\`.
+
+---
+### Resumen de los Cambios Clave en el README:
+* **Se añadió la Interfaz Web** como un componente principal del sistema.
+* **Se actualizó la Estructura del Proyecto** para reflejar la modularización del `callback` y la adición de `interfaz_web`.
+* **Se actualizaron las Instrucciones de Despliegue con NSSM** para incluir los cuatro servicios independientes.
+* **Se añadieron las nuevas dependencias** (`reactpy`, `fastapi`, `uvicorn`) a la lista de prerrequisitos.
 
 ---
 ## 🐛 Troubleshooting Básico
