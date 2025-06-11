@@ -327,9 +327,21 @@ def App():
     show_assignment_form, set_show_assignment_form = use_state(False)
     available_teams_for_assignment, set_available_teams_for_assignment = use_state([])
 
+    # State for Theme
+    current_theme, set_current_theme = use_state("dark") # Default to dark theme
+
+    def toggle_theme(event=None):
+        set_current_theme(lambda old_theme: "light" if old_theme == "dark" else "dark")
+
     # State for Table Sorting
     sort_key, set_sort_key = use_state("Robot") # Default sort by Robot name
     sort_ascending, set_sort_ascending = use_state(True) # Default to ascending
+
+    # State for Theme
+    current_theme, set_current_theme = use_state("dark") # Default to dark theme
+
+    def toggle_theme(event=None):
+        set_current_theme(lambda old_theme: "light" if old_theme == "dark" else "dark")
 
     def handle_sort_click(column_key_clicked):
         current_sort_k = sort_key
@@ -493,9 +505,7 @@ def App():
 
         for team_id in team_ids_list:
             try:
-                # Corrected query to include Reservado and AsignadoPor
                 query = "INSERT INTO dbo.Asignaciones (RobotId, EquipoId, Reservado, FechaAsignacion, AsignadoPor) VALUES (?, ?, ?, GETDATE(), ?)"
-                # Parameters now include 1 for Reservado and "WEB" for AsignadoPor
                 db.ejecutar_consulta(query, (int(robot_id), int(team_id), 1, "WEB"))
             except Exception as e:
                 all_successful = False
@@ -651,7 +661,10 @@ def App():
         )
 
     app_children = [
-        html.link({"rel": "stylesheet", "href": "/static/style.css"}),
+        html.head(
+            html.title("SAM - Gestión de Robots"),
+            html.link({"rel": "stylesheet", "href": "/static/style.css"})
+        ),
         html.h1("Panel de Mantenimiento SAM - Gestión de Robots"),
         html.div({"class_name": "filter-controls"},
             html.input({
@@ -688,14 +701,25 @@ def App():
                 )
             )
         ),
-        html.div({"class_name": "action-buttons-bar", "style": {"margin_bottom": "20px", "display": "flex", "gap": "10px"}},
-            html.button({"on_click": fetch_robots, "class_name": "btn-accion"}, "Refrescar Datos"),
-            html.button({
-                "on_click": handle_open_assignment_form,
-                "class_name": "btn-accion-secundario"
-            }, "Asignar Robot a Equipos")
-        ),
     ]
+
+    # Theme toggle button details
+    theme_toggle_button_icon = "☀️" if current_theme == "dark" else "🌙"
+    theme_toggle_button_title = "Cambiar a Tema Claro" if current_theme == "dark" else "Cambiar a Tema Oscuro"
+
+    action_buttons_children = [
+        html.button({
+            "on_click": toggle_theme,
+            "class_name": "btn-accion-secundario theme-toggle-btn",
+            "title": theme_toggle_button_title
+        }, theme_toggle_button_icon),
+        html.button({"on_click": fetch_robots, "class_name": "btn-accion"}, "Refrescar Datos"),
+        html.button({
+            "on_click": handle_open_assignment_form,
+            "class_name": "btn-accion-secundario"
+        }, "Asignar Robot a Equipos")
+    ]
+    app_children.append(html.div({"class_name": "action-buttons-bar", "style": {"margin_bottom": "20px", "display": "flex", "gap": "10px"}}, *action_buttons_children))
 
     # Prepare table headers with sort indicators
     robot_display_text = "Robot"
@@ -757,6 +781,6 @@ def App():
             on_dismiss=lambda event: set_show_feedback(False)
         ))
 
-    return html.div({"class_name": "container"}, *app_children)
+    return html.div({"class_name": f"container theme-{current_theme}"}, *app_children)
 
 ```
