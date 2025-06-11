@@ -508,5 +508,3 @@ def App():
         ))
 
     return html.div({"class_name": "container"}, *app_children)
-
-```
