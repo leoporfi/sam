@@ -92,8 +92,9 @@ def ScheduleCreateForm(robot, equipos_disponibles, on_save, on_cancel):
     def handle_change(event):
         set_form_data(lambda old: {**old, event["target"]["name"]: event["target"]["value"]})
 
-    # This will be modified later to trigger confirmation
-    async def handle_submit_internal(event):
+    async def handle_submit_form_data(event): # Renamed
+        # on_save is the prop, which will be trigger_robot_schedule_confirmation
+        # It expects (robot, form_data)
         await on_save(robot, form_data)
 
     dynamic_fields = []
@@ -156,8 +157,7 @@ def ScheduleCreateForm(robot, equipos_disponibles, on_save, on_cancel):
             *dynamic_fields,
             html.div(
                 {"class_name": "modal-actions"},
-                # Button behavior will be changed in a later step to trigger confirmation
-                html.button({"on_click": handle_submit_internal, "class_name": "btn-accion"}, "Guardar Programación"),
+                html.button({"on_click": handle_submit_form_data, "class_name": "btn-accion"}, "Guardar Programación"), # Updated on_click
                 html.button({"on_click": on_cancel}, "Cancelar"),
             ),
         ),
@@ -304,9 +304,18 @@ def App():
             set_feedback_type("error")
             set_show_feedback(True) # Show error feedback
 
+    async def trigger_robot_schedule_confirmation(robot_arg, form_data_arg):
+        set_confirmation_message("¿Está seguro de que desea programar este robot?")
+        async def actual_db_action():
+            await handle_save_schedule_action(robot_arg, form_data_arg)
+        set_on_confirm_action_callback(lambda _: (lambda: actual_db_action))
+        set_show_confirmation(True)
+
     async def handle_save_schedule_action(robot, schedule_form_data):
         if not db:
-            print("Error: Database connection not available for saving schedule.")
+            set_feedback_message("Error: No se pudo conectar a la base de datos.")
+            set_feedback_type("error")
+            set_show_feedback(True)
             return
 
         equipo_id_seleccionado = int(schedule_form_data["equipo_id"])
@@ -343,13 +352,18 @@ def App():
             cursor.execute("UPDATE dbo.Robots SET EsOnline = 0 WHERE RobotId = ?", (robot["RobotId"],))
             cursor.execute("UPDATE dbo.Equipos SET PermiteBalanceoDinamico = 0 WHERE EquipoId = ?", (equipo_id_seleccionado,))
             conn.commit()
-            # Feedback handled by wrapper
+
+            set_feedback_message("Robot programado exitosamente.")
+            set_feedback_type("success")
+            set_show_feedback(True)
         except Exception as e:
             if conn:
                 conn.rollback()
             print(f"UI Error: Falló la transacción de programación. Se revirtieron los cambios. Error: {e}")
-            # Feedback handled by wrapper, pass error message e
-            raise e # Re-raise to be caught by wrapper
+            set_feedback_message(f"Error al programar robot: {str(e)}")
+            set_feedback_type("error")
+            set_show_feedback(True)
+            # Removed raise e
         finally:
             if conn:
                 conn.close()
@@ -417,8 +431,6 @@ def App():
             )
         )
 
-    schedule_form_on_save_handler = handle_save_schedule_action # This will be changed in next step
-
     return html.div(
         {"class_name": "container"},
         html.link({"rel": "stylesheet", "href": "/static/style.css"}),
@@ -476,11 +488,21 @@ def App():
         robot_para_programar and ScheduleCreateForm(
             robot=robot_para_programar,
             equipos_disponibles=equipos_disponibles,
-            on_save=schedule_form_on_save_handler, # Will be changed
+            on_save=trigger_robot_schedule_confirmation, # Changed
             on_cancel=lambda event: set_robot_para_programar(None),
         ),
 
-        # Conditional rendering for Confirmation and Feedback modals will be added here later
+        # Conditional rendering for Confirmation and Feedback modals
+        show_confirmation and ConfirmationModal(
+            message=confirmation_message,
+            on_confirm=execute_confirmed_action,
+            on_cancel=lambda event: set_show_confirmation(False)
+        ),
+        show_feedback and FeedbackModal(
+            message=feedback_message,
+            message_type=feedback_type,
+            on_dismiss=lambda event: set_show_feedback(False)
+        )
     )
 
 ```

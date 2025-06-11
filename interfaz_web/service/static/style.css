@@ -258,3 +258,26 @@ button:active {
     min-width: 200px; /* Ensure it doesn't get too small */
     /* max-width: 400px; /* Optional: if you want to cap its growth */
 }
+
+/* --- Feedback Modal Specific Styles --- */
+.feedback-title-success { /* Class directly on the H2 title in FeedbackModal */
+    color: #155724; /* Dark green text for success */
+}
+.feedback-modal-success { /* Class on the modal-content div of a success FeedbackModal */
+    border-top: 4px solid #28a745; /* Green top border */
+}
+
+.feedback-title-error { /* Class directly on the H2 title in FeedbackModal */
+    color: #721c24; /* Dark red text for error */
+}
+.feedback-modal-error { /* Class on the modal-content div of an error FeedbackModal */
+    border-top: 4px solid #dc3545; /* Red top border */
+}
+
+/* Common title styling for Confirmation and Feedback modals if different from base .modal-content h2 */
+.confirmation-modal .modal-title,
+.feedback-modal .modal-title { /* This targets h2 within .modal-content that also has .confirmation-modal or .feedback-modal */
+    padding-bottom: 10px; /* Add a bit more space below title */
+    margin-bottom: 15px;
+    font-weight: 500; /* Slightly less heavy than main page H1 */
+}
