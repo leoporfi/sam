@@ -327,6 +327,18 @@ def App():
     show_assignment_form, set_show_assignment_form = use_state(False)
     available_teams_for_assignment, set_available_teams_for_assignment = use_state([])
 
+    # State for Table Sorting
+    sort_key, set_sort_key = use_state("Robot") # Default sort by Robot name
+    sort_ascending, set_sort_ascending = use_state(True) # Default to ascending
+
+    def handle_sort_click(column_key_clicked):
+        current_sort_k = sort_key
+        if column_key_clicked == current_sort_k:
+            set_sort_ascending(lambda old_val: not old_val)
+        else:
+            set_sort_key(column_key_clicked)
+            set_sort_ascending(True)
+
 
     async def fetch_robots(event=None):
         if not db:
@@ -578,6 +590,32 @@ def App():
     elif online_filter == "false":
         current_filter_stage = [r for r in current_filter_stage if r['EsOnline'] is False or r['EsOnline'] == 0]
 
+    # --- Sorting Logic ---
+    if sort_key and current_filter_stage:
+        current_s_key = sort_key
+        current_s_asc = sort_ascending
+
+        def get_sort_value(robot_item):
+            val = robot_item.get(current_s_key)
+            if val is None:
+                if current_s_key == "PrioridadBalanceo": # Numeric column
+                    return float('-inf') if current_s_asc else float('inf')
+                return "" # Default for strings like "Robot"
+
+            if current_s_key == "Robot":
+                return str(val).lower()
+            if current_s_key == "PrioridadBalanceo":
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    return float('-inf') if current_s_asc else float('inf')
+            return val
+
+        try:
+            current_filter_stage.sort(key=get_sort_value, reverse=not current_s_asc)
+        except TypeError as e:
+            print(f"Error during sorting: {e}. Sort key: {current_s_key}. Check data types.")
+
     filtered_robots = current_filter_stage
 
     table_rows = []
@@ -653,16 +691,34 @@ def App():
         html.div({"class_name": "action-buttons-bar", "style": {"margin_bottom": "20px", "display": "flex", "gap": "10px"}},
             html.button({"on_click": fetch_robots, "class_name": "btn-accion"}, "Refrescar Datos"),
             html.button({
-                "on_click": handle_open_assignment_form, # Changed
+                "on_click": handle_open_assignment_form,
                 "class_name": "btn-accion-secundario"
             }, "Asignar Robot a Equipos")
         ),
-        html.table(
-            {"class_name": "sam-table"},
-            html.thead(html.tr(html.th("Robot"), html.th("Activo"), html.th("Es Online"), html.th("Prioridad"), html.th("Acciones"))),
-            html.tbody(table_rows if filtered_robots else html.tr(html.td({"colSpan": 5}, "No hay robots para mostrar."))),
-        ),
     ]
+
+    # Prepare table headers with sort indicators
+    robot_display_text = "Robot"
+    if sort_key == "Robot":
+        robot_display_text += " ▲" if sort_ascending else " ▼"
+
+    prioridad_display_text = "Prioridad"
+    if sort_key == "PrioridadBalanceo":
+        prioridad_display_text += " ▲" if sort_ascending else " ▼"
+
+    table_header_row = html.tr(
+        html.th({"on_click": lambda event, key="Robot": handle_sort_click(key), "style": {"cursor": "pointer"}}, robot_display_text),
+        html.th("Activo"), # Not sortable in this version
+        html.th("Es Online"), # Not sortable
+        html.th({"on_click": lambda event, key="PrioridadBalanceo": handle_sort_click(key), "style": {"cursor": "pointer"}}, prioridad_display_text),
+        html.th("Acciones") # Not sortable
+    )
+
+    app_children.append(html.table(
+        {"class_name": "sam-table"},
+        html.thead(table_header_row),
+        html.tbody(table_rows if filtered_robots else html.tr(html.td({"colSpan": 5}, "No hay robots para mostrar."))),
+    ))
 
     if robot_en_edicion:
         app_children.append(RobotEditForm(

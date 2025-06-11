@@ -1,9 +1,26 @@
-/* General Body Styles (optional, depending on ReactPy's handling) */
+/*
+:root {
+    --theme-bg-primary: #1a1a1a;
+    --theme-bg-secondary: #2c2c2c;
+    --theme-bg-tertiary: #3a3a3a;
+    --theme-text-primary: #e0e0e0;
+    --theme-text-secondary: #a0a0a0;
+    --theme-accent: #0097a7;
+    --theme-accent-hover: #00acc1;
+    --theme-success: #4caf50;
+    --theme-error: #f44336;
+    --theme-border-color: #4f4f4f;
+    --theme-input-bg: #252525;
+    --theme-input-border: #505050;
+}
+*/
+
+/* General Body Styles */
 body {
     margin: 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f4f7f9; /* Light grey background */
-    color: #333; /* Default text color */
+    background-color: #1a1a1a; /* Dark theme primary background */
+    color: #e0e0e0; /* Dark theme primary text */
     line-height: 1.6;
 }
 
@@ -12,19 +29,20 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     padding: 25px;
     max-width: 1200px;
-    margin: 20px auto; /* Added top/bottom margin */
-    background-color: #ffffff; /* White background for content area */
+    margin: 40px auto; /* Increased top/bottom margin */
+    background-color: #2c2c2c; /* Dark theme secondary background */
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* Softer shadow */
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3); /* Darker shadow for dark theme */
+    color: #e0e0e0; /* Ensure text color for container content */
 }
 
 /* Headings */
 h1 {
-    color: #2c3e50; /* Dark blue-grey */
-    font-size: 2em; /* Slightly larger */
-    margin-bottom: 25px; /* More space below */
+    color: #e0e0e0; /* Light text for dark background */
+    font-size: 2.2em; /* Slightly larger */
+    margin-bottom: 30px; /* More space below */
     text-align: center;
-    font-weight: 600; /* Bolder */
+    font-weight: 600;
 }
 
 /* Table Styling */
@@ -37,31 +55,31 @@ h1 {
 
 .sam-table th,
 .sam-table td {
-    border: 1px solid #e0e0e0; /* Lighter border */
-    padding: 15px; /* Increased padding */
+    border: 1px solid #4f4f4f; /* Dark theme border */
+    padding: 15px;
     text-align: left;
     vertical-align: middle; /* Align text vertically */
 }
 
 .sam-table th {
-    background-color: #3498db; /* Vibrant blue */
-    color: white;
-    font-weight: 600; /* Bolder headers */
+    background-color: #00796b; /* Darker teal */
+    color: #e0e0e0; /* Primary text */
+    font-weight: 600;
     text-transform: uppercase;
     font-size: 0.9em;
     letter-spacing: 0.5px;
 }
 
 .sam-table td {
-    color: #555; /* Dark grey for text */
+    color: #e0e0e0; /* Primary text */
 }
 
 .sam-table tbody tr:hover {
-    background-color: #f2f8fc; /* Light blue hover */
+    background-color: #373737; /* Dark theme hover */
 }
 
 .sam-table tr:nth-child(even) {
-    background-color: #f9f9f9; /* Subtle zebra striping if preferred over plain */
+    background-color: #323232; /* Dark theme zebra striping */
 }
 
 
@@ -70,50 +88,60 @@ button {
     cursor: pointer;
     padding: 10px 18px;
     border-radius: 6px;
-    border: none; /* Removed border for a flatter look */
+    border: 1px solid #00796b; /* Accent border */
     margin: 0 5px;
     font-size: 0.95em;
-    font-weight: 500; /* Medium weight */
+    font-weight: 500;
     transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Subtle shadow */
-    line-height: 1.5; /* Ensure text is centered well */
+    background-color: #0097a7; /* Accent color */
+    color: #ffffff; /* White text on accent buttons */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    line-height: 1.5;
 }
 
 button:hover {
-    filter: brightness(110%); /* Generic hover, good for solid colors */
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1); /* Slightly raise on hover */
+    background-color: #00acc1; /* Accent hover */
+    border-color: #0097a7;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
 }
 
 button:active {
-    transform: translateY(1px); /* Click feedback */
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
 .btn-activo {
-    background-color: #2ecc71; /* Emerald green */
-    color: white;
+    background-color: #4caf50; /* Success color */
+    color: #ffffff;
+    border: 1px solid #388e3c; /* Darker success border */
 }
 
 .btn-inactivo {
-    background-color: #e74c3c; /* Alizarin red */
-    color: white;
+    background-color: #f44336; /* Error color */
+    color: #ffffff;
+    border: 1px solid #d32f2f; /* Darker error border */
 }
 
 .btn-accion {
-    background-color: #3498db; /* Peter river blue */
-    color: white;
+    /* This class will use the general button style or override if needed */
+    /* For now, it inherits the new general button style */
 }
 
 .btn-accion-secundario {
-    background-color: #95a5a6; /* Asbestos grey */
-    color: white;
+    background-color: #3e3e3e; /* Tertiary BG */
+    color: #e0e0e0; /* Primary text */
+    border: 1px solid #5f5f5f; /* Slightly lighter border for secondary */
 }
 
-/* Special button for "Refrescar Datos" if it's standalone */
-.container > button { /* Targets the first button child of container, usually "Refrescar" */
-    background-color: #5dade2; /* A lighter, friendly blue */
-    color: white;
-    margin-bottom: 20px; /* Space it out from the table */
+/* Specific button for "Refrescar Datos" is handled by its class .btn-accion,
+   and "Asignar Robot a Equipos" by .btn-accion-secundario.
+   The .container > button rule is no longer needed as buttons are wrapped. */
+.container > button {
+    /* This rule might be obsolete or needs re-evaluation if some buttons are direct children */
+    /* For now, let's assume it's less relevant due to .action-buttons-bar */
+    /* background-color: #5dade2; */ /* A lighter, friendly blue */
+    /* color: white; */
+    /* margin-bottom: 20px; */ /* Space it out from the table */
 }
 
 
@@ -124,26 +152,28 @@ button:active {
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.6); /* Darker overlay */
+    background-color: rgba(0,0,0,0.7); /* Darker overlay for dark theme */
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    backdrop-filter: blur(3px); /* Frosted glass effect */
+    backdrop-filter: blur(4px); /* Enhanced blur */
 }
 
 .modal-content {
-    background: white;
-    padding: 30px; /* More padding */
-    border-radius: 10px; /* More rounded corners */
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15); /* More pronounced shadow */
+    background: #2c2c2c; /* Secondary BG */
+    color: #e0e0e0; /* Primary text */
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5); /* More pronounced shadow */
     width: 90%;
-    max-width: 550px; /* Slightly wider for comfort */
+    max-width: 550px;
+    border: 1px solid #4f4f4f; /* Theme border */
 }
 
 .modal-content h2 {
-    color: #34495e; /* Wet asphalt blue-grey for modal titles */
-    font-size: 1.6em; /* Larger modal titles */
+    color: #e0e0e0; /* Primary text for modal titles */
+    font-size: 1.6em;
     margin-bottom: 25px;
     text-align: center;
     font-weight: 500;
@@ -156,26 +186,29 @@ button:active {
 
 .form-group label {
     display: block;
-    margin-bottom: 8px; /* Space between label and input */
-    font-weight: 600; /* Bolder labels */
-    color: #555;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #a0a0a0; /* Secondary text */
 }
 
 .form-group input,
 .form-group select {
     width: 100%;
-    padding: 12px; /* More padding in inputs */
+    padding: 12px;
     box-sizing: border-box;
-    border-radius: 6px; /* More rounded inputs */
-    border: 1px solid #ced4da; /* Standard border color */
+    border-radius: 6px;
+    border: 1px solid #505050; /* Input border */
     font-size: 1em;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    background-color: #252525; /* Input BG */
+    color: #e0e0e0; /* Primary text */
 }
 
 .form-group input:focus,
 .form-group select:focus {
-    border-color: #3498db; /* Blue focus border */
-    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25); /* Blue focus shadow */
+    border-color: #0097a7; /* Accent color */
+    box-shadow: 0 0 0 0.2rem rgba(0, 151, 167, 0.25); /* Accent shadow */
+    background-color: #2a2a2a; /* Slightly lighter on focus */
     outline: none;
 }
 
@@ -193,17 +226,23 @@ button:active {
     padding: 10px 12px;
     font-size: 1em;
     width: 100%;
-    max-width: 500px; /* Limits width on larger screens */
-    margin-bottom: 25px; /* More space below */
-    border: 1px solid #ced4da;
+    /* max-width: 500px; Let flex control this via .filter-controls .search-input */
+    /* margin-bottom: 25px; Reset by .filter-controls .search-input */
+    border: 1px solid #505050; /* Input border */
     border-radius: 6px;
-    box-sizing: border-box; /* Ensures padding and border are included in the width/height */
-    display: block; /* Takes up its own line */
+    box-sizing: border-box;
+    display: block;
+    background-color: #252525; /* Input BG */
+    color: #e0e0e0; /* Primary text */
+}
+.search-input::placeholder { /* Standard placeholder styling */
+    color: #777;
 }
 
 .search-input:focus {
-    border-color: #3498db; /* Highlight focus like other inputs */
-    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+    border-color: #0097a7; /* Accent color */
+    box-shadow: 0 0 0 0.2rem rgba(0, 151, 167, 0.25); /* Accent shadow */
+    background-color: #2a2a2a; /* Slightly lighter on focus */
     outline: none;
 }
 
@@ -211,43 +250,45 @@ button:active {
 .filter-controls {
     display: flex;
     flex-wrap: wrap;
-    gap: 20px; /* Increased gap for better spacing */
+    gap: 20px;
     align-items: center;
     margin-bottom: 25px;
-    padding: 20px; /* Increased padding */
-    background-color: #f8f9fa;
-    border-radius: 8px; /* Slightly larger radius */
-    border: 1px solid #e9ecef; /* Subtle border for the area */
+    padding: 20px;
+    background-color: #252525; /* Darker tertiary for distinct section */
+    border-radius: 8px;
+    border: 1px solid #4f4f4f; /* Theme border */
 }
 
 /* Individual Filter Group (label + select) */
 .filter-group {
     display: flex;
     align-items: center;
-    gap: 10px; /* Increased gap */
+    gap: 10px;
 }
 
 .filter-group label {
     font-weight: 500;
-    color: #343a40; /* Darker label color */
+    color: #a0a0a0; /* Secondary text */
     margin-bottom: 0;
-    white-space: nowrap; /* Prevent label text from wrapping */
+    white-space: nowrap;
 }
 
 /* Filter Select Dropdowns */
 .filter-select {
-    padding: 10px 12px; /* Match search input padding */
-    font-size: 1em;     /* Match search input font size */
-    border: 1px solid #ced4da;
-    border-radius: 6px; /* Match search input border radius */
-    background-color: #fff;
-    min-width: 150px; /* Slightly wider */
+    padding: 10px 12px;
+    font-size: 1em;
+    border: 1px solid #505050; /* Input border */
+    border-radius: 6px;
+    background-color: #252525; /* Input BG */
+    color: #e0e0e0; /* Primary text */
+    min-width: 150px;
     box-sizing: border-box;
 }
 
 .filter-select:focus {
-    border-color: #3498db;
-    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+    border-color: #0097a7; /* Accent color */
+    box-shadow: 0 0 0 0.2rem rgba(0, 151, 167, 0.25); /* Accent shadow */
+    background-color: #2a2a2a; /* Slightly lighter on focus */
     outline: none;
 }
 
@@ -260,27 +301,31 @@ button:active {
 }
 
 /* --- Feedback Modal Specific Styles --- */
-.feedback-title-success { /* Class directly on the H2 title in FeedbackModal */
-    color: #155724; /* Dark green text for success */
+.feedback-title-success {
+    color: #81c784; /* Lighter green for dark theme */
 }
-.feedback-modal-success { /* Class on the modal-content div of a success FeedbackModal */
-    border-top: 4px solid #28a745; /* Green top border */
-}
-
-.feedback-title-error { /* Class directly on the H2 title in FeedbackModal */
-    color: #721c24; /* Dark red text for error */
-}
-.feedback-modal-error { /* Class on the modal-content div of an error FeedbackModal */
-    border-top: 4px solid #dc3545; /* Red top border */
+.feedback-modal-success {
+    border-top: 4px solid #4caf50; /* Success color */
 }
 
-/* Common title styling for Confirmation and Feedback modals if different from base .modal-content h2 */
+.feedback-title-error {
+    color: #e57373; /* Lighter red for dark theme */
+}
+.feedback-modal-error {
+    border-top: 4px solid #f44336; /* Error color */
+}
+
+/* Common title styling for Confirmation and Feedback modals */
 .confirmation-modal .modal-title,
-.feedback-modal .modal-title { /* This targets h2 within .modal-content that also has .confirmation-modal or .feedback-modal */
-    padding-bottom: 10px; /* Add a bit more space below title */
+.feedback-modal .modal-title {
+    padding-bottom: 10px;
     margin-bottom: 15px;
-    font-weight: 500; /* Slightly less heavy than main page H1 */
+    font-weight: 500;
 }
+.confirmation-modal .modal-title { /* Specific for confirmation if needed */
+    color: #4db8ff; /* Light blue for confirmation title */
+}
+
 
 /* --- Assignment Form Specific Styles --- */
 
@@ -296,8 +341,9 @@ button:active {
     /* border: 1px solid #ced4da; already inline */
     /* padding: 10px; already inline */
     /* border-radius: 4px; already inline */
-    background-color: #f8f9fa; /* Light background for the list container */
-    margin-top: 5px; /* Space above the list */
+    background-color: #252525; /* Input BG */
+    border: 1px solid #505050; /* Input Border - override inline if desired */
+    margin-top: 5px;
 }
 
 /* Individual checkbox item styling */
@@ -310,18 +356,19 @@ button:active {
 }
 
 .checkbox-item:hover {
-    background-color: #e9ecef; /* Hover effect */
+    background-color: #3e3e3e; /* Tertiary BG for hover */
 }
 
 .checkbox-item input[type="checkbox"] {
     margin-right: 10px;
     vertical-align: middle;
     cursor: pointer;
+    accent-color: #0097a7; /* Accent color for checkbox */
 }
 
 .checkbox-item label {
-    font-weight: normal; /* Default label weight */
-    color: #212529;     /* Standard bootstrap text color */
+    font-weight: normal;
+    color: #e0e0e0; /* Primary text */
     vertical-align: middle;
-    cursor: pointer; /* Make label clickable */
+    cursor: pointer;
 }
