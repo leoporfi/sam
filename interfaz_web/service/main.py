@@ -209,6 +209,94 @@ def FeedbackModal(message, message_type, on_dismiss):
         ),
     )
 
+@component
+def AssignmentForm(robots, available_teams, on_save, on_cancel):
+    selected_robot_id, set_selected_robot_id = use_state("") # Store RobotId
+    selected_team_ids, set_selected_team_ids = use_state([]) # Store list of EquipoId
+
+    def handle_robot_change(event):
+        set_selected_robot_id(event["target"]["value"])
+
+    def handle_team_selection_change(team_id, event): # event is passed by on_change via partial
+        # Debug print removed
+        # is_checked determination removed
+
+        if team_id in selected_team_ids:
+            # Team is currently selected, so this action unchecks it
+            set_selected_team_ids(lambda old_ids: [tid for tid in old_ids if tid != team_id])
+        else:
+            # Team is not currently selected, so this action checks it
+            # Adding new items and then sorting is good for consistency.
+            set_selected_team_ids(lambda old_ids: sorted(old_ids + [team_id]))
+
+    async def handle_submit(event):
+        # Basic validation: ensure a robot is selected and at least one team
+        if not selected_robot_id:
+            # In a real app, show a message in the form itself. For now, just log or prevent save.
+            print("AssignmentForm Validation: Robot no seleccionado.")
+            # Optionally, trigger a feedback modal directly from here or let on_save handle it.
+            # For now, on_save will handle feedback for empty selections.
+            pass # Fall through to on_save which should validate.
+        if not selected_team_ids:
+            print("AssignmentForm Validation: Ningún equipo seleccionado.")
+            pass
+
+        await on_save(selected_robot_id, selected_team_ids)
+
+    robot_options = [html.option({"value": ""}, "Seleccione un robot")] + [
+        html.option({"value": r["RobotId"]}, r["Robot"]) for r in robots
+    ]
+
+    team_checkboxes = []
+    if not available_teams:
+        team_checkboxes.append(html.p("No hay equipos disponibles para asignación."))
+    else:
+        for team in available_teams:
+            team_id = team["EquipoId"]
+            is_checked = team_id in selected_team_ids
+            team_checkboxes.append(
+                html.div({"key": f"team-{team_id}", "class_name": "checkbox-item"},
+                    html.input({
+                        "type": "checkbox",
+                        "id": f"team-checkbox-{team_id}",
+                        "checked": is_checked,
+                        "on_change": partial(handle_team_selection_change, team_id)
+                    }),
+                    html.label({"for": f"team-checkbox-{team_id}"}, f" {team['Equipo']}")
+                )
+            )
+
+    return html.div(
+        {"class_name": "modal-overlay"},
+        html.div(
+            {"class_name": "modal-content assignment-form-modal"}, # New class for specific styling
+            html.h2({"class_name": "modal-title"}, "Asignar Robot a Equipos"),
+            html.div(
+                {"class_name": "form-group"},
+                html.label({"for": "robot_select_assignment"}, "Seleccionar Robot:"),
+                html.select({
+                    "id": "robot_select_assignment",
+                    "value": selected_robot_id,
+                    "on_change": handle_robot_change,
+                    "class_name": "form-control" # General form control class
+                }, robot_options)
+            ),
+            html.div(
+                {"class_name": "form-group"},
+                html.label("Seleccionar Equipos Disponibles (Licencia: ATTENDEDRUNTIME, Activo_SAM: 1, No asignados):"),
+                html.div({
+                    "class_name": "teams-checkbox-list", # For styling the scrollable area
+                    "style": {"max_height": "250px", "overflow_y": "auto", "border": "1px solid #ced4da", "padding": "10px", "border_radius": "4px"}
+                }, team_checkboxes)
+            ),
+            html.div(
+                {"class_name": "modal-actions"},
+                html.button({"on_click": handle_submit, "class_name": "btn-accion"}, "Guardar Asignaciones"),
+                html.button({"on_click": on_cancel, "class_name": "btn-accion-secundario"}, "Cancelar"),
+            ),
+        )
+    )
+
 # --- Componente Principal de la Aplicación ---
 @component
 def App():
@@ -234,6 +322,10 @@ def App():
     show_feedback, set_show_feedback = use_state(False)
     feedback_message, set_feedback_message = use_state("")
     feedback_type, set_feedback_type = use_state("success")
+
+    # State for new Assignment Form (to be created)
+    show_assignment_form, set_show_assignment_form = use_state(False)
+    available_teams_for_assignment, set_available_teams_for_assignment = use_state([])
 
 
     async def fetch_robots(event=None):
@@ -371,12 +463,100 @@ def App():
             set_robot_para_programar(None)
             await fetch_robots()
 
+    async def handle_save_assignments_action(robot_id, team_ids_list):
+        if not robot_id or not team_ids_list:
+            set_feedback_message("Error: Debe seleccionar un robot y al menos un equipo.")
+            set_feedback_type("error")
+            set_show_feedback(True)
+            return
+
+        if not db:
+            set_feedback_message("Error: No se pudo conectar a la base de datos.")
+            set_feedback_type("error")
+            set_show_feedback(True)
+            return
+
+        all_successful = True
+        errors_encountered = []
+
+        for team_id in team_ids_list:
+            try:
+                # Corrected query to include Reservado and AsignadoPor
+                query = "INSERT INTO dbo.Asignaciones (RobotId, EquipoId, Reservado, FechaAsignacion, AsignadoPor) VALUES (?, ?, ?, GETDATE(), ?)"
+                # Parameters now include 1 for Reservado and "WEB" for AsignadoPor
+                db.ejecutar_consulta(query, (int(robot_id), int(team_id), 1, "WEB"))
+            except Exception as e:
+                all_successful = False
+                error_detail = f"Error al asignar equipo ID {team_id}: {str(e)}"
+                print(error_detail)
+                errors_encountered.append(error_detail)
+
+        if all_successful:
+            set_feedback_message(f"{len(team_ids_list)} equipo(s) asignado(s) exitosamente.")
+            set_feedback_type("success")
+        else:
+            error_summary = "; ".join(errors_encountered)
+            set_feedback_message(f"Algunas asignaciones fallaron. Detalles: {error_summary}")
+            set_feedback_type("error")
+
+        set_show_feedback(True)
+        set_show_assignment_form(False)
+        await fetch_available_teams()
+
+    async def trigger_assignment_confirmation(robot_id, team_ids_list):
+        if not robot_id or not team_ids_list:
+            set_feedback_message("Debe seleccionar un robot y al menos un equipo antes de guardar.")
+            set_feedback_type("error")
+            set_show_feedback(True)
+            return
+
+        robot_name = next((r['Robot'] for r in robots if str(r['RobotId']) == str(robot_id)), "Robot Desconocido")
+        confirmation_msg = f"¿Está seguro de que desea asignar {len(team_ids_list)} equipo(s) al robot '{robot_name}'?"
+
+        set_confirmation_message(confirmation_msg)
+        async def actual_db_action():
+            await handle_save_assignments_action(robot_id, team_ids_list)
+        set_on_confirm_action_callback(lambda _: (lambda: actual_db_action))
+        set_show_confirmation(True)
+
+    async def fetch_available_teams():
+        if not db:
+            print("Error: Database connection not available for fetching available teams.")
+            set_available_teams_for_assignment([])
+            return
+
+        query = """
+            SELECT E.EquipoId, E.Equipo
+            FROM dbo.Equipos E
+            WHERE E.Licencia = 'ATTENDEDRUNTIME'
+              AND E.Activo_SAM = 1
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM dbo.Asignaciones A
+                  WHERE A.EquipoId = E.EquipoId
+              )
+            ORDER BY E.Equipo;
+        """
+        try:
+            teams_data = db.ejecutar_consulta(query, es_select=True)
+            set_available_teams_for_assignment(teams_data or [])
+        except Exception as e:
+            print(f"Error fetching available teams: {e}")
+            set_available_teams_for_assignment([])
+            set_feedback_message(f"Error al cargar equipos disponibles: {str(e)}")
+            set_feedback_type("error")
+            set_show_feedback(True)
+
+    async def handle_open_assignment_form(event=None):
+        await fetch_available_teams()
+        set_show_assignment_form(True)
 
     async def handle_open_schedule_form(robot_para_agendar, event=None):
         if not db: return
+        # This query for schedule form might be different, it fetches teams not reserved or programmed
         query = "SELECT EquipoId, Equipo FROM dbo.Equipos WHERE Activo_SAM = 1 AND EquipoId NOT IN (SELECT EquipoId FROM dbo.Asignaciones WHERE Reservado = 1 OR EsProgramado = 1)"
         equipos = db.ejecutar_consulta(query, es_select=True)
-        set_equipos_disponibles(equipos or [])
+        set_equipos_disponibles(equipos or []) # This is for the ScheduleCreateForm's specific needs
         set_robot_para_programar(robot_para_agendar)
 
     if not db:
@@ -470,7 +650,13 @@ def App():
                 )
             )
         ),
-        html.button({"on_click": fetch_robots, "class_name": "btn-accion"}, "Refrescar Datos"),
+        html.div({"class_name": "action-buttons-bar", "style": {"margin_bottom": "20px", "display": "flex", "gap": "10px"}},
+            html.button({"on_click": fetch_robots, "class_name": "btn-accion"}, "Refrescar Datos"),
+            html.button({
+                "on_click": handle_open_assignment_form, # Changed
+                "class_name": "btn-accion-secundario"
+            }, "Asignar Robot a Equipos")
+        ),
         html.table(
             {"class_name": "sam-table"},
             html.thead(html.tr(html.th("Robot"), html.th("Activo"), html.th("Es Online"), html.th("Prioridad"), html.th("Acciones"))),
@@ -491,6 +677,14 @@ def App():
             equipos_disponibles=equipos_disponibles,
             on_save=trigger_robot_schedule_confirmation,
             on_cancel=lambda event: set_robot_para_programar(None),
+        ))
+
+    if show_assignment_form:
+        app_children.append(AssignmentForm(
+            robots=robots,
+            available_teams=available_teams_for_assignment,
+            on_save=trigger_assignment_confirmation,
+            on_cancel=lambda event: set_show_assignment_form(False)
         ))
 
     if show_confirmation:

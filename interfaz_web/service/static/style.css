@@ -281,3 +281,47 @@ button:active {
     margin-bottom: 15px;
     font-weight: 500; /* Slightly less heavy than main page H1 */
 }
+
+/* --- Assignment Form Specific Styles --- */
+
+/* If the assignment form modal content needs to be wider or different */
+.assignment-form-modal {
+    /* max-width: 650px; */ /* Example: Slightly wider for more content */
+}
+
+/* Scrollable list for team checkboxes */
+.teams-checkbox-list {
+    /* max-height: 250px; already inline */
+    /* overflow-y: auto; already inline */
+    /* border: 1px solid #ced4da; already inline */
+    /* padding: 10px; already inline */
+    /* border-radius: 4px; already inline */
+    background-color: #f8f9fa; /* Light background for the list container */
+    margin-top: 5px; /* Space above the list */
+}
+
+/* Individual checkbox item styling */
+.checkbox-item {
+    display: block;
+    padding: 6px 8px;
+    margin-bottom: 1px; /* Minimal space */
+    border-radius: 3px;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.checkbox-item:hover {
+    background-color: #e9ecef; /* Hover effect */
+}
+
+.checkbox-item input[type="checkbox"] {
+    margin-right: 10px;
+    vertical-align: middle;
+    cursor: pointer;
+}
+
+.checkbox-item label {
+    font-weight: normal; /* Default label weight */
+    color: #212529;     /* Standard bootstrap text color */
+    vertical-align: middle;
+    cursor: pointer; /* Make label clickable */
+}
