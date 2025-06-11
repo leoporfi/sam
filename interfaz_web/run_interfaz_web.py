@@ -5,6 +5,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from reactpy.backend.fastapi import configure
 
 # Añadir la raíz del proyecto al sys.path para permitir importaciones relativas
@@ -19,6 +20,15 @@ from interfaz_web.service.main import App
 
 # Configuración del servidor web usando FastAPI como backend
 app = FastAPI()
+
+# Montar el directorio de archivos estáticos
+# La ruta "interfaz_web/service/static" es relativa al directorio raíz del proyecto.
+# Dado que run_interfaz_web.py está en interfaz_web, el directorio "service/static" está al mismo nivel.
+# No, service/static está DENTRO de interfaz_web.
+# WEB_MODULE_ROOT es interfaz_web.
+static_files_dir = Path(WEB_MODULE_ROOT, "service/static")
+app.mount("/static", StaticFiles(directory=static_files_dir), name="static")
+
 configure(app, App)
 
 if __name__ == "__main__":

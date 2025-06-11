@@ -293,22 +293,7 @@ def App():
 
     return html.div(
         {"class_name": "container"},
-        html.style("""
-            .container { font-family: sans-serif; padding: 20px; max-width: 1200px; margin: auto; } h1 { color: #333; }
-            .sam-table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-            .sam-table th, .sam-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-            .sam-table th { background-color: #f8f8f8; font-weight: bold; } .sam-table tr:nth-child(even) { background-color: #fdfdfd; }
-            button { cursor: pointer; padding: 8px 12px; border-radius: 5px; border: 1px solid #ccc; margin: 0 4px; font-size: 14px; }
-            .btn-activo { background-color: #28a745; border-color: #28a745; color: white; }
-            .btn-inactivo { background-color: #dc3545; border-color: #dc3545; color: white; }
-            .btn-accion { background-color: #007bff; color: white; border-color: #007bff; }
-            .btn-accion-secundario { background-color: #6c757d; color: white; border-color: #6c757d; }
-            .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-            .modal-content { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); width: 90%; max-width: 500px; }
-            .form-group { margin-bottom: 15px; } .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-            .form-group input, .form-group select { width: 100%; padding: 8px; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; }
-            .modal-actions { margin-top: 20px; text-align: right; }
-        """),
+        html.link({"rel": "stylesheet", "href": "/static/style.css"}),
         html.h1("Panel de Mantenimiento SAM - Gestión de Robots"),
         html.button({"on_click": fetch_robots}, "Refrescar Datos"),
         html.table(
