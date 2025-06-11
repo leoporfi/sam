@@ -31,7 +31,8 @@ def RobotEditForm(robot, on_save, on_cancel):
     def handle_change(event):
         set_form_data(lambda old: {**old, event["target"]["name"]: event["target"]["value"]})
 
-    async def handle_submit(event):
+    async def handle_submit_form_data(event): # Renamed
+        # on_save is the prop, which will be trigger_robot_edit_confirmation
         await on_save(form_data)
 
     return html.div(
@@ -68,7 +69,7 @@ def RobotEditForm(robot, on_save, on_cancel):
             ),
             html.div(
                 {"class_name": "modal-actions"},
-                html.button({"on_click": handle_submit, "class_name": "btn-accion"}, "Guardar Cambios"),
+                html.button({"on_click": handle_submit_form_data, "class_name": "btn-accion"}, "Guardar Cambios"), # Updated on_click
                 html.button({"on_click": on_cancel}, "Cancelar"),
             ),
         ),
@@ -91,7 +92,8 @@ def ScheduleCreateForm(robot, equipos_disponibles, on_save, on_cancel):
     def handle_change(event):
         set_form_data(lambda old: {**old, event["target"]["name"]: event["target"]["value"]})
 
-    async def handle_submit(event):
+    # This will be modified later to trigger confirmation
+    async def handle_submit_internal(event):
         await on_save(robot, form_data)
 
     dynamic_fields = []
@@ -154,12 +156,58 @@ def ScheduleCreateForm(robot, equipos_disponibles, on_save, on_cancel):
             *dynamic_fields,
             html.div(
                 {"class_name": "modal-actions"},
-                html.button({"on_click": handle_submit, "class_name": "btn-accion"}, "Guardar Programación"),
+                # Button behavior will be changed in a later step to trigger confirmation
+                html.button({"on_click": handle_submit_internal, "class_name": "btn-accion"}, "Guardar Programación"),
                 html.button({"on_click": on_cancel}, "Cancelar"),
             ),
         ),
     )
 
+# --- Componente de Confirmación Genérico ---
+@component
+def ConfirmationModal(message, on_confirm, on_cancel):
+    return html.div(
+        {"class_name": "modal-overlay"},
+        html.div(
+            {"class_name": "modal-content confirmation-modal"},
+            html.h2({"class_name": "modal-title"}, "Confirmación"),
+            html.p({"class_name": "modal-message"}, message),
+            html.div(
+                {"class_name": "modal-actions"},
+                html.button({
+                    "on_click": lambda event: asyncio.ensure_future(on_confirm()) if asyncio.iscoroutinefunction(on_confirm) else on_confirm(),
+                    "class_name": "btn-accion btn-confirm"
+                }, "Confirmar"),
+                html.button({
+                    "on_click": on_cancel,
+                    "class_name": "btn-accion-secundario btn-cancel"
+                }, "Cancelar"),
+            ),
+        ),
+    )
+
+# --- Componente de Feedback Genérico ---
+@component
+def FeedbackModal(message, message_type, on_dismiss):
+    modal_content_class = f"modal-content feedback-modal feedback-modal-{message_type}"
+    title_text = "Éxito" if message_type == "success" else "Error"
+    title_class = f"modal-title feedback-title-{message_type}"
+
+    return html.div(
+        {"class_name": "modal-overlay"},
+        html.div(
+            {"class_name": modal_content_class},
+            html.h2({"class_name": title_class}, title_text),
+            html.p({"class_name": "modal-message"}, message),
+            html.div(
+                {"class_name": "modal-actions"},
+                html.button({
+                    "on_click": on_dismiss,
+                    "class_name": "btn-accion"
+                }, "OK"),
+            ),
+        ),
+    )
 
 # --- Componente Principal de la Aplicación ---
 @component
@@ -168,9 +216,25 @@ def App():
     robot_en_edicion, set_robot_en_edicion = use_state(None)
     robot_para_programar, set_robot_para_programar = use_state(None)
     equipos_disponibles, set_equipos_disponibles = use_state([])
+
+    # State for Search
     search_term, set_search_term = use_state("")
-    activo_filter, set_activo_filter = use_state("all")
-    online_filter, set_online_filter = use_state("all")
+
+    # State for Filters
+    activo_filter, set_activo_filter = use_state("all") # "all", "true", "false"
+    online_filter, set_online_filter = use_state("all") # "all", "true", "false"
+
+    # State for Confirmation Modal
+    show_confirmation, set_show_confirmation = use_state(False)
+    confirmation_message, set_confirmation_message = use_state("")
+    # Store a factory/getter for the coroutine func: lambda that returns the actual coroutine or None
+    on_confirm_action_callback, set_on_confirm_action_callback = use_state(lambda: (lambda: None))
+
+    # State for Feedback Modal
+    show_feedback, set_show_feedback = use_state(False)
+    feedback_message, set_feedback_message = use_state("")
+    feedback_type, set_feedback_type = use_state("success")
+
 
     async def fetch_robots(event=None):
         if not db:
@@ -190,38 +254,68 @@ def App():
         nuevo_estado = not robot_actual[field_to_toggle]
         query = f"UPDATE dbo.Robots SET {field_to_toggle} = ? WHERE RobotId = ?"
         db.ejecutar_consulta(query, (nuevo_estado, robot_id))
-        await fetch_robots()
+        await fetch_robots() # This will also re-trigger filtering
 
-    async def handle_save_robot(updated_robot_data, event=None):
-        if not db:
-            return
-        query = "UPDATE dbo.Robots SET PrioridadBalanceo = ?, MinEquipos = ?, MaxEquipos = ?, TicketsPorEquipoAdicional = ? WHERE RobotId = ?"
-        params = (
-            updated_robot_data["PrioridadBalanceo"],
-            updated_robot_data["MinEquipos"],
-            updated_robot_data["MaxEquipos"],
-            updated_robot_data.get("TicketsPorEquipoAdicional") or None,
-            updated_robot_data["RobotId"],
-        )
-        db.ejecutar_consulta(query, params)
-        set_robot_en_edicion(None)
-        await fetch_robots()
+    async def trigger_robot_edit_confirmation(form_data_from_edit_form):
+        set_confirmation_message("¿Está seguro de que desea guardar los cambios en el robot?")
+        async def actual_db_action():
+            await handle_save_robot_action(form_data_from_edit_form)
+        # Store a lambda that returns the actual coroutine function
+        # The outer lambda `lambda _: ...` is to prevent ReactPy from calling our inner lambda with the previous state.
+        set_on_confirm_action_callback(lambda _: (lambda: actual_db_action))
+        set_show_confirmation(True)
 
-    async def handle_open_schedule_form(robot_para_agendar, event=None):
-        if not db:
-            return
-        query = "SELECT EquipoId, Equipo FROM dbo.Equipos WHERE Activo_SAM = 1 AND EquipoId NOT IN (SELECT EquipoId FROM dbo.Asignaciones WHERE Reservado = 1 OR EsProgramado = 1)"
-        equipos = db.ejecutar_consulta(query, es_select=True)
-        set_equipos_disponibles(equipos or [])
-        set_robot_para_programar(robot_para_agendar)
+    async def execute_confirmed_action():
+        set_show_confirmation(False)
+        # Call the stored lambda, which returns the actual_db_action
+        action_to_run_factory = on_confirm_action_callback()
+        if action_to_run_factory:
+            # Now call the actual_db_action (which is a coroutine function) and await it
+            await action_to_run_factory()
+        set_on_confirm_action_callback(lambda: (lambda: None)) # Reset
 
-    async def handle_save_schedule(robot, schedule_form_data, event=None):
+    async def handle_save_robot_action(updated_robot_data):
         if not db:
+            set_feedback_message("Error: No se pudo conectar a la base de datos.")
+            set_feedback_type("error")
+            set_show_feedback(True)
             return
+
+        try:
+            query = "UPDATE dbo.Robots SET PrioridadBalanceo = ?, MinEquipos = ?, MaxEquipos = ?, TicketsPorEquipoAdicional = ? WHERE RobotId = ?"
+            params = (
+                updated_robot_data["PrioridadBalanceo"],
+                updated_robot_data["MinEquipos"],
+                updated_robot_data["MaxEquipos"],
+                updated_robot_data.get("TicketsPorEquipoAdicional") or None,
+                updated_robot_data["RobotId"],
+            )
+            db.ejecutar_consulta(query, params)
+
+            set_feedback_message("Robot actualizado exitosamente.")
+            set_feedback_type("success")
+            set_show_feedback(True) # Show success feedback
+
+            set_robot_en_edicion(None)
+            await fetch_robots()
+        except Exception as e:
+            print(f"Error al actualizar robot: {e}") # Log for server
+            set_feedback_message(f"Error al actualizar robot: {str(e)}")
+            set_feedback_type("error")
+            set_show_feedback(True) # Show error feedback
+
+    async def handle_save_schedule_action(robot, schedule_form_data):
+        if not db:
+            print("Error: Database connection not available for saving schedule.")
+            return
+
         equipo_id_seleccionado = int(schedule_form_data["equipo_id"])
         equipo_seleccionado_obj = next((eq for eq in equipos_disponibles if eq["EquipoId"] == equipo_id_seleccionado), None)
         if not equipo_seleccionado_obj:
+            print("Error: Equipo seleccionado no encontrado.")
+            # Set feedback: "Equipo no encontrado"
             return
+
         nombre_del_equipo_seleccionado = equipo_seleccionado_obj["Equipo"]
         conn = None
         try:
@@ -229,6 +323,7 @@ def App():
             cursor = conn.cursor()
             sp_name = f"dbo.CargarProgramacion{schedule_form_data['tipo']}"
             params = {"@Robot": robot["Robot"], "@Equipos": nombre_del_equipo_seleccionado}
+
             if schedule_form_data["tipo"] == "Diaria":
                 params["@HorasInicio"] = schedule_form_data["hora_inicio"]
             elif schedule_form_data["tipo"] == "Semanal":
@@ -240,39 +335,49 @@ def App():
             elif schedule_form_data["tipo"] == "Especifica":
                 params["@FechasEspecificas"] = schedule_form_data["fecha_especifica"]
                 params["@HorasInicio"] = schedule_form_data["hora_inicio"]
+
             param_placeholders = ", ".join([f"{k} = ?" for k in params])
             query_sp = f"EXEC {sp_name} {param_placeholders}"
             cursor.execute(query_sp, tuple(params.values()))
+
             cursor.execute("UPDATE dbo.Robots SET EsOnline = 0 WHERE RobotId = ?", (robot["RobotId"],))
             cursor.execute("UPDATE dbo.Equipos SET PermiteBalanceoDinamico = 0 WHERE EquipoId = ?", (equipo_id_seleccionado,))
             conn.commit()
+            # Feedback handled by wrapper
         except Exception as e:
             if conn:
                 conn.rollback()
             print(f"UI Error: Falló la transacción de programación. Se revirtieron los cambios. Error: {e}")
+            # Feedback handled by wrapper, pass error message e
+            raise e # Re-raise to be caught by wrapper
         finally:
             if conn:
                 conn.close()
             set_robot_para_programar(None)
             await fetch_robots()
 
+
+    async def handle_open_schedule_form(robot_para_agendar, event=None):
+        if not db: return
+        query = "SELECT EquipoId, Equipo FROM dbo.Equipos WHERE Activo_SAM = 1 AND EquipoId NOT IN (SELECT EquipoId FROM dbo.Asignaciones WHERE Reservado = 1 OR EsProgramado = 1)"
+        equipos = db.ejecutar_consulta(query, es_select=True)
+        set_equipos_disponibles(equipos or [])
+        set_robot_para_programar(robot_para_agendar)
+
     if not db:
         return html.div(html.h1("Error de Conexión"), html.p("No se pudo establecer la conexión con la base de datos SAM."))
 
-    # Aplicar filtros secuencialmente
-    # 1. Filtro de búsqueda por nombre
-    if search_term:
-        current_filter_stage = [r for r in robots if search_term.lower() in r['Robot'].lower()]
-    else:
-        current_filter_stage = list(robots)  # Empezar con una copia de todos los robots
+    # Filtering Logic
+    current_filter_stage = list(robots) # Start with a copy
 
-    # 2. Filtro por estado "Activo"
+    if search_term:
+        current_filter_stage = [r for r in current_filter_stage if search_term.lower() in r['Robot'].lower()]
+
     if activo_filter == "true":
         current_filter_stage = [r for r in current_filter_stage if r['Activo'] is True or r['Activo'] == 1]
     elif activo_filter == "false":
         current_filter_stage = [r for r in current_filter_stage if r['Activo'] is False or r['Activo'] == 0]
 
-    # 3. Filtro por estado "EsOnline"
     if online_filter == "true":
         current_filter_stage = [r for r in current_filter_stage if r['EsOnline'] is True or r['EsOnline'] == 1]
     elif online_filter == "false":
@@ -281,44 +386,44 @@ def App():
     filtered_robots = current_filter_stage
 
     table_rows = []
-    for robot in filtered_robots:
+    for robot_data in filtered_robots: # Renamed robot to robot_data to avoid conflict with robot_para_programar
         table_rows.append(
             html.tr(
-                {"key": robot["RobotId"]},
-                html.td(robot["Robot"]),
+                {"key": robot_data["RobotId"]},
+                html.td(robot_data["Robot"]),
                 html.td(
                     html.button(
                         {
-                            "on_click": partial(handle_toggle, robot["RobotId"], "Activo"),
-                            "class_name": f"btn-{'activo' if robot['Activo'] else 'inactivo'}",
+                            "on_click": partial(handle_toggle, robot_data["RobotId"], "Activo"),
+                            "class_name": f"btn-{'activo' if robot_data['Activo'] else 'inactivo'}",
                         },
-                        "Sí" if robot["Activo"] else "No",
+                        "Sí" if robot_data["Activo"] else "No",
                     )
                 ),
                 html.td(
                     html.button(
                         {
-                            "on_click": partial(handle_toggle, robot["RobotId"], "EsOnline"),
-                            "class_name": f"btn-{'activo' if robot['EsOnline'] else 'inactivo'}",
+                            "on_click": partial(handle_toggle, robot_data["RobotId"], "EsOnline"),
+                            "class_name": f"btn-{'activo' if robot_data['EsOnline'] else 'inactivo'}",
                         },
-                        "Sí" if robot["EsOnline"] else "No",
+                        "Sí" if robot_data["EsOnline"] else "No",
                     )
                 ),
-                html.td(robot["PrioridadBalanceo"]),
+                html.td(robot_data["PrioridadBalanceo"]),
                 html.td(
-                    html.button({"on_click": partial(handle_open_schedule_form, robot), "class_name": "btn-accion"}, "Programar"),
-                    # <<< --- INICIO DE LA CORRECCIÓN --- >>>
-                    # Usamos lambda para llamar a la función de estado con un solo argumento.
-                    html.button({"on_click": lambda event, r=robot: set_robot_en_edicion(r), "class_name": "btn-accion-secundario"}, "Editar"),
-                    # <<< --- FIN DE LA CORRECCIÓN --- >>>
+                    html.button({"on_click": partial(handle_open_schedule_form, robot_data), "class_name": "btn-accion"}, "Programar"),
+                    html.button({"on_click": lambda event, r=robot_data: set_robot_en_edicion(r), "class_name": "btn-accion-secundario"}, "Editar"),
                 ),
             )
         )
+
+    schedule_form_on_save_handler = handle_save_schedule_action # This will be changed in next step
 
     return html.div(
         {"class_name": "container"},
         html.link({"rel": "stylesheet", "href": "/static/style.css"}),
         html.h1("Panel de Mantenimiento SAM - Gestión de Robots"),
+
         html.div({"class_name": "filter-controls"},
             html.input({
                 "type": "text",
@@ -354,21 +459,28 @@ def App():
                 )
             )
         ),
-        html.button({"on_click": fetch_robots}, "Refrescar Datos"),
+
+        html.button({"on_click": fetch_robots, "class_name": "btn-accion"}, "Refrescar Datos"), # Added btn-accion class
+
         html.table(
             {"class_name": "sam-table"},
             html.thead(html.tr(html.th("Robot"), html.th("Activo"), html.th("Es Online"), html.th("Prioridad"), html.th("Acciones"))),
-            html.tbody(table_rows),
+            html.tbody(table_rows if filtered_robots else html.tr(html.td({"colSpan": 5}, "No hay robots para mostrar."))), # Added colspan
         ),
-        # <<< --- INICIO DE LA CORRECCIÓN --- >>>
-        # Aquí también usamos lambda para los botones de "Cancelar" de los modales.
-        robot_en_edicion and RobotEditForm(robot=robot_en_edicion, on_save=handle_save_robot, on_cancel=lambda event: set_robot_en_edicion(None)),
-        robot_para_programar
-        and ScheduleCreateForm(
+
+        robot_en_edicion and RobotEditForm(
+            robot=robot_en_edicion,
+            on_save=trigger_robot_edit_confirmation, # Changed
+            on_cancel=lambda event: set_robot_en_edicion(None)
+        ),
+        robot_para_programar and ScheduleCreateForm(
             robot=robot_para_programar,
             equipos_disponibles=equipos_disponibles,
-            on_save=handle_save_schedule,
+            on_save=schedule_form_on_save_handler, # Will be changed
             on_cancel=lambda event: set_robot_para_programar(None),
         ),
-        # <<< --- FIN DE LA CORRECCIÓN --- >>>
+
+        # Conditional rendering for Confirmation and Feedback modals will be added here later
     )
+
+```
