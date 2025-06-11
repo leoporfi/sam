@@ -1,0 +1,189 @@
+/* General Body Styles (optional, depending on ReactPy's handling) */
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f7f9; /* Light grey background */
+    color: #333; /* Default text color */
+    line-height: 1.6;
+}
+
+/* Main Container */
+.container {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 25px;
+    max-width: 1200px;
+    margin: 20px auto; /* Added top/bottom margin */
+    background-color: #ffffff; /* White background for content area */
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* Softer shadow */
+}
+
+/* Headings */
+h1 {
+    color: #2c3e50; /* Dark blue-grey */
+    font-size: 2em; /* Slightly larger */
+    margin-bottom: 25px; /* More space below */
+    text-align: center;
+    font-weight: 600; /* Bolder */
+}
+
+/* Table Styling */
+.sam-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 25px;
+    /* Removed box-shadow from here, container has it */
+}
+
+.sam-table th,
+.sam-table td {
+    border: 1px solid #e0e0e0; /* Lighter border */
+    padding: 15px; /* Increased padding */
+    text-align: left;
+    vertical-align: middle; /* Align text vertically */
+}
+
+.sam-table th {
+    background-color: #3498db; /* Vibrant blue */
+    color: white;
+    font-weight: 600; /* Bolder headers */
+    text-transform: uppercase;
+    font-size: 0.9em;
+    letter-spacing: 0.5px;
+}
+
+.sam-table td {
+    color: #555; /* Dark grey for text */
+}
+
+.sam-table tbody tr:hover {
+    background-color: #f2f8fc; /* Light blue hover */
+}
+
+.sam-table tr:nth-child(even) {
+    background-color: #f9f9f9; /* Subtle zebra striping if preferred over plain */
+}
+
+
+/* Button Styling */
+button {
+    cursor: pointer;
+    padding: 10px 18px;
+    border-radius: 6px;
+    border: none; /* Removed border for a flatter look */
+    margin: 0 5px;
+    font-size: 0.95em;
+    font-weight: 500; /* Medium weight */
+    transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+    line-height: 1.5; /* Ensure text is centered well */
+}
+
+button:hover {
+    filter: brightness(110%); /* Generic hover, good for solid colors */
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1); /* Slightly raise on hover */
+}
+
+button:active {
+    transform: translateY(1px); /* Click feedback */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.btn-activo {
+    background-color: #2ecc71; /* Emerald green */
+    color: white;
+}
+
+.btn-inactivo {
+    background-color: #e74c3c; /* Alizarin red */
+    color: white;
+}
+
+.btn-accion {
+    background-color: #3498db; /* Peter river blue */
+    color: white;
+}
+
+.btn-accion-secundario {
+    background-color: #95a5a6; /* Asbestos grey */
+    color: white;
+}
+
+/* Special button for "Refrescar Datos" if it's standalone */
+.container > button { /* Targets the first button child of container, usually "Refrescar" */
+    background-color: #5dade2; /* A lighter, friendly blue */
+    color: white;
+    margin-bottom: 20px; /* Space it out from the table */
+}
+
+
+/* Modal Styling */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6); /* Darker overlay */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(3px); /* Frosted glass effect */
+}
+
+.modal-content {
+    background: white;
+    padding: 30px; /* More padding */
+    border-radius: 10px; /* More rounded corners */
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15); /* More pronounced shadow */
+    width: 90%;
+    max-width: 550px; /* Slightly wider for comfort */
+}
+
+.modal-content h2 {
+    color: #34495e; /* Wet asphalt blue-grey for modal titles */
+    font-size: 1.6em; /* Larger modal titles */
+    margin-bottom: 25px;
+    text-align: center;
+    font-weight: 500;
+}
+
+/* Form Group Styling */
+.form-group {
+    margin-bottom: 20px; /* Increased spacing */
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px; /* Space between label and input */
+    font-weight: 600; /* Bolder labels */
+    color: #555;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 12px; /* More padding in inputs */
+    box-sizing: border-box;
+    border-radius: 6px; /* More rounded inputs */
+    border: 1px solid #ced4da; /* Standard border color */
+    font-size: 1em;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: #3498db; /* Blue focus border */
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25); /* Blue focus shadow */
+    outline: none;
+}
+
+/* Modal Actions (buttons at the bottom of modal) */
+.modal-actions {
+    margin-top: 30px; /* More space above action buttons */
+    text-align: right; /* Align buttons to the right */
+    display: flex; /* Use flex for better spacing */
+    justify-content: flex-end;
+    gap: 12px; /* Space between buttons */
+}
