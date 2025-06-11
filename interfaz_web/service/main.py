@@ -169,6 +169,8 @@ def App():
     robot_para_programar, set_robot_para_programar = use_state(None)
     equipos_disponibles, set_equipos_disponibles = use_state([])
     search_term, set_search_term = use_state("")
+    activo_filter, set_activo_filter = use_state("all")
+    online_filter, set_online_filter = use_state("all")
 
     async def fetch_robots(event=None):
         if not db:
@@ -257,11 +259,26 @@ def App():
     if not db:
         return html.div(html.h1("Error de Conexión"), html.p("No se pudo establecer la conexión con la base de datos SAM."))
 
-    # Filtrar robots basado en el término de búsqueda
+    # Aplicar filtros secuencialmente
+    # 1. Filtro de búsqueda por nombre
     if search_term:
-        filtered_robots = [r for r in robots if search_term.lower() in r['Robot'].lower()]
+        current_filter_stage = [r for r in robots if search_term.lower() in r['Robot'].lower()]
     else:
-        filtered_robots = robots
+        current_filter_stage = list(robots)  # Empezar con una copia de todos los robots
+
+    # 2. Filtro por estado "Activo"
+    if activo_filter == "true":
+        current_filter_stage = [r for r in current_filter_stage if r['Activo'] is True or r['Activo'] == 1]
+    elif activo_filter == "false":
+        current_filter_stage = [r for r in current_filter_stage if r['Activo'] is False or r['Activo'] == 0]
+
+    # 3. Filtro por estado "EsOnline"
+    if online_filter == "true":
+        current_filter_stage = [r for r in current_filter_stage if r['EsOnline'] is True or r['EsOnline'] == 1]
+    elif online_filter == "false":
+        current_filter_stage = [r for r in current_filter_stage if r['EsOnline'] is False or r['EsOnline'] == 0]
+
+    filtered_robots = current_filter_stage
 
     table_rows = []
     for robot in filtered_robots:
@@ -302,13 +319,41 @@ def App():
         {"class_name": "container"},
         html.link({"rel": "stylesheet", "href": "/static/style.css"}),
         html.h1("Panel de Mantenimiento SAM - Gestión de Robots"),
-        html.input({
-            "type": "text",
-            "placeholder": "Buscar robot...",
-            "value": search_term,
-            "on_change": lambda event: set_search_term(event["target"]["value"]),
-            "class_name": "search-input"
-        }),
+        html.div({"class_name": "filter-controls"},
+            html.input({
+                "type": "text",
+                "placeholder": "Buscar robot...",
+                "value": search_term,
+                "on_change": lambda event: set_search_term(event["target"]["value"]),
+                "class_name": "search-input"
+            }),
+            html.div({"class_name": "filter-group"},
+                html.label({"for": "activo_filter_select"}, "Activo: "),
+                html.select({
+                    "id": "activo_filter_select",
+                    "value": activo_filter,
+                    "on_change": lambda event: set_activo_filter(event["target"]["value"]),
+                    "class_name": "filter-select"
+                },
+                    html.option({"value": "all"}, "Todos"),
+                    html.option({"value": "true"}, "Sí"),
+                    html.option({"value": "false"}, "No")
+                )
+            ),
+            html.div({"class_name": "filter-group"},
+                html.label({"for": "online_filter_select"}, "Online: "),
+                html.select({
+                    "id": "online_filter_select",
+                    "value": online_filter,
+                    "on_change": lambda event: set_online_filter(event["target"]["value"]),
+                    "class_name": "filter-select"
+                },
+                    html.option({"value": "all"}, "Todos"),
+                    html.option({"value": "true"}, "Sí"),
+                    html.option({"value": "false"}, "No")
+                )
+            )
+        ),
         html.button({"on_click": fetch_robots}, "Refrescar Datos"),
         html.table(
             {"class_name": "sam-table"},
