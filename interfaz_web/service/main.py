@@ -272,7 +272,8 @@ def App():
         if action_to_run_factory:
             # Now call the actual_db_action (which is a coroutine function) and await it
             await action_to_run_factory()
-        set_on_confirm_action_callback(lambda: (lambda: None)) # Reset
+        # The outer lambda `lambda _: ...` is to prevent ReactPy from calling our inner lambda with the previous state.
+        set_on_confirm_action_callback(lambda _: (lambda: (lambda: None))) # Reset
 
     async def handle_save_robot_action(updated_robot_data):
         if not db:
@@ -431,11 +432,9 @@ def App():
             )
         )
 
-    return html.div(
-        {"class_name": "container"},
+    app_children = [
         html.link({"rel": "stylesheet", "href": "/static/style.css"}),
         html.h1("Panel de Mantenimiento SAM - Gestión de Robots"),
-
         html.div({"class_name": "filter-controls"},
             html.input({
                 "type": "text",
@@ -471,38 +470,43 @@ def App():
                 )
             )
         ),
-
-        html.button({"on_click": fetch_robots, "class_name": "btn-accion"}, "Refrescar Datos"), # Added btn-accion class
-
+        html.button({"on_click": fetch_robots, "class_name": "btn-accion"}, "Refrescar Datos"),
         html.table(
             {"class_name": "sam-table"},
             html.thead(html.tr(html.th("Robot"), html.th("Activo"), html.th("Es Online"), html.th("Prioridad"), html.th("Acciones"))),
-            html.tbody(table_rows if filtered_robots else html.tr(html.td({"colSpan": 5}, "No hay robots para mostrar."))), # Added colspan
+            html.tbody(table_rows if filtered_robots else html.tr(html.td({"colSpan": 5}, "No hay robots para mostrar."))),
         ),
+    ]
 
-        robot_en_edicion and RobotEditForm(
+    if robot_en_edicion:
+        app_children.append(RobotEditForm(
             robot=robot_en_edicion,
-            on_save=trigger_robot_edit_confirmation, # Changed
+            on_save=trigger_robot_edit_confirmation,
             on_cancel=lambda event: set_robot_en_edicion(None)
-        ),
-        robot_para_programar and ScheduleCreateForm(
+        ))
+
+    if robot_para_programar:
+        app_children.append(ScheduleCreateForm(
             robot=robot_para_programar,
             equipos_disponibles=equipos_disponibles,
-            on_save=trigger_robot_schedule_confirmation, # Changed
+            on_save=trigger_robot_schedule_confirmation,
             on_cancel=lambda event: set_robot_para_programar(None),
-        ),
+        ))
 
-        # Conditional rendering for Confirmation and Feedback modals
-        show_confirmation and ConfirmationModal(
+    if show_confirmation:
+        app_children.append(ConfirmationModal(
             message=confirmation_message,
             on_confirm=execute_confirmed_action,
             on_cancel=lambda event: set_show_confirmation(False)
-        ),
-        show_feedback and FeedbackModal(
+        ))
+
+    if show_feedback:
+        app_children.append(FeedbackModal(
             message=feedback_message,
             message_type=feedback_type,
             on_dismiss=lambda event: set_show_feedback(False)
-        )
-    )
+        ))
+
+    return html.div({"class_name": "container"}, *app_children)
 
 ```
