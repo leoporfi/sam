@@ -168,6 +168,7 @@ def App():
     robot_en_edicion, set_robot_en_edicion = use_state(None)
     robot_para_programar, set_robot_para_programar = use_state(None)
     equipos_disponibles, set_equipos_disponibles = use_state([])
+    search_term, set_search_term = use_state("")
 
     async def fetch_robots(event=None):
         if not db:
@@ -256,8 +257,14 @@ def App():
     if not db:
         return html.div(html.h1("Error de Conexión"), html.p("No se pudo establecer la conexión con la base de datos SAM."))
 
+    # Filtrar robots basado en el término de búsqueda
+    if search_term:
+        filtered_robots = [r for r in robots if search_term.lower() in r['Robot'].lower()]
+    else:
+        filtered_robots = robots
+
     table_rows = []
-    for robot in robots:
+    for robot in filtered_robots:
         table_rows.append(
             html.tr(
                 {"key": robot["RobotId"]},
@@ -295,6 +302,13 @@ def App():
         {"class_name": "container"},
         html.link({"rel": "stylesheet", "href": "/static/style.css"}),
         html.h1("Panel de Mantenimiento SAM - Gestión de Robots"),
+        html.input({
+            "type": "text",
+            "placeholder": "Buscar robot...",
+            "value": search_term,
+            "on_change": lambda event: set_search_term(event["target"]["value"]),
+            "class_name": "search-input"
+        }),
         html.button({"on_click": fetch_robots}, "Refrescar Datos"),
         html.table(
             {"class_name": "sam-table"},
