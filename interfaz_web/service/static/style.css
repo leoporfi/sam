@@ -206,3 +206,55 @@ button:active {
     box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
     outline: none;
 }
+
+/* Filter Controls Container */
+.filter-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px; /* Increased gap for better spacing */
+    align-items: center;
+    margin-bottom: 25px;
+    padding: 20px; /* Increased padding */
+    background-color: #f8f9fa;
+    border-radius: 8px; /* Slightly larger radius */
+    border: 1px solid #e9ecef; /* Subtle border for the area */
+}
+
+/* Individual Filter Group (label + select) */
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Increased gap */
+}
+
+.filter-group label {
+    font-weight: 500;
+    color: #343a40; /* Darker label color */
+    margin-bottom: 0;
+    white-space: nowrap; /* Prevent label text from wrapping */
+}
+
+/* Filter Select Dropdowns */
+.filter-select {
+    padding: 10px 12px; /* Match search input padding */
+    font-size: 1em;     /* Match search input font size */
+    border: 1px solid #ced4da;
+    border-radius: 6px; /* Match search input border radius */
+    background-color: #fff;
+    min-width: 150px; /* Slightly wider */
+    box-sizing: border-box;
+}
+
+.filter-select:focus {
+    border-color: #3498db;
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+    outline: none;
+}
+
+/* Adjustments to search input when inside filter-controls */
+.filter-controls .search-input {
+    margin-bottom: 0; /* Reset margin as gap is controlled by flex container */
+    flex: 1 1 250px;  /* Grow, shrink, with a preferred basis of 250px */
+    min-width: 200px; /* Ensure it doesn't get too small */
+    /* max-width: 400px; /* Optional: if you want to cap its growth */
+}
