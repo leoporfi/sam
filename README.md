@@ -150,13 +150,6 @@ Para un entorno de producción, se recomienda ejecutar los **cuatro servicios** 
     * **Directorio de Inicio:** `C:\ruta\a\SAM_PROJECT_ROOT\`.
 
 ---
-### Resumen de los Cambios Clave en el README:
-* **Se añadió la Interfaz Web** como un componente principal del sistema.
-* **Se actualizó la Estructura del Proyecto** para reflejar la modularización del `callback` y la adición de `interfaz_web`.
-* **Se actualizaron las Instrucciones de Despliegue con NSSM** para incluir los cuatro servicios independientes.
-* **Se añadieron las nuevas dependencias** (`reactpy`, `fastapi`, `uvicorn`) a la lista de prerrequisitos.
-
----
 ## 🐛 Troubleshooting Básico
 
 * **Verificar Logs**: Revisa los archivos de log generados por cada servicio (ej. `sam_lanzador_app.log`, `sam_callback_server.log`, `sam_balanceador_app.log` definidos en `ConfigManager.get_log_config()`). Aumenta el `LOG_LEVEL` a `DEBUG` en `.env` para obtener más detalles.
