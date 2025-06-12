@@ -782,5 +782,3 @@ def App():
         ))
 
     return html.div({"class_name": f"container theme-{current_theme}"}, *app_children)
-
-```
