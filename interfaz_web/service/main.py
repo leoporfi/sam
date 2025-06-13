@@ -220,7 +220,7 @@ def AssignmentForm(robots, available_teams, on_save, on_cancel):
     def handle_team_selection_change(team_id, event): # event is passed by on_change via partial
         # Debug print removed
         # is_checked determination removed
-        
+
         if team_id in selected_team_ids:
             # Team is currently selected, so this action unchecks it
             set_selected_team_ids(lambda old_ids: [tid for tid in old_ids if tid != team_id])
@@ -297,6 +297,78 @@ def AssignmentForm(robots, available_teams, on_save, on_cancel):
         )
     )
 
+# --- Componente para De-asignar Equipos ---
+@component
+def DeassignmentForm(robot_for_deassignment, teams_for_deassignment, on_save, on_cancel):
+    # State for selected team IDs to de-assign
+    selected_team_ids_to_deassign, set_selected_team_ids_to_deassign = use_state([])
+
+    def handle_team_selection_change(team_id, event):
+        if team_id in selected_team_ids_to_deassign:
+            set_selected_team_ids_to_deassign(
+                lambda old_ids: [tid for tid in old_ids if tid != team_id]
+            )
+        else:
+            set_selected_team_ids_to_deassign(
+                lambda old_ids: sorted(old_ids + [team_id])
+            )
+
+    async def handle_submit(event):
+        if not selected_team_ids_to_deassign:
+            # Optionally: show a message within the modal if no teams are selected.
+            # For now, we can rely on the on_save handler (trigger_deassignment_confirmation)
+            # to provide feedback if no teams are selected.
+            print("DeassignmentForm: No teams selected for de-assignment.")
+        # on_save will be trigger_deassignment_confirmation, which expects (robot_id, team_ids_list)
+        await on_save(robot_for_deassignment["RobotId"], selected_team_ids_to_deassign)
+
+    # Modal Structure
+    modal_title = "De-asignar Equipos del Robot: " + robot_for_deassignment['Robot'] if robot_for_deassignment else "De-asignar Equipos"
+    
+    team_checkboxes = []
+    if not teams_for_deassignment:
+        team_checkboxes.append(html.p("No hay equipos asignados a este robot o no se pudieron cargar."))
+    else:
+        for team in teams_for_deassignment:
+            team_id = team["EquipoId"]
+            is_checked = team_id in selected_team_ids_to_deassign
+            team_checkboxes.append(
+                html.div({"key": f"deassign-team-{team_id}", "class_name": "checkbox-item"},
+                    html.input({
+                        "type": "checkbox",
+                        "id": f"deassign-team-checkbox-{team_id}",
+                        "checked": is_checked,
+                        "on_change": partial(handle_team_selection_change, team_id)
+                    }),
+                    html.label({"for": f"deassign-team-checkbox-{team_id}"}, f" {team['Equipo']}")
+                )
+            )
+
+    return html.div(
+        {"class_name": "modal-overlay"},
+        html.div(
+            {"class_name": "modal-content deassignment-form-modal"}, # Consider adding a specific class
+            html.h2({"class_name": "modal-title"}, modal_title),
+            html.div(
+                {"class_name": "form-group"},
+                html.label("Seleccionar Equipos a De-asignar:"),
+                html.div({
+                    "class_name": "teams-checkbox-list",
+                    "style": {"max_height": "250px", "overflow_y": "auto", "border": "1px solid #ced4da", "padding": "10px", "border_radius": "4px"}
+                }, team_checkboxes if teams_for_deassignment else html.p("No hay equipos para mostrar.") )
+            ),
+            html.div(
+                {"class_name": "modal-actions"},
+                html.button({
+                    "on_click": handle_submit,
+                    "class_name": "btn-accion-peligro", # Destructive action style
+                    "disabled": not selected_team_ids_to_deassign # Disable if no teams are selected
+                    }, "De-asignar Seleccionados"),
+                html.button({"on_click": on_cancel, "class_name": "btn-accion-secundario"}, "Cancelar"),
+            ),
+        )
+    )
+
 # --- Componente Principal de la Aplicación ---
 @component
 def App():
@@ -327,6 +399,12 @@ def App():
     show_assignment_form, set_show_assignment_form = use_state(False)
     available_teams_for_assignment, set_available_teams_for_assignment = use_state([])
 
+    # State for De-assignment Modal
+    show_deassignment_modal, set_show_deassignment_modal = use_state(False)
+    robot_for_deassignment, set_robot_for_deassignment = use_state(None)
+    # teams_for_deassignment will store a list of {'EquipoId': id, 'Equipo': name}
+    teams_for_deassignment, set_teams_for_deassignment = use_state([])
+
     # State for Theme
     current_theme, set_current_theme = use_state("dark") # Default to dark theme
 
@@ -344,7 +422,7 @@ def App():
         set_current_theme(lambda old_theme: "light" if old_theme == "dark" else "dark")
 
     def handle_sort_click(column_key_clicked):
-        current_sort_k = sort_key 
+        current_sort_k = sort_key
         if column_key_clicked == current_sort_k:
             set_sort_ascending(lambda old_val: not old_val)
         else:
@@ -355,9 +433,40 @@ def App():
     async def fetch_robots(event=None):
         if not db:
             return
-        query = "SELECT RobotId, Robot, Activo, EsOnline, PrioridadBalanceo, MinEquipos, MaxEquipos, TicketsPorEquipoAdicional FROM dbo.Robots ORDER BY Robot"
-        data = db.ejecutar_consulta(query, es_select=True)
-        set_robots(data or [])
+        query = """
+            SELECT
+                R.RobotId, R.Robot, R.Activo, R.EsOnline,
+                R.PrioridadBalanceo, R.MinEquipos, R.MaxEquipos, R.TicketsPorEquipoAdicional,
+                STRING_AGG(E.Equipo, ', ') WITHIN GROUP (ORDER BY E.Equipo) AS EquiposAsignados
+            FROM dbo.Robots R
+            LEFT JOIN dbo.Asignaciones A ON R.RobotId = A.RobotId
+            LEFT JOIN dbo.Equipos E ON A.EquipoId = E.EquipoId
+            GROUP BY
+                R.RobotId, R.Robot, R.Activo, R.EsOnline,
+                R.PrioridadBalanceo, R.MinEquipos, R.MaxEquipos, R.TicketsPorEquipoAdicional
+            ORDER BY R.Robot
+        """
+        try:
+            data = db.ejecutar_consulta(query, es_select=True)
+            set_robots(data or [])
+        except Exception as e:
+            print(f"Error fetching robots with STRING_AGG: {e}")
+            # Fallback to the old query if STRING_AGG fails
+            print("Falling back to fetching robots without team assignments due to error.")
+            query_fallback = "SELECT RobotId, Robot, Activo, EsOnline, PrioridadBalanceo, MinEquipos, MaxEquipos, TicketsPorEquipoAdicional FROM dbo.Robots ORDER BY Robot"
+            data = db.ejecutar_consulta(query_fallback, es_select=True)
+            # Add an empty EquiposAsignados field to maintain consistent data structure
+            processed_data = []
+            if data:
+                for robot_row in data:
+                    robot_row['EquiposAsignados'] = None # Or an empty string ""
+                    processed_data.append(robot_row)
+            set_robots(processed_data)
+            # Optionally, set a feedback message for the UI about the fallback
+            set_feedback_message("No se pudieron cargar los equipos asignados a los robots. Funcionalidad limitada.")
+            set_feedback_type("error")
+            set_show_feedback(True)
+
 
     use_effect(fetch_robots, [])
 
@@ -384,10 +493,10 @@ def App():
     async def execute_confirmed_action():
         set_show_confirmation(False)
         # Call the stored lambda, which returns the actual_db_action
-        action_to_run_factory = on_confirm_action_callback() 
+        action_to_run_factory = on_confirm_action_callback()
         if action_to_run_factory:
             # Now call the actual_db_action (which is a coroutine function) and await it
-            await action_to_run_factory() 
+            await action_to_run_factory()
         # The outer lambda `lambda _: ...` is to prevent ReactPy from calling our inner lambda with the previous state.
         set_on_confirm_action_callback(lambda _: (lambda: (lambda: None))) # Reset
 
@@ -408,12 +517,12 @@ def App():
                 updated_robot_data["RobotId"],
             )
             db.ejecutar_consulta(query, params)
-            
+
             set_feedback_message("Robot actualizado exitosamente.")
             set_feedback_type("success")
             set_show_feedback(True) # Show success feedback
-            
-            set_robot_en_edicion(None) 
+
+            set_robot_en_edicion(None)
             await fetch_robots()
         except Exception as e:
             print(f"Error al actualizar robot: {e}") # Log for server
@@ -434,7 +543,7 @@ def App():
             set_feedback_type("error")
             set_show_feedback(True)
             return
-        
+
         equipo_id_seleccionado = int(schedule_form_data["equipo_id"])
         equipo_seleccionado_obj = next((eq for eq in equipos_disponibles if eq["EquipoId"] == equipo_id_seleccionado), None)
         if not equipo_seleccionado_obj:
@@ -461,15 +570,15 @@ def App():
             elif schedule_form_data["tipo"] == "Especifica":
                 params["@FechasEspecificas"] = schedule_form_data["fecha_especifica"]
                 params["@HorasInicio"] = schedule_form_data["hora_inicio"]
-            
+
             param_placeholders = ", ".join([f"{k} = ?" for k in params])
             query_sp = f"EXEC {sp_name} {param_placeholders}"
             cursor.execute(query_sp, tuple(params.values()))
-            
+
             cursor.execute("UPDATE dbo.Robots SET EsOnline = 0 WHERE RobotId = ?", (robot["RobotId"],))
             cursor.execute("UPDATE dbo.Equipos SET PermiteBalanceoDinamico = 0 WHERE EquipoId = ?", (equipo_id_seleccionado,))
             conn.commit()
-            
+
             set_feedback_message("Robot programado exitosamente.")
             set_feedback_type("success")
             set_show_feedback(True)
@@ -499,20 +608,20 @@ def App():
             set_feedback_type("error")
             set_show_feedback(True)
             return
-        
+
         all_successful = True
         errors_encountered = []
 
         for team_id in team_ids_list:
             try:
                 query = "INSERT INTO dbo.Asignaciones (RobotId, EquipoId, Reservado, FechaAsignacion, AsignadoPor) VALUES (?, ?, ?, GETDATE(), ?)"
-                db.ejecutar_consulta(query, (int(robot_id), int(team_id), 1, "WEB")) 
+                db.ejecutar_consulta(query, (int(robot_id), int(team_id), 1, "WEB"))
             except Exception as e:
                 all_successful = False
                 error_detail = f"Error al asignar equipo ID {team_id}: {str(e)}"
-                print(error_detail) 
+                print(error_detail)
                 errors_encountered.append(error_detail)
-        
+
         if all_successful:
             set_feedback_message(f"{len(team_ids_list)} equipo(s) asignado(s) exitosamente.")
             set_feedback_type("success")
@@ -520,10 +629,74 @@ def App():
             error_summary = "; ".join(errors_encountered)
             set_feedback_message(f"Algunas asignaciones fallaron. Detalles: {error_summary}")
             set_feedback_type("error")
+
+        set_show_feedback(True)
+        set_show_assignment_form(False)
+        
+        if all_successful and team_ids_list: # Only refresh if successful and teams were assigned
+            await fetch_robots() # Refresh main robot list to show new assignments
+        
+        await fetch_available_teams() # Refresh the list of teams available for assignment
+
+    async def handle_save_deassignments_action(robot_id, team_ids_to_deassign_list):
+        if not team_ids_to_deassign_list:
+            set_feedback_message("No se seleccionó ningún equipo para de-asignar.")
+            set_feedback_type("error")
+            set_show_feedback(True)
+            return
+
+        if not db:
+            set_feedback_message("Error: No se pudo conectar a la base de datos.")
+            set_feedback_type("error")
+            set_show_feedback(True)
+            return
+
+        all_successful = True
+        errors_encountered = []
+
+        for team_id in team_ids_to_deassign_list:
+            try:
+                # Assuming robot_id is an int, and team_id from the list is also an int
+                query = "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ?"
+                db.ejecutar_consulta(query, (robot_id, team_id)) 
+            except Exception as e:
+                all_successful = False
+                error_detail = f"Error al de-asignar equipo ID {team_id}: {str(e)}"
+                print(error_detail) # Log for server-side inspection
+                errors_encountered.append(error_detail)
+
+        if all_successful:
+            set_feedback_message(f"{len(team_ids_to_deassign_list)} equipo(s) de-asignado(s) exitosamente del robot.")
+            set_feedback_type("success")
+        else:
+            error_summary = "; ".join(errors_encountered)
+            set_feedback_message(f"Algunas de-asignaciones fallaron. Detalles: {error_summary}")
+            set_feedback_type("error")
         
         set_show_feedback(True)
-        set_show_assignment_form(False) 
-        await fetch_available_teams()
+        # Further actions like closing modal and refreshing data will be handled by the calling context (e.g., trigger_deassignment_confirmation)
+
+    async def trigger_deassignment_confirmation(robot_id, team_ids_to_deassign_list):
+        if not team_ids_to_deassign_list:
+            set_feedback_message("Por favor, seleccione al menos un equipo para de-asignar.")
+            set_feedback_type("error")
+            set_show_feedback(True)
+            return
+
+        robot_name = robot_for_deassignment['Robot'] if robot_for_deassignment else "Desconocido"
+        confirmation_msg = f"¿Está seguro de que desea de-asignar {len(team_ids_to_deassign_list)} equipo(s) del robot '{robot_name}'?"
+
+        set_confirmation_message(confirmation_msg)
+        async def actual_db_action():
+            await handle_save_deassignments_action(robot_id, team_ids_to_deassign_list)
+            # After de-assignment, close the de-assignment modal and refresh robot list
+            set_show_deassignment_modal(False) 
+            await fetch_robots()
+            await fetch_available_teams() # Also refresh available teams as some might become available
+
+        # Store a lambda that returns the actual coroutine function
+        set_on_confirm_action_callback(lambda _: (lambda: actual_db_action))
+        set_show_confirmation(True)
 
     async def trigger_assignment_confirmation(robot_id, team_ids_list):
         if not robot_id or not team_ids_list:
@@ -534,7 +707,7 @@ def App():
 
         robot_name = next((r['Robot'] for r in robots if str(r['RobotId']) == str(robot_id)), "Robot Desconocido")
         confirmation_msg = f"¿Está seguro de que desea asignar {len(team_ids_list)} equipo(s) al robot '{robot_name}'?"
-        
+
         set_confirmation_message(confirmation_msg)
         async def actual_db_action():
             await handle_save_assignments_action(robot_id, team_ids_list)
@@ -581,6 +754,33 @@ def App():
         set_equipos_disponibles(equipos or []) # This is for the ScheduleCreateForm's specific needs
         set_robot_para_programar(robot_para_agendar)
 
+    async def handle_open_deassignment_modal(robot_data_arg, event=None):
+        if not db:
+            set_feedback_message("Error: No se pudo conectar a la base de datos para obtener equipos asignados.")
+            set_feedback_type("error")
+            set_show_feedback(True)
+            return
+
+        set_robot_for_deassignment(robot_data_arg)
+        try:
+            query = """
+                SELECT E.EquipoId, E.Equipo
+                FROM dbo.Equipos E
+                INNER JOIN dbo.Asignaciones A ON E.EquipoId = A.EquipoId
+                WHERE A.RobotId = ?
+                ORDER BY E.Equipo
+            """
+            fetched_teams = db.ejecutar_consulta(query, (robot_data_arg["RobotId"],), es_select=True)
+            set_teams_for_deassignment(fetched_teams or [])
+            set_show_deassignment_modal(True)
+        except Exception as e:
+            print(f"Error fetching assigned teams for deassignment: {e}")
+            set_feedback_message(f"Error al cargar equipos asignados para {robot_data_arg['Robot']}: {str(e)}")
+            set_feedback_type("error")
+            set_show_feedback(True)
+            set_teams_for_deassignment([]) # Ensure it's empty on error
+            set_show_deassignment_modal(False) # Don't show modal if data fetch failed
+
     if not db:
         return html.div(html.h1("Error de Conexión"), html.p("No se pudo establecer la conexión con la base de datos SAM."))
 
@@ -599,19 +799,19 @@ def App():
         current_filter_stage = [r for r in current_filter_stage if r['EsOnline'] is True or r['EsOnline'] == 1]
     elif online_filter == "false":
         current_filter_stage = [r for r in current_filter_stage if r['EsOnline'] is False or r['EsOnline'] == 0]
-    
+
     # --- Sorting Logic ---
     if sort_key and current_filter_stage:
-        current_s_key = sort_key 
+        current_s_key = sort_key
         current_s_asc = sort_ascending
 
         def get_sort_value(robot_item):
             val = robot_item.get(current_s_key)
             if val is None:
                 if current_s_key == "PrioridadBalanceo": # Numeric column
-                    return float('-inf') if current_s_asc else float('inf') 
+                    return float('-inf') if current_s_asc else float('inf')
                 return "" # Default for strings like "Robot"
-            
+
             if current_s_key == "Robot":
                 return str(val).lower()
             if current_s_key == "PrioridadBalanceo":
@@ -630,10 +830,30 @@ def App():
 
     table_rows = []
     for robot_data in filtered_robots: # Renamed robot to robot_data to avoid conflict with robot_para_programar
+        equipos_asignados_display = robot_data.get("EquiposAsignados")
+        if not equipos_asignados_display: # Handles None or empty string
+            equipos_asignados_text = "Ninguno"
+        else:
+            equipos_asignados_text = equipos_asignados_display
+        
+        action_buttons = [
+            html.button({"on_click": partial(handle_open_schedule_form, robot_data), "class_name": "btn-accion"}, "Programar"),
+            html.button({"on_click": lambda event, r=robot_data: set_robot_en_edicion(r), "class_name": "btn-accion-secundario"}, "Editar"),
+        ]
+
+        if robot_data.get("EquiposAsignados"): # Only show De-assign if teams are assigned
+            action_buttons.append(
+                html.button({
+                    "on_click": partial(handle_open_deassignment_modal, robot_data),
+                    "class_name": "btn-accion-peligro" # Assuming this class exists or will be added to CSS
+                }, "De-asignar")
+            )
+
         table_rows.append(
             html.tr(
                 {"key": robot_data["RobotId"]},
                 html.td(robot_data["Robot"]),
+                html.td(equipos_asignados_text), # Display EquiposAsignados
                 html.td(
                     html.button(
                         {
@@ -653,10 +873,7 @@ def App():
                     )
                 ),
                 html.td(robot_data["PrioridadBalanceo"]),
-                html.td(
-                    html.button({"on_click": partial(handle_open_schedule_form, robot_data), "class_name": "btn-accion"}, "Programar"),
-                    html.button({"on_click": lambda event, r=robot_data: set_robot_en_edicion(r), "class_name": "btn-accion-secundario"}, "Editar"),
-                ),
+                html.td(*action_buttons),
             )
         )
 
@@ -702,7 +919,7 @@ def App():
             )
         ),
     ]
-    
+
     # Theme toggle button details
     theme_toggle_button_icon = "☀️" if current_theme == "dark" else "🌙"
     theme_toggle_button_title = "Cambiar a Tema Claro" if current_theme == "dark" else "Cambiar a Tema Oscuro"
@@ -726,12 +943,17 @@ def App():
     if sort_key == "Robot":
         robot_display_text += " ▲" if sort_ascending else " ▼"
     
+    equipos_asignados_display_text = "Equipos Asignados"
+    if sort_key == "EquiposAsignados":
+        equipos_asignados_display_text += " ▲" if sort_ascending else " ▼"
+
     prioridad_display_text = "Prioridad"
     if sort_key == "PrioridadBalanceo":
         prioridad_display_text += " ▲" if sort_ascending else " ▼"
 
     table_header_row = html.tr(
         html.th({"on_click": lambda event, key="Robot": handle_sort_click(key), "style": {"cursor": "pointer"}}, robot_display_text),
+        html.th({"on_click": lambda event, key="EquiposAsignados": handle_sort_click(key), "style": {"cursor": "pointer"}}, equipos_asignados_display_text),
         html.th("Activo"), # Not sortable in this version
         html.th("Es Online"), # Not sortable
         html.th({"on_click": lambda event, key="PrioridadBalanceo": handle_sort_click(key), "style": {"cursor": "pointer"}}, prioridad_display_text),
@@ -741,16 +963,16 @@ def App():
     app_children.append(html.table(
         {"class_name": "sam-table"},
         html.thead(table_header_row),
-        html.tbody(table_rows if filtered_robots else html.tr(html.td({"colSpan": 5}, "No hay robots para mostrar."))),
+        html.tbody(table_rows if filtered_robots else html.tr(html.td({"colSpan": 6}, "No hay robots para mostrar."))), # Updated colSpan
     ))
 
     if robot_en_edicion:
         app_children.append(RobotEditForm(
-            robot=robot_en_edicion, 
+            robot=robot_en_edicion,
             on_save=trigger_robot_edit_confirmation,
             on_cancel=lambda event: set_robot_en_edicion(None)
         ))
-    
+
     if robot_para_programar:
         app_children.append(ScheduleCreateForm(
             robot=robot_para_programar,
@@ -767,6 +989,14 @@ def App():
             on_cancel=lambda event: set_show_assignment_form(False)
         ))
 
+    if show_deassignment_modal:
+        app_children.append(DeassignmentForm(
+            robot_for_deassignment=robot_for_deassignment,
+            teams_for_deassignment=teams_for_deassignment,
+            on_save=trigger_deassignment_confirmation, 
+            on_cancel=lambda event: set_show_deassignment_modal(False)
+        ))
+
     if show_confirmation:
         app_children.append(ConfirmationModal(
             message=confirmation_message,
@@ -780,5 +1010,5 @@ def App():
             message_type=feedback_type,
             on_dismiss=lambda event: set_show_feedback(False)
         ))
-    
+
     return html.div({"class_name": f"container theme-{current_theme}"}, *app_children)
