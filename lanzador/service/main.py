@@ -185,7 +185,7 @@ class LanzadorRobots:
 
     def ejecutar_ciclo_lanzamiento(self):
         if self._is_shutting_down:
-            logger.info("LanzadorRobots: Ciclo de lanzamiento abortado (cierre general).")
+            logger.info("Lanzador: Ciclo de lanzamiento abortado (cierre general).")
             return
 
         if self._esta_en_periodo_de_pausa():
@@ -197,7 +197,7 @@ class LanzadorRobots:
             return
 
         if self.pausa_activa_actualmente:
-            logger.info("LanzadorRobots: Finalizado período de pausa de lanzamiento. Reanudando operaciones.")
+            logger.info("Lanzador: Finalizado período de pausa de lanzamiento. Reanudando operaciones.")
             self.pausa_activa_actualmente = False
 
         logger.info("Lanzador: Iniciando ciclo de lanzamiento de robots (concurrente)...")
@@ -218,7 +218,6 @@ class LanzadorRobots:
             logger.error(f"Lanzador: Error al obtener robots ejecutables de la BD: {e_db_get}", exc_info=True)
             return
 
-        bot_input_plantilla = {"in_NumRepeticion": {"type": "NUMBER", "number": self.cfg_lanzador.get("bot_input_vueltas", 5)}}
         robots_fallidos_para_notificar = []
         robots_para_reintentar_lista = []
         max_workers = self.cfg_lanzador.get("max_lanzamientos_concurrentes", 5)
@@ -226,10 +225,30 @@ class LanzadorRobots:
         if robots_para_lanzar_inicialmente_tuplas and not self._is_shutting_down:
             logger.info(f"LanzadorRobots: Iniciando primer intento de lanzamiento para {len(robots_para_lanzar_inicialmente_tuplas)} robots usando {max_workers} hilos.")
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                mapa_futuro_a_robot = {
-                    executor.submit(self._lanzar_robot_individualmente_y_registrar, robot_info, bot_input_plantilla): robot_info
-                    for robot_info in robots_para_lanzar_inicialmente_tuplas
-                }
+                mapa_futuro_a_robot = {}
+                # Se itera sobre cada robot para crear su propio bot_input
+                for robot_info in robots_para_lanzar_inicialmente_tuplas:
+                    if self._is_shutting_down: break
+
+                    hora_programada = robot_info[3]  # El cuarto elemento de la tupla es 'Hora'
+                    vueltas = 1
+                    
+                    if hora_programada is None:
+                        # Si la hora es NULA, es un robot online, usar valor de config
+                        vueltas = self.cfg_lanzador.get("bot_input_vueltas", 5)
+                        logger.debug(f"Robot on-demand (ID: {robot_info[0]}). Usando {vueltas} vueltas.")
+                    else:
+                        # Si la hora NO es nula, es un robot programado, usar 1 vuelta
+                        logger.debug(f"Robot programado (ID: {robot_info[0]}, Hora: {hora_programada}). Usando {vueltas} vuelta.")
+                    
+                    # Crear la plantilla de input específica para este robot
+                    bot_input_plantilla = {"in_NumRepeticion": {"type": "NUMBER", "number": vueltas}}
+                    
+                    # Enviar a ejecutar con su input específico
+                    futuro = executor.submit(self._lanzar_robot_individualmente_y_registrar, robot_info, bot_input_plantilla)
+                    mapa_futuro_a_robot[futuro] = robot_info
+
+                # El resto del procesamiento de resultados no cambia
                 for futuro in concurrent.futures.as_completed(mapa_futuro_a_robot):
                     if self._is_shutting_down: break
                     robot_info_original = mapa_futuro_a_robot[futuro]
@@ -253,15 +272,26 @@ class LanzadorRobots:
         if not self._is_shutting_down and robots_para_reintentar_lista:
             delay_reintento = self.cfg_lanzador.get("reintento_lanzamiento_delay_seg", 10)
             logger.info(f"LanzadorRobots: {len(robots_para_reintentar_lista)} robots para reintentar. Esperando {delay_reintento} segundos...")
-            if self.shutdown_event.wait(timeout=delay_reintento): # Espera interrumpible
-                 logger.info("Cierre solicitado durante espera para reintentos. No se realizarán.")
-            elif not self._is_shutting_down: # Re-chequear después del wait
+            if self.shutdown_event.wait(timeout=delay_reintento):
+                logger.info("Cierre solicitado durante espera para reintentos. No se realizarán.")
+            elif not self._is_shutting_down:
                 logger.info(f"LanzadorRobots: Iniciando SEGUNDO intento para {len(robots_para_reintentar_lista)} robots.")
                 with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor_reintento:
-                    mapa_futuro_reintento_a_robot = {
-                        executor_reintento.submit(self._lanzar_robot_individualmente_y_registrar, robot_info, bot_input_plantilla): robot_info
-                        for robot_info in robots_para_reintentar_lista
-                    }
+                    mapa_futuro_reintento_a_robot = {}
+                    # Aplicar la misma lógica para el reintento
+                    for robot_info_re in robots_para_reintentar_lista:
+                        if self._is_shutting_down: break
+                        
+                        hora_programada_re = robot_info_re[3]
+                        vueltas_re = 1
+                        if hora_programada_re is None:
+                            vueltas_re = self.cfg_lanzador.get("bot_input_vueltas", 5)
+                        
+                        bot_input_plantilla_re = {"in_NumRepeticion": {"type": "NUMBER", "number": vueltas_re}}
+                        
+                        futuro_reintento = executor_reintento.submit(self._lanzar_robot_individualmente_y_registrar, robot_info_re, bot_input_plantilla_re)
+                        mapa_futuro_reintento_a_robot[futuro_reintento] = robot_info_re
+
                     for futuro_reintento in concurrent.futures.as_completed(mapa_futuro_reintento_a_robot):
                         if self._is_shutting_down: break
                         robot_info_original_re = mapa_futuro_reintento_a_robot[futuro_reintento]
