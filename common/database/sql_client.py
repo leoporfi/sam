@@ -5,7 +5,7 @@ import sys
 import threading
 import time
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -429,7 +429,7 @@ class DatabaseConnector:
                         hora_db = datetime.strptime(marca_tiempo_programada, "%H:%M:%S.%f").time()
                     except ValueError:
                         logger.warning(f"Formato de marca_tiempo_programada '{marca_tiempo_programada}' no reconocido. Se guardará Hora como NULL.")
-            elif isinstance(marca_tiempo_programada, datetime.time):
+            elif isinstance(marca_tiempo_programada, time):
                 hora_db = marca_tiempo_programada
             elif isinstance(marca_tiempo_programada, datetime):
                 hora_db = marca_tiempo_programada.time()
