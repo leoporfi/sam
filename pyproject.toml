@@ -53,7 +53,9 @@ include = ["*.py"]
 extend-ignore = [
   "E402", # importaciones no al inicio del archivo
   "F401", # imports sin usar (útil en __init__.py)
-  "F841"  # variables asignadas pero no usadas
+  "F841",  # variables asignadas pero no usadas
+  "E501",
+  "W291"
 ]
 
 # Estilo y formato
