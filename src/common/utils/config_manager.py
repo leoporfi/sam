@@ -1,4 +1,4 @@
-# SAM/common/utils/config_manager.py
+# SAM/src/common/utils/config_manager.py
 import json
 import os
 import sys  # Para los prints de advertencia si falta config

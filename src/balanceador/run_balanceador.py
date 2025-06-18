@@ -1,3 +1,4 @@
+# SAM/src/balanceador/run_balanceador.py
 """
 Script principal para ejecutar el servicio Balanceador.
 
@@ -9,7 +10,6 @@ Autor: Equipo SAM
 Fecha: 2025
 """
 
-# SAM/balanceador/run_balanceador.py
 
 import sys
 from pathlib import Path

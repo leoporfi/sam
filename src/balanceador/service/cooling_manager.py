@@ -1,4 +1,4 @@
-# SAM/balanceador/service/cooling_manager.py
+# SAM/src/balanceador/service/cooling_manager.py
 
 import logging
 import time
