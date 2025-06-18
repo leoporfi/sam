@@ -1,4 +1,4 @@
-# SAM/callback/run_callback.py
+# SAM/src/callback/run_callback.py
 
 import sys
 from pathlib import Path
