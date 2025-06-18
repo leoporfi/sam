@@ -1,4 +1,4 @@
-# common/utils/mail_client.py
+# SAM/src/common/utils/mail_client.py
 import datetime
 import logging
 import smtplib

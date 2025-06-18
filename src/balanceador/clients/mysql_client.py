@@ -1,4 +1,4 @@
-# SAM/Balanceador/clients/mysql_client.py
+# SAM/src/balanceador/clients/mysql_client.py
 
 import csv
 import io

@@ -1,4 +1,4 @@
-# SAM/common/utils/logging_setup.py
+# SAM/src/common/utils/logging_setup.py
 import logging
 import os
 import sys

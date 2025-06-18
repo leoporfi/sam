@@ -1,3 +1,4 @@
+# SAM/src/Lanzador/run_lanzador.py
 """
 Script principal para ejecutar el servicio Lanzador.
 
@@ -9,7 +10,6 @@ Autor: Equipo SAM
 Fecha: 2024
 """
 
-# SAM/Lanzador/run_lanzador.py
 import sys
 from pathlib import Path
 

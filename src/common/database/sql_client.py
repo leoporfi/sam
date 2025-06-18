@@ -1,4 +1,4 @@
-# SAM/common/database/sql_client.py
+# SAM/src/common/database/sql_client.py
 
 import logging
 import sys
