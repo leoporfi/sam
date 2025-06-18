@@ -1,4 +1,4 @@
-# interfaz_web/service/main.py
+# src/interfaz_web/service/main.py
 
 import asyncio
 from datetime import date
@@ -795,21 +795,23 @@ def App():
             return
         # Modificamos el LEFT JOIN para que SOLO considere las asignaciones manuales.
         # Esto alinea lo que ve el usuario en la tabla con lo que puede desasignar.
-        # query = """
-        #     SELECT R.RobotId, R.Robot, R.Activo, R.EsOnline, R.PrioridadBalanceo, R.MinEquipos, R.MaxEquipos, R.TicketsPorEquipoAdicional,
-        #            STRING_AGG(E.Equipo, ', ') WITHIN GROUP (ORDER BY E.Equipo) AS EquiposAsignados
-        #     FROM dbo.Robots R
-        #     LEFT JOIN dbo.Asignaciones A ON R.RobotId = A.RobotId
-        #     LEFT JOIN dbo.Equipos E ON A.EquipoId = E.EquipoId
-        #     GROUP BY R.RobotId, R.Robot, R.Activo, R.EsOnline, R.PrioridadBalanceo, R.MinEquipos, R.MaxEquipos, R.TicketsPorEquipoAdicional
-        #     ORDER BY R.Robot
-        # """
         query = """
+            SELECT R.RobotId, R.Robot, R.Activo, R.EsOnline, R.PrioridadBalanceo, R.MinEquipos, R.MaxEquipos, R.TicketsPorEquipoAdicional,
+                   STRING_AGG(E.Equipo, ', ') WITHIN GROUP (ORDER BY E.Equipo) AS EquiposAsignados
+            FROM dbo.Robots R
+            LEFT JOIN dbo.Asignaciones A ON R.RobotId = A.RobotId
+            LEFT JOIN dbo.Equipos E ON A.EquipoId = E.EquipoId
+            WHERE R.Robot NOT LIKE '%_Loop'
+            GROUP BY R.RobotId, R.Robot, R.Activo, R.EsOnline, R.PrioridadBalanceo, R.MinEquipos, R.MaxEquipos, R.TicketsPorEquipoAdicional
+            ORDER BY R.Robot
+        """
+        query_1 = """
             SELECT R.RobotId, R.Robot, R.Activo, R.EsOnline, R.PrioridadBalanceo, R.MinEquipos, R.MaxEquipos, R.TicketsPorEquipoAdicional,
                 STRING_AGG(E.Equipo, ', ') WITHIN GROUP (ORDER BY E.Equipo) AS EquiposAsignados
             FROM dbo.Robots R
             LEFT JOIN dbo.Asignaciones A ON R.RobotId = A.RobotId AND A.Reservado = 1 AND (A.EsProgramado = 0 OR A.EsProgramado IS NULL)
             LEFT JOIN dbo.Equipos E ON A.EquipoId = E.EquipoId
+            WHERE R.Robot NOT LIKE '%_Loop'
             GROUP BY R.RobotId, R.Robot, R.Activo, R.EsOnline, R.PrioridadBalanceo, R.MinEquipos, R.MaxEquipos, R.TicketsPorEquipoAdicional
             ORDER BY R.Robot
         """
@@ -843,8 +845,16 @@ def App():
                 return []
         return current_list
 
-    use_effect(lambda: asyncio.ensure_future(fetch_robots()), [])
-    use_effect(lambda: asyncio.ensure_future(fetch_all_active_teams_if_needed()), [])
+    # use_effect(lambda: asyncio.ensure_future(fetch_robots()), [])
+    # use_effect(lambda: asyncio.ensure_future(fetch_all_active_teams_if_needed()), [])
+
+    # Combinamos las llamadas de carga inicial en un solo efecto.
+    # Esta función no devuelve nada (implícitamente devuelve None),
+    # por lo que ReactPy sabe que no hay función de limpieza que ejecutar.
+    @use_effect(dependencies=[])
+    def initial_data_load():
+        asyncio.ensure_future(fetch_robots())
+        asyncio.ensure_future(fetch_all_active_teams_if_needed())
 
     async def handle_toggle(robot_id, field, event=None):
         robot_actual = next((r for r in robots if r["RobotId"] == robot_id), None)

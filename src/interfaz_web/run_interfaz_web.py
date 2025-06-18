@@ -1,4 +1,4 @@
-# interfaz_web/run_interfaz_web.py
+# src/interfaz_web/run_interfaz_web.py
 
 import sys
 from pathlib import Path
