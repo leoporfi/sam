@@ -116,11 +116,7 @@ class ConfigManager:
             "smtp_server": os.getenv(f"{email_prefix}_SMTP_SERVER"),
             "smtp_port": int(os.getenv(f"{email_prefix}_SMTP_PORT", 25)),
             "from_email": os.getenv(f"{email_prefix}_FROM", f"sam_service@{os.getenv('EMAIL_DOMAIN', 'example.com')}"),
-            "recipients": [
-                rec.strip()
-                for rec in os.getenv(f"{email_prefix}_RECIPIENTS", f"admin@{os.getenv('EMAIL_DOMAIN', 'example.com')}").split(",")
-                if rec.strip()
-            ],
+            "recipients": [rec.strip() for rec in os.getenv(f"{email_prefix}_RECIPIENTS", f"admin@{os.getenv('EMAIL_DOMAIN', 'example.com')}").split(",") if rec.strip()],
             "use_tls": os.getenv(f"{email_prefix}_USE_TLS", "False").lower() == "true",
             "smtp_user": os.getenv(f"{email_prefix}_USER"),
             "smtp_password": os.getenv(f"{email_prefix}_PASSWORD"),
@@ -156,6 +152,7 @@ class ConfigManager:
             "port": int(os.getenv("CALLBACK_SERVER_PORT", 8008)),
             "threads": int(os.getenv("CALLBACK_SERVER_THREADS", 8)),
             # La URL pública que A360 usará se toma de AA_CONFIG["url_callback"]
+            "callback_token": os.getenv("CALLBACK_TOKEN", ""),
         }
 
     # --- BALANCEADOR (Configuración específica) ---

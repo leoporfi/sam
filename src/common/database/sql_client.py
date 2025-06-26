@@ -39,9 +39,7 @@ logger = logging.getLogger(f"SAM.{Path(__file__).parent.name}.{Path(__file__).st
 
 
 class DatabaseConnector:
-    def __init__(
-        self, servidor: str, base_datos: str, usuario: str, contrasena: str, db_config_prefix: str = "SQL_SAM"
-    ):  # db_config_prefix para leer reintentos, etc.
+    def __init__(self, servidor: str, base_datos: str, usuario: str, contrasena: str, db_config_prefix: str = "SQL_SAM"):  # db_config_prefix para leer reintentos, etc.
         # Obtener la configuración SQL específica usando el prefijo.
         # El ConfigManager centralizado ya debería tener un método para esto.
         # Si get_sql_server_config toma un prefijo, es perfecto.
@@ -81,12 +79,7 @@ class DatabaseConnector:
                 logger.warning(f"Hilo {threading.get_ident()}: Error menor al cerrar conexión previa: {e_close}")
 
         connection_string = (
-            f"Driver={self.driver};"
-            f"Server={self.servidor};"
-            f"Database={self.base_datos};"
-            f"UID={self.usuario};"
-            f"PWD={self.contrasena};"
-            f"Connection Timeout={self.timeout_conexion_inicial};"
+            f"Driver={self.driver};Server={self.servidor};Database={self.base_datos};UID={self.usuario};PWD={self.contrasena};Connection Timeout={self.timeout_conexion_inicial};"
         )
         try:
             conn = pyodbc.connect(connection_string, autocommit=False)
@@ -170,16 +163,12 @@ class DatabaseConnector:
         """
         if es_select is None:
             query_lower = query.strip().lower()
-            es_select = query_lower.startswith("select") or (
-                query_lower.startswith("exec") and ("obtener" in query_lower or "consultar" in query_lower)
-            )
+            es_select = query_lower.startswith("select") or (query_lower.startswith("exec") and ("obtener" in query_lower or "consultar" in query_lower))
 
         for intento in range(1, self.max_reintentos_query + 1):
             try:
                 with self.obtener_cursor() as cursor:  # obtener_cursor maneja la conexión y el commit/rollback básico
-                    logger.debug(
-                        f"Intento {intento}/{self.max_reintentos_query} - Ejecutando query: {query[:150]}... con params: {str(parametros)[:150]}..."
-                    )
+                    logger.debug(f"Intento {intento}/{self.max_reintentos_query} - Ejecutando query: {query[:150]}... con params: {str(parametros)[:150]}...")
                     if parametros:
                         cursor.execute(query, parametros)
                     else:
@@ -207,9 +196,7 @@ class DatabaseConnector:
                 es_error_reintentable = sql_state in self.codigos_sqlstate_reintentables or "deadlock" in error_msg_lower
 
                 if es_error_reintentable:
-                    logger.warning(
-                        f"Intento {intento}/{self.max_reintentos_query} falló con error de BD REINTENTABLE (SQLSTATE: {sql_state}): {db_err}"
-                    )
+                    logger.warning(f"Intento {intento}/{self.max_reintentos_query} falló con error de BD REINTENTABLE (SQLSTATE: {sql_state}): {db_err}")
                     if intento < self.max_reintentos_query:
                         # Backoff exponencial
                         sleep_time = self.delay_reintento_query_base_seg * (2 ** (intento - 1))
@@ -217,9 +204,7 @@ class DatabaseConnector:
                         time.sleep(sleep_time)
                         # La conexión podría haberse cerrado; obtener_cursor intentará reconectar en el próximo intento.
                     else:
-                        logger.error(
-                            f"Máximo de reintentos ({self.max_reintentos_query}) alcanzado para error de BD reintentable. Query: {query[:150]}"
-                        )
+                        logger.error(f"Máximo de reintentos ({self.max_reintentos_query}) alcanzado para error de BD reintentable. Query: {query[:150]}")
                         raise  # Relanzar la última excepción después de agotar reintentos
                 else:
                     # Error de BD no reintentable por esta lógica (ej. violación de constraint, sintaxis SQL)
@@ -279,9 +264,7 @@ class DatabaseConnector:
                 continue
             # Dado que Equipos.UserId es NOT NULL en tu BD SAM:
             if eq_data.get("UserId") is None:
-                logger.warning(
-                    f"MERGE EQUIPOS: Registro omitido para EquipoId {eq_data.get('EquipoId')} por falta de UserId (A360 UserID): {eq_data}"
-                )
+                logger.warning(f"MERGE EQUIPOS: Registro omitido para EquipoId {eq_data.get('EquipoId')} por falta de UserId (A360 UserID): {eq_data}")
                 continue
 
             params_tupla = (
@@ -410,13 +393,9 @@ class DatabaseConnector:
             logger.error(f"Error al obtener ejecuciones en curso: {e}", exc_info=True)
             return []
 
-    def insertar_registro_ejecucion(
-        self, id_despliegue: str, db_robot_id: int, db_equipo_id: int, a360_user_id: int, marca_tiempo_programada: Optional[Any], estado: str
-    ):
+    def insertar_registro_ejecucion(self, id_despliegue: str, db_robot_id: int, db_equipo_id: int, a360_user_id: int, marca_tiempo_programada: Optional[Any], estado: str):
         if id_despliegue is None:
-            logger.error(
-                f"Intento de insertar ejecución con DeploymentId NULO para RobotID(SAM): {db_robot_id}, EquipoID(SAM): {db_equipo_id}. Operación abortada."
-            )
+            logger.error(f"Intento de insertar ejecución con DeploymentId NULO para RobotID(SAM): {db_robot_id}, EquipoID(SAM): {db_equipo_id}. Operación abortada.")
             return
 
         hora_db: Optional[datetime.time] = None
@@ -451,9 +430,7 @@ class DatabaseConnector:
             logger.error(f"Error al insertar ejecución para DeploymentId {id_despliegue}: {e}", exc_info=True)
             # Considera si relanzar la excepción
 
-    def lanzar_robots(
-        self, robots_a_ejecutar: List[Dict[str, Any]], aa_client: "AutomationAnywhereClient", botInput_plantilla: Optional[dict] = None
-    ) -> List[Dict[str, Any]]:
+    def lanzar_robots(self, robots_a_ejecutar: List[Dict[str, Any]], aa_client: "AutomationAnywhereClient", botInput_plantilla: Optional[dict] = None) -> List[Dict[str, Any]]:
         robots_fallidos_detalle = []
         for robot_info in robots_a_ejecutar:
             db_robot_id = robot_info.get("RobotId")
@@ -481,21 +458,15 @@ class DatabaseConnector:
                 error_lanzamiento = resultado_despliegue.get("error")
 
                 if a360_deployment_id:
-                    self.insertar_registro_ejecucion(
-                        a360_deployment_id, db_robot_id, db_equipo_id, a360_user_id, hora_programada_obj, "LAUNCHED"
-                    )  # Cambiado a LAUNCHED
+                    self.insertar_registro_ejecucion(a360_deployment_id, db_robot_id, db_equipo_id, a360_user_id, hora_programada_obj, "LAUNCHED")  # Cambiado a LAUNCHED
                 else:
                     # error_lanzamiento ya fue asignado desde resultado_despliegue.get("error")
-                    logger.warning(
-                        f"Fallo en API de despliegue para RobotID(SAM):{db_robot_id}, UserID(A360):{a360_user_id}. Error: {error_lanzamiento}"
-                    )
+                    logger.warning(f"Fallo en API de despliegue para RobotID(SAM):{db_robot_id}, UserID(A360):{a360_user_id}. Error: {error_lanzamiento}")
             except Exception as e:
                 error_lanzamiento = str(e)
                 logger.error(f"Excepción al procesar/lanzar RobotID(SAM):{db_robot_id}, UserID(A360):{a360_user_id}: {e}", exc_info=True)
             if error_lanzamiento:
-                robots_fallidos_detalle.append(
-                    {"robot_id": db_robot_id, "equipo_id": db_equipo_id, "user_id": a360_user_id, "error": error_lanzamiento}
-                )
+                robots_fallidos_detalle.append({"robot_id": db_robot_id, "equipo_id": db_equipo_id, "user_id": a360_user_id, "error": error_lanzamiento})
         return robots_fallidos_detalle
 
     def _obtener_detalles_robot(self, robot_id: int) -> str:
@@ -549,12 +520,7 @@ class DatabaseConnector:
             nombre_robot = self._obtener_detalles_robot(robot_id)
             nombre_equipo, nombre_usuario = self._obtener_detalles_equipo(equipo_id, user_id)
 
-            mensaje_final += (
-                f"{i + 1}. Robot: '{nombre_robot}'\n"
-                f"   Equipo SAM: '{nombre_equipo}'\n"
-                f"   Usuario Ejecución A360: '{nombre_usuario}'\n"
-                f"   Error Reportado: {error}\n\n"
-            )
+            mensaje_final += f"{i + 1}. Robot: '{nombre_robot}'\n   Equipo SAM: '{nombre_equipo}'\n   Usuario Ejecución A360: '{nombre_usuario}'\n   Error Reportado: {error}\n\n"
 
         mensaje_final += "\nPor favor, revise los logs del Lanzador SAM para más detalles y el estado de los usuarios/dispositivos en A360."
         return mensaje_final
@@ -639,9 +605,7 @@ class DatabaseConnector:
             rowcount = self.ejecutar_consulta(query, params, es_select=False)
 
             if rowcount is not None and rowcount > 0:
-                logger.info(
-                    f"Callback recibido y procesado para DeploymentId: {deployment_id}. Nuevo Estado: {estado_callback}. Filas afectadas: {rowcount}"
-                )
+                logger.info(f"Callback recibido y procesado para DeploymentId: {deployment_id}. Nuevo Estado: {estado_callback}. Filas afectadas: {rowcount}")
                 return True
             elif rowcount == 0:
                 logger.warning(
@@ -649,14 +613,68 @@ class DatabaseConnector:
                 )
                 return False
             else:  # rowcount es None o -1 (éxito pero sin conteo claro)
-                logger.info(
-                    f"Callback recibido y procesado para DeploymentId: {deployment_id}. Nuevo Estado: {estado_callback}. (Rowcount no definitivo)"
-                )
+                logger.info(f"Callback recibido y procesado para DeploymentId: {deployment_id}. Nuevo Estado: {estado_callback}. (Rowcount no definitivo)")
                 return True
 
         except Exception as e:
             logger.error(f"Error al actualizar ejecución desde callback para DeploymentId {deployment_id}: {e}", exc_info=True)
             return False
+
+    def actualizar_asignaciones_robot(self, robot_id: int, ids_para_asignar: list[int], ids_para_desasignar: list[int]):
+        """
+        Actualiza las asignaciones de un robot. Las asignaciones manuales desde la web
+        siempre se marcan como Reservado.
+        """
+        with self.obtener_cursor() as cursor:
+            # 1. Desasignar equipos
+            if ids_para_desasignar:
+                placeholders = ",".join("?" for _ in ids_para_desasignar)
+                query_delete = f"DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId IN ({placeholders})"
+                params_delete = [robot_id] + ids_para_desasignar
+                cursor.execute(query_delete, *params_delete)
+
+            # 2. Asignar nuevos equipos
+            if ids_para_asignar:
+                # --- INICIO DE LA CORRECCIÓN ---
+                # Las asignaciones manuales siempre son 'Reservado = 1'
+                query_insert = """
+                    INSERT INTO dbo.Asignaciones (RobotId, EquipoId, EsProgramado, Reservado, AsignadoPor)
+                    VALUES (?, ?, 0, 1, 'WebApp')
+                """
+                # El tercer valor del tuple (es_reservado) ya no es necesario
+                params_insert = [(robot_id, equipo_id) for equipo_id in ids_para_asignar]
+                # --- FIN DE LA CORRECCIÓN ---
+                cursor.executemany(query_insert, params_insert)
+
+            return {"message": "Asignaciones actualizadas correctamente"}
+
+    def actualizar_asignaciones_robot_old(self, robot_id: int, es_online: bool, ids_para_asignar: list[int], ids_para_desasignar: list[int]):
+        """
+        Actualiza las asignaciones de un robot dentro de una única transacción.
+        """
+        with self.obtener_cursor() as cursor:
+            # 1. Desasignar equipos
+            if ids_para_desasignar:
+                # Creamos placeholders (?) para cada ID en la lista
+                placeholders = ",".join("?" for _ in ids_para_desasignar)
+                query_delete = f"DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId IN ({placeholders})"
+                params_delete = [robot_id] + ids_para_desasignar
+                cursor.execute(query_delete, *params_delete)
+
+            # 2. Asignar nuevos equipos
+            if ids_para_asignar:
+                # Si el robot es online, las nuevas asignaciones son 'Reservado'.
+                # Si no, son dinámicas (el SP se encargará de las programadas).
+                es_reservado = 1 if es_online else 0
+                query_insert = """
+                    INSERT INTO dbo.Asignaciones (RobotId, EquipoId, EsProgramado, Reservado, AsignadoPor)
+                    VALUES (?, ?, 0, ?, 'WebApp')
+                """
+                params_insert = [(robot_id, equipo_id, es_reservado) for equipo_id in ids_para_asignar]
+                cursor.executemany(query_insert, params_insert)
+
+            # El context manager de obtener_cursor se encargará del commit o rollback.
+            return {"message": "Asignaciones actualizadas correctamente"}
 
     def cerrar_conexion_hilo_actual(self):
         conn = self._get_current_thread_connection()

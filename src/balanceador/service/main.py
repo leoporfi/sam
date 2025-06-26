@@ -16,7 +16,7 @@ import schedule
 from dotenv import load_dotenv
 
 # --- Configuración de Path ---
-BALANCEADOR_MODULE_ROOT = Path(__file__).resolve().parent.parent
+BALANCEADOR_MODULE_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(BALANCEADOR_MODULE_ROOT) not in sys.path:
     sys.path.insert(0, str(BALANCEADOR_MODULE_ROOT))
 
@@ -27,7 +27,7 @@ env_path_balanceador = BALANCEADOR_MODULE_ROOT / "balanceador" / ".env"
 if os.path.exists(env_path_balanceador):
     load_dotenv(dotenv_path=env_path_balanceador)
 else:  # O carga un .env general del proyecto SAM si existe
-    env_path_sam_root = BALANCEADOR_MODULE_ROOT / ".env"
+    env_path_sam_root =BALANCEADOR_MODULE_ROOT.parent / ".env"
     if os.path.exists(env_path_sam_root):
         load_dotenv(dotenv_path=env_path_sam_root)  # Probar .env general
     else:
