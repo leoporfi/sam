@@ -29,7 +29,7 @@ env_path_lanzador = LANZADOR_PROJECT_ROOT / "lanzador" / ".env"
 if os.path.exists(env_path_lanzador):
     load_dotenv(dotenv_path=env_path_lanzador)
 else:  # O carga un .env general del proyecto SAM si existe
-    env_path_sam_root = LANZADOR_PROJECT_ROOT / ".env"
+    env_path_sam_root = LANZADOR_PROJECT_ROOT.parent / ".env"
     if os.path.exists(env_path_sam_root):
         load_dotenv(dotenv_path=env_path_sam_root)
     else:
