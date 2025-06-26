@@ -1,0 +1,125 @@
+openapi: 3.0.1
+info:
+  title: "SAM Callback Service API"
+  description: |
+    API para recibir y procesar notificaciones de callback desde Automation Anywhere A360.
+    Esta versión ha sido refactorizada para una mayor robustez, seguridad y mantenibilidad. 
+    Incluye validación de solicitudes basada en un token de seguridad, manejo de errores estructurado y una clara separación de responsabilidades.
+  version: "2.0.0"
+servers:
+  - url: http://localhost:8008
+    description: Servidor de desarrollo local.
+
+paths:
+  /:
+    post:
+      summary: "Recibir notificación de callback de A360"
+      description: |
+        Endpoint único que recibe una solicitud POST con un cuerpo JSON que contiene el estado final de una ejecución de bot (despliegue) en A360.
+        La solicitud debe incluir un encabezado 'X-Authorization' para la autenticación.
+      tags:
+        - "Callback"
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        description: "Payload JSON enviado por A360 al finalizar una ejecución."
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallbackPayload'
+            examples:
+              exito:
+                summary: "Ejemplo de ejecución exitosa"
+                value:
+                  deploymentId: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+                  status: "COMPLETED"
+                  botOutput: {"clave": "valor"}
+      responses:
+        '200':
+          description: "Callback recibido y procesado exitosamente."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: "Solicitud Incorrecta. Ocurre por varios motivos: JSON mal formado, campos requeridos faltantes o con formato inválido, o codificación de caracteres incorrecta."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: "No Autorizado. El encabezado 'X-Authorization' falta o contiene un token no válido."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '405':
+          description: "Método No Permitido. El endpoint solo acepta solicitudes POST."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: "Payload Demasiado Grande. El cuerpo de la solicitud excede el tamaño máximo configurado."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: "Error Interno del Servidor. Ocurrió un problema al procesar el callback, como un fallo en la base de datos o una excepción inesperada."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    CallbackPayload:
+      type: object
+      required:
+        - deploymentId
+        - status
+        - botOutput
+      properties:
+        deploymentId:
+          type: string
+          description: "ID único del despliegue (ejecución del bot) en A360. Cadena no vacía."
+          example: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+        status:
+          type: string
+          description: "Estado final de la ejecución del bot. Cadena no vacía."
+          example: "COMPLETED"
+        botOutput:
+          type: object
+          description: "Diccionario que contiene las variables de salida del bot."
+          example: {"status": "OK", "download_path": "/share/file.xlsx"}
+    
+    SuccessResponse:
+      type: object
+      properties:
+        estado:
+          type: string
+          example: "OK"
+        mensaje:
+          type: string
+          example: "Callback procesado y registrado exitosamente."
+
+    ErrorResponse:
+      type: object
+      properties:
+        estado:
+          type: string
+          description: "Código interno que representa el tipo de error."
+          example: "ERROR_AUTORIZACION"
+        mensaje:
+          type: string
+          description: "Mensaje legible que describe el error."
+          example: "Credenciales de autorización no válidas o ausentes."
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Authorization
+      description: "Token de seguridad para validar la autenticidad de la llamada desde A360."
