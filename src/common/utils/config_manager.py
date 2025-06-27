@@ -1,49 +1,40 @@
 # SAM/src/common/utils/config_manager.py
 import json
 import os
-import sys  # Para los prints de advertencia si falta config
+import sys
+from pathlib import Path
 from typing import Any, Dict, Optional
-
-# Cargar variables de entorno desde .env al importar este módulo.
-# load_dotenv() buscará .env en el directorio actual o superiores.
-# Si tus .env están en las carpetas de cada módulo (Lanzador, Balanceador),
-# el script principal de cada módulo (run_lanzador.py, run_balanceador.py)
-# debería llamar a load_dotenv() antes de importar cualquier cosa que use ConfigManager,
-# o puedes pasar la ruta al .env a ConfigManager.
-# Para un enfoque central, podrías tener un .env principal en SAM_PROJECT_ROOT
-# con prefijos para las variables de Lanzador y Balanceador.
-
-# Alternativa: Cargar un .env específico si se pasa una ruta.
-# def load_specific_env(dotenv_path: Optional[str] = None):
-# if dotenv_path and os.path.exists(dotenv_path):
-# load_dotenv(dotenv_path=dotenv_path)
-# else:
-# load_dotenv() # Comportamiento por defecto
-# load_specific_env() # Llamar una vez
-
-# Por ahora, asumimos que load_dotenv() sin argumentos es suficiente
-# y se llama desde el script principal del módulo (Lanzador o Balanceador)
-# o que el .env está en un lugar que python-dotenv encuentra.
-# Si los `run_...py` están en `SAM/Lanzador` y `SAM/Balanceador` respectivamente,
-# y los `.env` están en esas mismas carpetas, `load_dotenv()` debería funcionar
-# si se llama desde esos `run_...py` antes de importar service.main.
 
 
 class ConfigManager:
     """
     Gestor de Configuración Centralizado para el Proyecto SAM.
 
-    Lee variables de entorno (idealmente cargadas desde un archivo .env).
+    Funciona junto con ConfigLoader para leer variables de entorno
+    cargadas desde archivos .env con jerarquía definida.
     """
+
+    @staticmethod
+    def _get_env_with_warning(key: str, default: Any = None, warning_msg: str = None) -> Any:
+        """
+        Obtiene una variable de entorno con advertencia opcional si no existe.
+        """
+        value = os.getenv(key, default)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            if warning_msg:
+                print(f"ADVERTENCIA ConfigManager: {warning_msg}", file=sys.stderr)
+        return value
 
     # --- LOGGING ---
     @staticmethod
     def get_log_config() -> Dict[str, Any]:
+        """Obtiene la configuración de logging."""
         return {
-            "directory": os.getenv("LOG_DIRECTORY", "C:/RPA/Logs/SAM"),  # Directorio base común
+            "directory": os.getenv("LOG_DIRECTORY", "C:/RPA/Logs/SAM"),
             "app_log_filename_lanzador": os.getenv("APP_LOG_FILENAME_LANZADOR", "sam_lanzador_app.log"),
             "app_log_filename_balanceador": os.getenv("APP_LOG_FILENAME_BALANCEADOR", "sam_balanceador_app.log"),
             "callback_log_filename": os.getenv("CALLBACK_LOG_FILENAME", "sam_callback_server.log"),
+            "interfaz_web_log_filename": os.getenv("INTERFAZ_WEB_LOG_FILENAME", "sam_interfaz_web.log"),
             "level_str": os.getenv("LOG_LEVEL", "INFO").upper(),
             "when": "midnight",
             "interval": 1,
@@ -53,88 +44,94 @@ class ConfigManager:
             "datefmt": os.getenv("LOG_DATEFMT", "%Y-%m-%d %H:%M:%S"),
         }
 
-    # --- SQL SERVER (Genérico, usado por Lanzador para SAM DB, y por Balanceador para SAM y RPA360 DBs) ---
+    # --- SQL SERVER ---
     @staticmethod
     def get_sql_server_config(db_prefix: str) -> Dict[str, Any]:
         """
         Obtiene la configuración para una conexión SQL Server específica.
 
-        db_prefix: Ej. "SQL_SAM", "SQL_RPA360" (usado para leer las variables de entorno)
+        Args:
+            db_prefix: Prefijo de las variables de entorno (ej: "SQL_SAM", "SQL_RPA360")
         """
         config = {
-            "driver": os.getenv(f"{db_prefix}_DRIVER", "{ODBC Driver 17 for SQL Server}"),
-            "server": os.getenv(f"{db_prefix}_HOST"),
-            "database": os.getenv(f"{db_prefix}_DB_NAME"),
-            "uid": os.getenv(f"{db_prefix}_UID"),
-            "pwd": os.getenv(f"{db_prefix}_PWD"),
+            "driver": os.getenv(f"{db_prefix}_DRIVER", "{SQL Server}"),
+            "server": ConfigManager._get_env_with_warning(f"{db_prefix}_HOST", warning_msg=f"Servidor SQL no configurado para {db_prefix}_HOST"),
+            "database": ConfigManager._get_env_with_warning(
+                f"{db_prefix}_DB_NAME", warning_msg=f"Base de datos no configurada para {db_prefix}_DB_NAME"
+            ),
+            "uid": ConfigManager._get_env_with_warning(f"{db_prefix}_UID", warning_msg=f"Usuario SQL no configurado para {db_prefix}_UID"),
+            "pwd": ConfigManager._get_env_with_warning(f"{db_prefix}_PWD", warning_msg=f"Contraseña SQL no configurada para {db_prefix}_PWD"),
             "timeout_conexion_inicial": int(os.getenv(f"{db_prefix}_TIMEOUT_CONEXION_INICIAL", 30)),
             "max_reintentos_query": int(os.getenv(f"{db_prefix}_MAX_REINTENTOS_QUERY", 3)),
             "delay_reintento_query_base_seg": int(os.getenv(f"{db_prefix}_DELAY_REINTENTO_QUERY_BASE_SEG", 2)),
             "codigos_sqlstate_reintentables": os.getenv(f"{db_prefix}_CODIGOS_SQLSTATE_REINTENTABLES", "40001,HYT00,HYT01,08S01").split(","),
         }
+
+        # Validación de configuración crítica
         required_keys = ["server", "database", "uid", "pwd"]
-        if not all(config.get(k) for k in required_keys):
-            print(f"ADVERTENCIA: Configuración SQL crítica faltante para el prefijo {db_prefix} (server, database, uid, pwd).", file=sys.stderr)
+        missing_keys = [k for k in required_keys if not config.get(k)]
+        if missing_keys:
+            print(f"ERROR ConfigManager: Configuración SQL crítica faltante para {db_prefix}: {missing_keys}", file=sys.stderr)
+
         return config
 
-    # --- AUTOMATION ANYWHERE API (Usado por Lanzador, opcionalmente por Balanceador) ---
+    # --- AUTOMATION ANYWHERE API ---
     @staticmethod
     def get_aa_config() -> Dict[str, Any]:
-        # La URL de callback se construye dinámicamente si no se provee explícitamente.
-        _callback_server_public_host = os.getenv("CALLBACK_SERVER_PUBLIC_HOST", os.getenv("CALLBACK_SERVER_HOST", "localhost"))
-        _callback_server_port = int(os.getenv("CALLBACK_SERVER_PORT", 8008))  # Puerto del callback server
-        _callback_endpoint_path = os.getenv("CALLBACK_ENDPOINT_PATH", "/sam_callback").strip("/")
+        """Obtiene la configuración de Automation Anywhere."""
+        # Construcción dinámica de URL de callback
+        callback_host = os.getenv("CALLBACK_SERVER_PUBLIC_HOST", os.getenv("CALLBACK_SERVER_HOST", "localhost"))
+        callback_port = int(os.getenv("CALLBACK_SERVER_PORT", 8008))
+        callback_path = os.getenv("CALLBACK_ENDPOINT_PATH", "/sam_callback").strip("/")
 
-        default_constructed_callback_url = f"http://{_callback_server_public_host}:{_callback_server_port}/{_callback_endpoint_path}".rstrip("/")
+        default_callback_url = f"http://{callback_host}:{callback_port}/{callback_path}".rstrip("/")
 
         config = {
-            "url": os.getenv("AA_URL"),
-            "user": os.getenv("AA_USER"),
-            "pwd": os.getenv("AA_PWD"),
-            "apiKey": os.getenv("AA_API_KEY"),
-            "url_callback": os.getenv("AA_URL_CALLBACK", default_constructed_callback_url),
+            "url": ConfigManager._get_env_with_warning("AA_URL", warning_msg="URL de Automation Anywhere no configurada (AA_URL)"),
+            "user": ConfigManager._get_env_with_warning("AA_USER", warning_msg="Usuario de Automation Anywhere no configurado (AA_USER)"),
+            "pwd": ConfigManager._get_env_with_warning("AA_PWD", warning_msg="Contraseña de Automation Anywhere no configurada (AA_PWD)"),
+            "apiKey": os.getenv("AA_API_KEY"),  # Opcional
+            "url_callback": os.getenv("AA_URL_CALLBACK", default_callback_url),
+            "api_timeout_seconds": int(os.getenv("AA_API_TIMEOUT_SECONDS", 60)),
+            "token_ttl_refresh_buffer_sec": int(os.getenv("AA_TOKEN_REFRESH_BUFFER_SEC", 1140)),
+            "api_default_page_size": int(os.getenv("API_DEFAULT_PAGE_SIZE", 100)),
+            "api_max_pagination_pages": int(os.getenv("API_MAX_PAGINATION_PAGES", 1000)),
         }
-        required_keys = ["url", "user", "pwd"]  # url_callback es importante pero puede ser auto-construida
-        if not all(config.get(k) for k in required_keys):
-            print("ADVERTENCIA: Configuración AA crítica faltante (url, user, pwd).", file=sys.stderr)
-        if not config.get("url_callback"):  # Si después de intentar construirla, sigue vacía
-            print(
-                "ADVERTENCIA: AA_URL_CALLBACK no está definida ni pudo ser construida desde CALLBACK_SERVER_PUBLIC_HOST/PORT/PATH.",
-                file=sys.stderr,
-            )
+
         return config
 
-    # --- EMAIL (Común para Lanzador y Balanceador, pueden usar el mismo .env o prefijos) ---
+    # --- EMAIL ---
     @staticmethod
-    def get_email_config(email_prefix: Optional[str] = "EMAIL") -> Dict[str, Any]:
+    def get_email_config(email_prefix: str = "EMAIL") -> Dict[str, Any]:
         """
         Obtiene la configuración de Email.
 
-        email_prefix: Ej. "EMAIL" (default), "BALANCEADOR_EMAIL" si hay configs separadas.
+        Args:
+            email_prefix: Prefijo de las variables de entorno (ej: "EMAIL", "BALANCEADOR_EMAIL")
         """
+        default_domain = os.getenv("EMAIL_DOMAIN", "example.com")
+
         config = {
-            "smtp_server": os.getenv(f"{email_prefix}_SMTP_SERVER"),
+            "smtp_server": ConfigManager._get_env_with_warning(
+                f"{email_prefix}_SMTP_SERVER", warning_msg=f"Servidor SMTP no configurado para {email_prefix}_SMTP_SERVER"
+            ),
             "smtp_port": int(os.getenv(f"{email_prefix}_SMTP_PORT", 25)),
-            "from_email": os.getenv(f"{email_prefix}_FROM", f"sam_service@{os.getenv('EMAIL_DOMAIN', 'example.com')}"),
-            "recipients": [rec.strip() for rec in os.getenv(f"{email_prefix}_RECIPIENTS", f"admin@{os.getenv('EMAIL_DOMAIN', 'example.com')}").split(",") if rec.strip()],
+            "from_email": os.getenv(f"{email_prefix}_FROM", f"sam_service@{default_domain}"),
+            "recipients": [rec.strip() for rec in os.getenv(f"{email_prefix}_RECIPIENTS", f"admin@{default_domain}").split(",") if rec.strip()],
             "use_tls": os.getenv(f"{email_prefix}_USE_TLS", "False").lower() == "true",
             "smtp_user": os.getenv(f"{email_prefix}_USER"),
             "smtp_password": os.getenv(f"{email_prefix}_PASSWORD"),
         }
-        required_keys = ["smtp_server", "from_email", "recipients"]
-        if not all(config.get(k) for k in required_keys):
-            print(f"ADVERTENCIA: Configuración Email crítica faltante para el prefijo {email_prefix}.", file=sys.stderr)
+
         return config
 
-    # --- LANZADOR (Configuración específica) ---
+    # --- CONFIGURACIONES ESPECÍFICAS DE SERVICIOS ---
+
     @staticmethod
     def get_lanzador_config() -> Dict[str, Any]:
+        """Obtiene la configuración específica del Lanzador."""
         return {
-            "bot_input_vueltas": int(os.getenv("LANZADOR_BOT_INPUT_VUELTAS", 5)),  # Prefijado
-            "api_timeout_seconds": int(os.getenv("AA_API_TIMEOUT_SECONDS", 60)),  # Puede ser común con AA_CONFIG
-            "token_ttl_refresh_buffer_sec": int(os.getenv("AA_TOKEN_REFRESH_BUFFER_SEC", 1140)),  # Común con AA_CONFIG
-            "api_default_page_size": int(os.getenv("API_DEFAULT_PAGE_SIZE", 100)),  # Común
-            "api_max_pagination_pages": int(os.getenv("API_MAX_PAGINATION_PAGES", 1000)),  # Común
+            "bot_input_vueltas": int(os.getenv("LANZADOR_BOT_INPUT_VUELTAS", 5)),
             "intervalo_lanzador_seg": int(os.getenv("LANZADOR_INTERVALO_LANZADOR_SEG", 30)),
             "intervalo_conciliador_seg": int(os.getenv("LANZADOR_INTERVALO_CONCILIADOR_SEG", 180)),
             "intervalo_sync_tablas_seg": int(os.getenv("LANZADOR_INTERVALO_SYNC_TABLAS_SEG", 3600)),
@@ -144,60 +141,212 @@ class ConfigManager:
             "pausa_lanzamiento_fin_hhmm": os.getenv("LANZADOR_PAUSA_FIN_HHMM", "05:00"),
         }
 
-    # --- CALLBACK SERVER (Común para el Lanzador, pero parámetros leídos del .env) ---
     @staticmethod
     def get_callback_server_config() -> Dict[str, Any]:
+        """Obtiene la configuración del servidor de callbacks."""
         return {
             "host": os.getenv("CALLBACK_SERVER_HOST", "0.0.0.0"),
             "port": int(os.getenv("CALLBACK_SERVER_PORT", 8008)),
             "threads": int(os.getenv("CALLBACK_SERVER_THREADS", 8)),
-            # La URL pública que A360 usará se toma de AA_CONFIG["url_callback"]
             "callback_token": os.getenv("CALLBACK_TOKEN", ""),
+            "public_host": os.getenv("CALLBACK_SERVER_PUBLIC_HOST", os.getenv("CALLBACK_SERVER_HOST", "localhost")),
+            "endpoint_path": os.getenv("CALLBACK_ENDPOINT_PATH", "/sam_callback"),
         }
 
-    # --- BALANCEADOR (Configuración específica) ---
     @staticmethod
     def get_balanceador_config() -> Dict[str, Any]:
         """Obtiene la configuración específica del Balanceador."""
         return {
-            "intervalo_ciclo_balanceo_seg": int(os.getenv("BALANCEADOR_INTERVALO_CICLO_SEG", "120")),
-            "default_tickets_por_equipo": int(os.getenv("BALANCEADOR_DEFAULT_TICKETS_POR_EQUIPO", "10")),
+            "intervalo_ciclo_balanceo_seg": int(os.getenv("BALANCEADOR_INTERVALO_CICLO_SEG", 120)),
+            "default_tickets_por_equipo": int(os.getenv("BALANCEADOR_DEFAULT_TICKETS_POR_EQUIPO", 10)),
             "mapa_robots": ConfigManager.get_mapa_robots(),
         }
 
     @staticmethod
     def get_mapa_robots() -> Dict[str, str]:
         """
-        Obtiene el mapeo de nombres de robots de Clouders a SAM desde el entorno.
+        Obtiene el mapeo de nombres de robots de Clouders a SAM.
 
-        Returns: Dict[str, str]: Diccionario con el mapeo de nombres de robots.
+        Returns:
+            Dict[str, str]: Diccionario con el mapeo de nombres de robots.
         """
         try:
             mapa_robots_str = os.getenv("MAPA_ROBOTS", "{}")
-            return json.loads(mapa_robots_str)
-        except json.JSONDecodeError as e:
-            print(f"ADVERTENCIA: Error al decodificar MAPA_ROBOTS desde la variable de entorno: {e}. Se usará un mapa vacío.\n", file=sys.stderr)
+            mapa = json.loads(mapa_robots_str)
+            if not isinstance(mapa, dict):
+                raise ValueError("MAPA_ROBOTS debe ser un objeto JSON válido")
+            return mapa
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"ERROR ConfigManager: Error al decodificar MAPA_ROBOTS: {e}. Se usará un mapa vacío.", file=sys.stderr)
             return {}
 
-    # --- SSH y MySQL para "clouders" (Específico del Balanceador) ---
     @staticmethod
     def get_ssh_mysql_clouders_config() -> Dict[str, Any]:
+        """Obtiene la configuración SSH y MySQL para Clouders."""
         config = {
-            "host_ssh": os.getenv("CLOUDERS_SSH_HOST"),
+            "host_ssh": ConfigManager._get_env_with_warning(
+                "CLOUDERS_SSH_HOST", warning_msg="Host SSH de Clouders no configurado (CLOUDERS_SSH_HOST)"
+            ),
             "puerto_ssh": int(os.getenv("CLOUDERS_SSH_PORT", 22)),
-            "usuario_ssh": os.getenv("CLOUDERS_SSH_USER"),
-            "pass_ssh": os.getenv("CLOUDERS_SSH_PASS"),
+            "usuario_ssh": ConfigManager._get_env_with_warning(
+                "CLOUDERS_SSH_USER", warning_msg="Usuario SSH de Clouders no configurado (CLOUDERS_SSH_USER)"
+            ),
+            "pass_ssh": ConfigManager._get_env_with_warning(
+                "CLOUDERS_SSH_PASS", warning_msg="Contraseña SSH de Clouders no configurada (CLOUDERS_SSH_PASS)"
+            ),
             "db_host_mysql": os.getenv("CLOUDERS_MYSQL_DB_HOST", "127.0.0.1"),
             "db_port_mysql": int(os.getenv("CLOUDERS_MYSQL_DB_PORT", 3306)),
-            "database_mysql": os.getenv("CLOUDERS_MYSQL_DB_NAME"),
-            "usuario_mysql": os.getenv("CLOUDERS_MYSQL_USER"),
-            "pass_mysql": os.getenv("CLOUDERS_MYSQL_PASS"),
+            "database_mysql": ConfigManager._get_env_with_warning(
+                "CLOUDERS_MYSQL_DB_NAME", warning_msg="Base de datos MySQL de Clouders no configurada (CLOUDERS_MYSQL_DB_NAME)"
+            ),
+            "usuario_mysql": ConfigManager._get_env_with_warning(
+                "CLOUDERS_MYSQL_USER", warning_msg="Usuario MySQL de Clouders no configurado (CLOUDERS_MYSQL_USER)"
+            ),
+            "pass_mysql": ConfigManager._get_env_with_warning(
+                "CLOUDERS_MYSQL_PASS", warning_msg="Contraseña MySQL de Clouders no configurada (CLOUDERS_MYSQL_PASS)"
+            ),
             "max_reintentos_ssh_connect": int(os.getenv("CLOUDERS_MAX_REINTENTOS_SSH_CONNECT", 3)),
             "delay_reintento_ssh_seg": int(os.getenv("CLOUDERS_DELAY_REINTENTO_SSH_SEG", 5)),
             "max_reintentos_mysql_query": int(os.getenv("CLOUDERS_MAX_REINTENTOS_MYSQL_QUERY", 2)),
             "delay_reintento_mysql_query_seg": int(os.getenv("CLOUDERS_DELAY_REINTENTO_MYSQL_QUERY_SEG", 3)),
         }
-        required_keys = ["host_ssh", "usuario_ssh", "pass_ssh", "usuario_mysql", "pass_mysql", "database_mysql"]
-        if not all(config.get(k) for k in required_keys):
-            print("ADVERTENCIA: Configuración SSH/MySQL Clouders crítica faltante.", file=sys.stderr)
+
         return config
+
+    @staticmethod
+    def get_interfaz_web_config() -> Dict[str, Any]:
+        """Obtiene la configuración específica de la Interfaz Web."""
+        return {
+            "host": os.getenv("INTERFAZ_WEB_HOST", "127.0.0.1"),
+            "port": int(os.getenv("INTERFAZ_WEB_PORT", 8080)),
+            "debug": os.getenv("INTERFAZ_WEB_DEBUG", "False").lower() == "true",
+            "secret_key": os.getenv("INTERFAZ_WEB_SECRET_KEY", "dev-secret-key-change-in-production"),
+            "session_timeout_minutes": int(os.getenv("INTERFAZ_WEB_SESSION_TIMEOUT_MIN", 30)),
+            "max_upload_size_mb": int(os.getenv("INTERFAZ_WEB_MAX_UPLOAD_SIZE_MB", 16)),
+        }
+
+    # --- MÉTODOS DE UTILIDAD ---
+
+    @staticmethod
+    def get_environment_info() -> Dict[str, Any]:
+        """Obtiene información del entorno actual."""
+        try:
+            from .config_loader import ConfigLoader
+
+            project_root = ConfigLoader.get_project_root() if ConfigLoader.is_initialized() else "No inicializado"
+            src_root = ConfigLoader.get_src_root() if ConfigLoader.is_initialized() else "No inicializado"
+        except Exception:
+            project_root = "Error al obtener"
+            src_root = "Error al obtener"
+
+        return {
+            "project_root": str(project_root),
+            "src_root": str(src_root),
+            "python_version": sys.version,
+            "platform": sys.platform,
+            "config_loader_initialized": ConfigLoader.is_initialized() if "ConfigLoader" in locals() else False,
+        }
+
+    @staticmethod
+    def validate_all_configs() -> Dict[str, Any]:
+        """
+        Valida todas las configuraciones y retorna un reporte de estado.
+
+        Returns:
+            Dict con el estado de validación de cada componente.
+        """
+        validation_report = {"timestamp": str(Path(__file__).stat().st_mtime), "components": {}}
+
+        # Validar configuraciones críticas
+        components_to_validate = [
+            ("log", ConfigManager.get_log_config),
+            ("sql_sam", lambda: ConfigManager.get_sql_server_config("SQL_SAM")),
+            ("aa", ConfigManager.get_aa_config),
+            ("email", ConfigManager.get_email_config),
+            ("callback_server", ConfigManager.get_callback_server_config),
+        ]
+
+        for component_name, config_getter in components_to_validate:
+            try:
+                config = config_getter()
+                # Verificar si hay valores críticos faltantes
+                critical_missing = []
+
+                if component_name == "sql_sam":
+                    critical_keys = ["server", "database", "uid", "pwd"]
+                    critical_missing = [k for k in critical_keys if not config.get(k)]
+                elif component_name == "aa":
+                    critical_keys = ["url", "user", "pwd"]
+                    critical_missing = [k for k in critical_keys if not config.get(k)]
+                elif component_name == "email":
+                    critical_keys = ["smtp_server", "from_email"]
+                    critical_missing = [k for k in critical_keys if not config.get(k)]
+
+                validation_report["components"][component_name] = {
+                    "status": "OK" if not critical_missing else "WARNING",
+                    "missing_critical": critical_missing,
+                    "config_keys_count": len(config),
+                }
+
+            except Exception as e:
+                validation_report["components"][component_name] = {
+                    "status": "ERROR",
+                    "error": str(e),
+                }
+
+        return validation_report
+
+    @staticmethod
+    def print_config_summary(service_name: Optional[str] = None) -> None:
+        """
+        Imprime un resumen de la configuración actual.
+
+        Args:
+            service_name: Nombre del servicio para mostrar configuración específica.
+        """
+        print("=" * 60, file=sys.stderr)
+        print("RESUMEN DE CONFIGURACIÓN SAM", file=sys.stderr)
+        print("=" * 60, file=sys.stderr)
+
+        # Información del entorno
+        env_info = ConfigManager.get_environment_info()
+        print(f"Proyecto Root: {env_info['project_root']}", file=sys.stderr)
+        print(f"Src Root: {env_info['src_root']}", file=sys.stderr)
+        print(f"ConfigLoader inicializado: {env_info['config_loader_initialized']}", file=sys.stderr)
+
+        # Validación general
+        validation = ConfigManager.validate_all_configs()
+        print("\nValidación de componentes:", file=sys.stderr)
+        for comp, status in validation["components"].items():
+            status_symbol = "✓" if status["status"] == "OK" else "⚠" if status["status"] == "WARNING" else "✗"
+            print(f"  {status_symbol} {comp}: {status['status']}", file=sys.stderr)
+            if status.get("missing_critical"):
+                print(f"    Faltantes: {', '.join(status['missing_critical'])}", file=sys.stderr)
+
+        # Configuración específica del servicio
+        if service_name:
+            print(f"\nConfiguración específica de '{service_name}':", file=sys.stderr)
+            try:
+                if service_name == "lanzador":
+                    config = ConfigManager.get_lanzador_config()
+                elif service_name == "balanceador":
+                    config = ConfigManager.get_balanceador_config()
+                elif service_name == "callback":
+                    config = ConfigManager.get_callback_server_config()
+                elif service_name == "interfaz_web":
+                    config = ConfigManager.get_interfaz_web_config()
+                else:
+                    config = {}
+
+                for key, value in config.items():
+                    # Ocultar contraseñas y datos sensibles
+                    if any(sensitive in key.lower() for sensitive in ["pass", "pwd", "secret", "token"]):
+                        display_value = "*" * len(str(value)) if value else "No configurado"
+                    else:
+                        display_value = value
+                    print(f"  {key}: {display_value}", file=sys.stderr)
+
+            except Exception as e:
+                print(f"  Error al obtener configuración: {e}", file=sys.stderr)
+
+        print("=" * 60, file=sys.stderr)

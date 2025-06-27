@@ -51,7 +51,7 @@ class DatabaseConnector:
         self.contrasena = contrasena
 
         self.timeout_conexion_inicial = sql_cfg.get("timeout_conexion_inicial", 30)
-        self.driver = sql_cfg.get("driver", "{ODBC Driver 17 for SQL Server}")  # Obtener y guardar driver aquí
+        self.driver = sql_cfg.get("driver", "{ODBC Driver 17 for SQL Server}")
         # Parámetros de reintento para queries
         self.max_reintentos_query = sql_cfg.get("max_reintentos_query", 3)
         self.delay_reintento_query_base_seg = sql_cfg.get("delay_reintento_query_base_seg", 2)
