@@ -21,8 +21,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from wsgiref.simple_server import make_server
 
-from dotenv import load_dotenv
-
 try:
     from waitress import serve
 
@@ -57,35 +55,10 @@ class ConfiguracionLog:
     formato_fecha: str = "%Y-%m-%d %H:%M:%S"  # date_format
 
 
-# --- Carga optimizada de configuración ---
-def cargar_configuracion_entorno() -> None:
-    """Carga la configuración del entorno con manejo de errores adecuado."""
-    raiz_proyecto_sam = Path(__file__).resolve().parent.parent.parent.parent
-    ruta_env: Path = raiz_proyecto_sam / ".env"
-
-    if ruta_env.exists():
-        print(f"SERVIDOR_CALLBACK: Cargando .env desde {ruta_env}", file=sys.stderr)
-        load_dotenv(dotenv_path=ruta_env, override=True)
-    else:
-        print(f"SERVIDOR_CALLBACK: No se encontró .env en {ruta_env}, usando defaults del sistema", file=sys.stderr)
-        load_dotenv()
-
-
-# Cargar configuración temprano
-cargar_configuracion_entorno()
-
-# Imports que dependen de la configuración
-try:
-    CALLBACK_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-    if str(CALLBACK_PROJECT_ROOT) not in sys.path:
-        sys.path.insert(0, str(CALLBACK_PROJECT_ROOT))
-
-    from common.database.sql_client import DatabaseConnector
-    from common.utils.config_manager import ConfigManager
-    from common.utils.logging_setup import RobustTimedRotatingFileHandler
-except ImportError as e:
-    print(f"CRITICO: No se pueden importar los módulos requeridos: {e}", file=sys.stderr)
-    sys.exit(1)
+# Imports que ahora funcionan gracias a ConfigLoader
+from common.database.sql_client import DatabaseConnector
+from common.utils.config_manager import ConfigManager
+from common.utils.logging_setup import RobustTimedRotatingFileHandler
 
 
 # --- Clases de Constantes para Respuestas ---
@@ -239,7 +212,9 @@ class ServidorCallback:  # CallbackServer
             self.token_autorizacion = cfg_aa.get("callback_token")  # Asume que la clave en .env es CALLBACK_TOKEN
             print(self.token_autorizacion)
             if not self.token_autorizacion:
-                self.logger.warning("No se ha configurado un token de autorización (CALLBACK_TOKEN). El servidor aceptará solicitudes sin validar el token.")
+                self.logger.warning(
+                    "No se ha configurado un token de autorización (CALLBACK_TOKEN). El servidor aceptará solicitudes sin validar el token."
+                )
             else:
                 self.logger.info("Token de autorización cargado. El servidor validará el encabezado 'X-Authorization'.")
             self.logger.info("Configuración cargada/recargada exitosamente")
@@ -378,7 +353,9 @@ class ServidorCallback:  # CallbackServer
                     self.logger.error("Config BD incompleta (falta server, uid o pwd para SQL_SAM).")
                     return False
 
-                self.conector_bd = DatabaseConnector(servidor=cfg_sql["server"], base_datos=nombre_bd_sam, usuario=cfg_sql["uid"], contrasena=cfg_sql["pwd"])
+                self.conector_bd = DatabaseConnector(
+                    servidor=cfg_sql["server"], base_datos=nombre_bd_sam, usuario=cfg_sql["uid"], contrasena=cfg_sql["pwd"]
+                )
 
                 # VERIFICACIÓN INMEDIATA TRAS CREACIÓN
                 self.logger.debug("Objeto DatabaseConnector creado. Verificando conexión inmediatamente...")
@@ -403,7 +380,9 @@ class ServidorCallback:  # CallbackServer
                     self.logger.error(f"Excepción al intentar conectar inmediatamente: {e_connect_inmediata}", exc_info=True)
 
             except Exception as e_init_obj:
-                self.logger.warning(f"Intento {intento}/{max_reintentos} de creación de objeto DatabaseConnector fallido: {e_init_obj}", exc_info=True)
+                self.logger.warning(
+                    f"Intento {intento}/{max_reintentos} de creación de objeto DatabaseConnector fallido: {e_init_obj}", exc_info=True
+                )
 
             if intento < max_reintentos:
                 self.logger.info(f"Esperando {retraso_reintento_seg}s antes del siguiente intento...")
@@ -647,7 +626,9 @@ class ServidorCallback:  # CallbackServer
 
         except ConnectionError as e_conn:  # Captura específica si _obtener_conexion_bd falla
             self._estadisticas["solicitudes_fallidas"] += 1
-            self.logger.error(f"Error de conexión a BD procesando callback para {id_despliegue}: {e_conn}", exc_info=False)  # No incluir exc_info si ya se logueó antes
+            self.logger.error(
+                f"Error de conexión a BD procesando callback para {id_despliegue}: {e_conn}", exc_info=False
+            )  # No incluir exc_info si ya se logueó antes
             return False, f"Error de conexión a BD: {str(e_conn)}"
         except Exception as e:  # Otros errores
             self._estadisticas["solicitudes_fallidas"] += 1
@@ -666,7 +647,9 @@ class ServidorCallback:  # CallbackServer
             token_recibido_bytes = token_recibido_str.encode("utf-8") if token_recibido_str else b""
 
             if not hmac.compare_digest(token_esperado_bytes, token_recibido_bytes):
-                raise RequestValidationError(status=HTTP.UNAUTHORIZED, codigo_interno=ESTADOS.ERROR_AUTORIZACION, mensaje="Credenciales de autorización no válidas o ausentes.")
+                raise RequestValidationError(
+                    status=HTTP.UNAUTHORIZED, codigo_interno=ESTADOS.ERROR_AUTORIZACION, mensaje="Credenciales de autorización no válidas o ausentes."
+                )
 
         # 2. Validación del Método
         if entorno.get("REQUEST_METHOD", "GET") != "POST":
@@ -679,11 +662,15 @@ class ServidorCallback:  # CallbackServer
             longitud_contenido = 0
 
         if longitud_contenido <= 0:
-            raise RequestValidationError(status=HTTP.BAD_REQUEST, codigo_interno=ESTADOS.ERROR, mensaje="Cuerpo de la solicitud vacío o Content-Length inválido/ausente.")
+            raise RequestValidationError(
+                status=HTTP.BAD_REQUEST, codigo_interno=ESTADOS.ERROR, mensaje="Cuerpo de la solicitud vacío o Content-Length inválido/ausente."
+            )
 
         if longitud_contenido > self.config.longitud_max_contenido:
             raise RequestValidationError(
-                status=HTTP.PAYLOAD_TOO_LARGE, codigo_interno=ESTADOS.ERROR, mensaje=f"Payload demasiado grande (máximo {self.config.longitud_max_contenido} bytes)."
+                status=HTTP.PAYLOAD_TOO_LARGE,
+                codigo_interno=ESTADOS.ERROR,
+                mensaje=f"Payload demasiado grande (máximo {self.config.longitud_max_contenido} bytes).",
             )
 
     def _leer_y_parsear_payload(self, entorno: Dict[str, Any]) -> Tuple[str, str, str]:
@@ -699,6 +686,8 @@ class ServidorCallback:  # CallbackServer
             body_str = bytes_cuerpo.decode("utf-8")
         except UnicodeDecodeError:
             raise RequestValidationError(HTTP.BAD_REQUEST, ESTADOS.ERROR, "Codificación UTF-8 inválida.")
+
+        self._log_solicitud_completa(entorno, body_str)
 
         try:
             datos_payload = json.loads(body_str)
@@ -739,10 +728,14 @@ class ServidorCallback:  # CallbackServer
 
             if exito_proceso:
                 # 4a. Generar respuesta de éxito
-                status_final, cabeceras, cuerpo = self._generar_respuesta_json(status=HTTP.OK, codigo_interno=ESTADOS.OK, mensaje="Callback procesado y registrado exitosamente.")
+                status_final, cabeceras, cuerpo = self._generar_respuesta_json(
+                    status=HTTP.OK, codigo_interno=ESTADOS.OK, mensaje="Callback procesado y registrado exitosamente."
+                )
             else:
                 # 4b. Generar respuesta de fallo de procesamiento
-                status_final, cabeceras, cuerpo = self._generar_respuesta_json(status=HTTP.INTERNAL_SERVER_ERROR, codigo_interno=ESTADOS.ERROR_PROCESAMIENTO, mensaje=msg_proceso)
+                status_final, cabeceras, cuerpo = self._generar_respuesta_json(
+                    status=HTTP.INTERNAL_SERVER_ERROR, codigo_interno=ESTADOS.ERROR_PROCESAMIENTO, mensaje=msg_proceso
+                )
 
         except RequestValidationError as e:
             # Captura todos los errores de validación y genera la respuesta adecuada
@@ -759,340 +752,6 @@ class ServidorCallback:  # CallbackServer
         # Enviar la respuesta final al servidor WSGI
         iniciar_respuesta(status_final, cabeceras)
         return [cuerpo]
-
-    def aplicacion_wsgi_old_3(self, entorno: Dict[str, Any], iniciar_respuesta):
-        """Aplicación WSGI refactorizada para usar constantes de estado y códigos de error."""
-        self._estadisticas["solicitudes_recibidas"] += 1
-
-        status = HTTP.OK
-        cabeceras = [("Content-Type", "application/json; charset=utf-8")]
-        response_data = {"estado": ESTADOS.OK, "mensaje": "Callback recibido y en procesamiento."}
-
-        try:
-            if self.token_autorizacion:
-                token_recibido_str = entorno.get("HTTP_X_AUTHORIZATION")
-                token_esperado_bytes = self.token_autorizacion.encode("utf-8")
-                token_recibido_bytes = token_recibido_str.encode("utf-8") if token_recibido_str else b""
-
-                if not hmac.compare_digest(token_esperado_bytes, token_recibido_bytes):
-                    status = HTTP.UNAUTHORIZED
-                    response_data = {"estado": ESTADOS.ERROR_AUTORIZACION, "mensaje": "Credenciales de autorización no válidas o ausentes."}
-                    self.logger.warning(f"Solicitud rechazada desde {entorno.get('REMOTE_ADDR', 'Desconocida')}: Fallo de autorización.")
-                    raise StopProcessingRequest()
-
-            metodo = entorno.get("REQUEST_METHOD", "GET")
-            if metodo != "POST":
-                status = HTTP.METHOD_NOT_ALLOWED
-                response_data = {"estado": ESTADOS.ERROR, "mensaje": "Solo se permite el método POST."}
-                raise StopProcessingRequest()
-
-            try:
-                longitud_contenido = int(entorno.get("CONTENT_LENGTH", 0))
-            except (ValueError, TypeError):
-                longitud_contenido = 0
-
-            if longitud_contenido <= 0:
-                status = HTTP.BAD_REQUEST
-                response_data = {"estado": ESTADOS.ERROR, "mensaje": "Cuerpo de la solicitud vacío o Content-Length inválido/ausente."}
-                raise StopProcessingRequest()
-
-            if longitud_contenido > self.config.longitud_max_contenido:
-                status = HTTP.PAYLOAD_TOO_LARGE
-                response_data = {"estado": ESTADOS.ERROR, "mensaje": f"Payload demasiado grande (máximo {self.config.longitud_max_contenido} bytes)."}
-                raise StopProcessingRequest()
-
-            bytes_cuerpo = entorno["wsgi.input"].read(longitud_contenido)
-            try:
-                body_str = bytes_cuerpo.decode("utf-8")
-            except UnicodeDecodeError:
-                status = HTTP.BAD_REQUEST
-                response_data = {"estado": ESTADOS.ERROR, "mensaje": "Codificación UTF-8 inválida en el cuerpo de la solicitud."}
-                raise StopProcessingRequest()
-
-            try:
-                datos_payload = json.loads(body_str)
-            except json.JSONDecodeError:
-                status = HTTP.BAD_REQUEST
-                response_data = {"estado": ESTADOS.ERROR, "mensaje": "Formato JSON inválido en el cuerpo de la solicitud."}
-                raise StopProcessingRequest()
-
-            es_valido, msg_validacion, deployment_id, callback_status = self._validar_payload_callback(datos_payload)
-
-            if not es_valido:
-                status = HTTP.BAD_REQUEST
-                response_data = {"estado": ESTADOS.ERROR, "mensaje": msg_validacion}
-                raise StopProcessingRequest()
-
-            payload_compacto = json.dumps(datos_payload, separators=(",", ":"))
-            exito_proceso, msg_proceso_final = self._procesar_callback(deployment_id, callback_status, payload_compacto)
-
-            if not exito_proceso:
-                status = HTTP.INTERNAL_SERVER_ERROR
-                response_data = {"estado": ESTADOS.ERROR_PROCESAMIENTO, "mensaje": msg_proceso_final}
-            else:
-                response_data = {"estado": ESTADOS.OK, "mensaje": "Callback procesado y registrado exitosamente."}
-
-        except StopProcessingRequest:
-            pass
-        except Exception as e_general_wsgi:
-            status = HTTP.INTERNAL_SERVER_ERROR
-            response_data = {"estado": ESTADOS.ERROR_SERVIDOR, "mensaje": "Ocurrió un error interno inesperado."}
-            self.logger.critical(f"Excepción crítica no manejada en aplicacion_wsgi: {e_general_wsgi}", exc_info=True)
-
-        cuerpo_respuesta_bytes = json.dumps(response_data, ensure_ascii=False).encode("utf-8")
-        cabeceras.append(("Content-Length", str(len(cuerpo_respuesta_bytes))))
-        iniciar_respuesta(status, cabeceras)
-        return [cuerpo_respuesta_bytes]
-
-    def aplicacion_wsgi_old_2(self, entorno: Dict[str, Any], iniciar_respuesta):  # wsgi_application, environ, start_response
-        """Aplicación WSGI con manejo de errores y validación mejorados."""
-        self._estadisticas["solicitudes_recibidas"] += 1
-
-        status = "200 OK"
-        cabeceras = [("Content-Type", "application/json; charset=utf-8")]
-        response_data = {"estado": "OK", "mensaje": "Callback recibido y en procesamiento."}
-
-        try:
-            # --- Validación de Autorización ---
-            if self.token_autorizacion:
-                token_recibido_str = entorno.get("HTTP_X_AUTHORIZATION")
-
-                # Codificamos ambos tokens a bytes (UTF-8 es un estándar seguro).
-                # Esto es un requisito para hmac.compare_digest.
-                token_esperado_bytes = self.token_autorizacion.encode("utf-8")
-
-                # Manejamos el caso de que el token no venga, creando un objeto de bytes vacío para la comparación.
-                token_recibido_bytes = token_recibido_str.encode("utf-8") if token_recibido_str else b""
-
-                # Usamos hmac.compare_digest para una comparación segura en tiempo constante.
-                # La función devuelve True si son iguales, por eso negamos el resultado con 'not'.
-                if not hmac.compare_digest(token_esperado_bytes, token_recibido_bytes):
-                    status = "401 Unauthorized"
-                    response_data = {"estado": "ERROR_AUTORIZACION", "mensaje": "Credenciales de autorización no válidas o ausentes."}
-                    self.logger.warning(f"Solicitud rechazada desde {entorno.get('REMOTE_ADDR', 'Desconocida')}: Fallo de autorización (token ausente o inválido).")
-                    raise StopProcessingRequest()
-            # --- Fin validación Autorización ---
-
-            metodo = entorno.get("REQUEST_METHOD", "GET")
-            ruta = entorno.get("PATH_INFO", "/")
-            direccion_remota = entorno.get("REMOTE_ADDR", "Desconocida")
-
-            self.logger.info(f"Solicitud entrante: {metodo} {ruta} desde {direccion_remota}")
-
-            if metodo != "POST":
-                status = "405 Method Not Allowed"
-                response_data = {"estado": "ERROR", "mensaje": "Solo se permite el método POST."}
-                self.logger.warning(f"Método no permitido recibido: {metodo} desde {direccion_remota} para {ruta}.")
-                raise StopProcessingRequest()  # <-- CAMBIO AQUÍ
-
-            # Procesamiento del cuerpo de la solicitud POST
-            try:
-                longitud_contenido = int(entorno.get("CONTENT_LENGTH", 0))
-            except (ValueError, TypeError):
-                longitud_contenido = 0
-
-            if longitud_contenido <= 0:
-                status = "400 Bad Request"
-                response_data = {"estado": "ERROR", "mensaje": "Cuerpo de la solicitud vacío o Content-Length inválido/ausente."}
-                raise StopProcessingRequest()  # <-- CAMBIO AQUÍ
-
-            if longitud_contenido > self.config.longitud_max_contenido:
-                status = "413 Payload Too Large"
-                response_data = {"estado": "ERROR", "mensaje": f"Payload demasiado grande (máximo {self.config.longitud_max_contenido} bytes)."}
-                raise StopProcessingRequest()  # <-- CAMBIO AQUÍ
-
-            bytes_cuerpo = entorno["wsgi.input"].read(longitud_contenido)
-            try:
-                body_str = bytes_cuerpo.decode("utf-8")
-            except UnicodeDecodeError:
-                status = "400 Bad Request"
-                response_data = {"estado": "ERROR", "mensaje": "Codificación UTF-8 inválida en el cuerpo de la solicitud."}
-                raise StopProcessingRequest()  # <-- CAMBIO AQUÍ
-
-            try:
-                datos_payload = json.loads(body_str)
-            except json.JSONDecodeError:
-                status = "400 Bad Request"
-                response_data = {"estado": "ERROR", "mensaje": "Formato JSON inválido en el cuerpo de la solicitud."}
-                raise StopProcessingRequest()  # <-- CAMBIO AQUÍ
-
-            es_valido, msg_validacion, deployment_id, callback_status = self._validar_payload_callback(datos_payload)
-
-            if not es_valido:
-                status = "400 Bad Request"
-                response_data = {"estado": "ERROR", "mensaje": msg_validacion}
-                raise StopProcessingRequest()  # <-- CAMBIO AQUÍ
-
-            # Si llegamos aquí, la solicitud es válida y se puede procesar
-            payload_compacto = json.dumps(datos_payload, separators=(",", ":"))
-            exito_proceso, msg_proceso_final = self._procesar_callback(deployment_id, callback_status, payload_compacto)
-
-            if not exito_proceso:
-                status = "500 Internal Server Error"
-                response_data = {"estado": "ERROR_PROCESAMIENTO", "mensaje": msg_proceso_final}
-            else:
-                response_data = {"estado": "OK", "mensaje": "Callback procesado y registrado exitosamente."}
-
-        except StopProcessingRequest:  # <-- CAMBIO AQUÍ
-            # Esta excepción es controlada. Simplemente la usamos para saltar a la respuesta final.
-            pass
-        except Exception as e_general_wsgi:
-            status = "500 Internal Server Error"
-            response_data = {"estado": "ERROR_SERVIDOR", "mensaje": "Ocurrió un error interno inesperado."}
-            self.logger.critical(f"Excepción crítica no manejada en aplicacion_wsgi: {e_general_wsgi}", exc_info=True)
-
-        # Preparación y envío de la respuesta final
-        cuerpo_respuesta_bytes = json.dumps(response_data, ensure_ascii=False).encode("utf-8")
-        cabeceras.append(("Content-Length", str(len(cuerpo_respuesta_bytes))))
-        iniciar_respuesta(status, cabeceras)
-        return [cuerpo_respuesta_bytes]
-
-    def aplicacion_wsgi_old_1(self, entorno: Dict[str, Any], iniciar_respuesta):  # wsgi_application, environ, start_response
-        """Aplicación WSGI con manejo de errores y validación mejorados."""
-        self._estadisticas["solicitudes_recibidas"] += 1
-
-        # Respuesta por defecto
-        status = "200 OK"  # status
-        cabeceras = [("Content-Type", "application/json; charset=utf-8")]  # headers
-        response_data = {"estado": "OK", "mensaje": "Callback recibido y en procesamiento."}  # response_data
-
-        try:
-            # --- INICIO DE LA MODIFICACIÓN: VALIDACIÓN DE AUTORIZACIÓN ---
-            if self.token_autorizacion:
-                token_recibido = entorno.get("HTTP_X_AUTHORIZATION")  # Los encabezados se normalizan a HTTP_NOMBRE_EN_MAYUSCULAS
-
-                if not token_recibido or token_recibido != self.token_autorizacion:
-                    status = "401 Unauthorized"
-                    response_data = {"estado": "ERROR_AUTORIZACION", "mensaje": "Credenciales de autorización no válidas o ausentes."}
-                    self.logger.warning(f"Solicitud rechazada desde {entorno.get('REMOTE_ADDR', 'Desconocida')}: Fallo de autorización (token ausente o inválido).")
-                    raise StopIteration()  # Detiene la ejecución y responde con el error 401.
-
-                # Se recomienda usar hmac.compare_digest para evitar ataques de temporización
-                # import hmac
-                # if not hmac.compare_digest(token_recibido, self.token_autorizacion):
-                elif token_recibido != self.token_autorizacion:
-                    status = "401 Unauthorized"
-                    response_data = {"estado": "ERROR_AUTORIZACION", "mensaje": "Token de autorización no válido."}
-                    self.logger.warning(f"Solicitud rechazada desde {entorno.get('REMOTE_ADDR', 'Desconocida')}: Token no válido.")
-                    # El resto del código se salta gracias al 'raise StopIteration()' al final del bloque
-
-                if status == "401 Unauthorized":
-                    raise StopIteration()  # Detiene la ejecución aquí y va directo a la respuesta final
-
-            # --- FIN DE LA MODIFICACIÓN ---
-            metodo = entorno.get("REQUEST_METHOD", "GET")  # method
-            ruta = entorno.get("PATH_INFO", "/")  # path
-            direccion_remota = entorno.get("REMOTE_ADDR", "Desconocida")  # remote_addr
-
-            self.logger.info(f"Solicitud entrante: {metodo} {ruta} desde {direccion_remota}")
-
-            # Validación del método
-            if metodo != "POST":
-                status = "405 Method Not Allowed"
-                cabeceras.append(("Allow", "POST"))
-                response_data = {"estado": "ERROR", "mensaje": "Solo se permite el método POST."}
-                self.logger.warning(f"Método no permitido recibido: {metodo} desde {direccion_remota} para {ruta}.")
-
-            else:  # Método es POST
-                # Validación de longitud de contenido
-                try:
-                    longitud_contenido = int(entorno.get("CONTENT_LENGTH", 0))  # content_length
-                except (ValueError, TypeError):
-                    longitud_contenido = 0
-                    self.logger.warning(f"Content-Length inválido o ausente: {entorno.get('CONTENT_LENGTH')}")
-
-                if longitud_contenido <= 0:
-                    status = "400 Bad Request"
-                    response_data = {"estado": "ERROR", "mensaje": "Cuerpo de la solicitud vacío o Content-Length inválido/ausente."}
-                    self.logger.warning("Solicitud POST con cuerpo vacío o Content-Length problemático.")
-
-                elif longitud_contenido > self.config.longitud_max_contenido:
-                    status = "413 Payload Too Large"
-                    response_data = {"estado": "ERROR", "mensaje": f"Payload demasiado grande (máximo {self.config.longitud_max_contenido} bytes)."}
-                    self.logger.warning(f"Solicitud POST con payload demasiado grande: {longitud_contenido} bytes.")
-
-                else:  # Payload con tamaño aceptable
-                    # Leer y procesar payload
-                    try:
-                        bytes_cuerpo = entorno["wsgi.input"].read(longitud_contenido)  # body_bytes
-                        try:
-                            body_str = bytes_cuerpo.decode("utf-8")  # body_str
-                        except UnicodeDecodeError as e_unicode:
-                            self.logger.error(f"Error de decodificación UTF-8 del payload: {e_unicode}. Bytes (primeros 200): {bytes_cuerpo[:200]}", exc_info=True)
-                            status = "400 Bad Request"
-                            response_data = {"estado": "ERROR", "mensaje": "Codificación UTF-8 inválida en el cuerpo de la solicitud."}
-                            # Salir del else anidado, ya que no podemos procesar más.
-                            raise StopIteration()  # Usar una excepción para romper el flujo normal
-
-                        # Loguear payload (truncado por seguridad)
-                        vista_previa_payload = body_str[: self.config.log_payload_max_caracteres]  # payload_preview
-                        if len(body_str) > self.config.log_payload_max_caracteres:
-                            vista_previa_payload += "..."
-                        self.logger.debug(f"Payload recibido: {vista_previa_payload}")
-
-                        # Parsear JSON
-                        try:
-                            datos_payload = json.loads(body_str)  # payload_data
-                        except json.JSONDecodeError as e_json:
-                            self.logger.error(f"Error de decodificación JSON del payload: {e_json}. Payload (str preview): {vista_previa_payload}", exc_info=True)
-                            status = "400 Bad Request"
-                            response_data = {"estado": "ERROR", "mensaje": "Formato JSON inválido en el cuerpo de la solicitud."}
-                            raise StopIteration()  # Romper flujo
-
-                        # Validar payload parseado
-                        es_valido, msg_validacion, deployment_id, callback_status = self._validar_payload_callback(
-                            datos_payload
-                        )  # is_valid, validation_msg, deployment_id, callback_status
-
-                        if not es_valido:
-                            status = "400 Bad Request"
-                            response_data = {"estado": "ERROR", "mensaje": msg_validacion}
-                            self.logger.warning(f"Payload de callback inválido: {msg_validacion}. Payload: {datos_payload}")
-                        elif deployment_id is None or callback_status is None:
-                            status = "400 Bad Request"
-                            response_data = {"estado": "ERROR", "mensaje": "deploymentId o status no pueden ser None."}
-                            self.logger.error(f"deploymentId o status son None tras validación. Payload: {datos_payload}")
-                        else:
-                            # Procesar callback (esta es la ruta de éxito principal)
-                            self.logger.info(f"Procesando callback validado: DeploymentId='{deployment_id}', Status='{callback_status}'")
-                            # RE-SERIALIZAR EL PAYLOAD A UN STRING COMPACTO ANTES DE GUARDARLO
-                            payload_compacto = json.dumps(datos_payload, separators=(",", ":"))
-                            exito_proceso, msg_proceso_final = self._procesar_callback(deployment_id, callback_status, payload_compacto)  # success, process_msg
-
-                            if not exito_proceso:
-                                status = "500 Internal Server Error"  # Podría ser 202 Accepted si el procesamiento es asíncrono y solo falló la BD
-                                response_data = {"estado": "ERROR_PROCESAMIENTO", "mensaje": msg_proceso_final}
-                                self.logger.error(f"Fallo en el procesamiento del callback para DeploymentId {deployment_id}: {msg_proceso_final}")
-                            else:
-                                # Si _procesar_callback fue exitoso, el estado_http 200 OK y mensaje por defecto son apropiados.
-                                response_data = {"estado": "OK", "mensaje": "Callback procesado y registrado exitosamente."}
-                                self.logger.info(f"Callback procesado y registrado exitosamente para DeploymentId: {deployment_id}")
-
-                    except StopIteration:  # Para manejar las salidas tempranas por errores de decodificación/parseo
-                        pass  # El estado_http y datos_respuesta ya están seteados.
-                    except Exception as e_lectura_payload:
-                        self.logger.error(f"Error leyendo o procesando el cuerpo del payload: {e_lectura_payload}", exc_info=True)
-                        status = "500 Internal Server Error"
-                        response_data = {"estado": "ERROR", "mensaje": "Error interno al procesar el cuerpo de la solicitud."}
-
-        except Exception as e_general_wsgi:  # Error muy general en la app WSGI
-            status = "500 Internal Server Error"
-            response_data = {"estado": "ERROR", "mensaje": "Ocurrió un error interno inesperado en la aplicación de callbacks."}
-            self.logger.critical(f"Excepción crítica no manejada en aplicacion_wsgi: {e_general_wsgi}", exc_info=True)
-
-        # Preparar respuesta final
-        try:
-            cuerpo_respuesta_bytes = json.dumps(response_data, ensure_ascii=False).encode("utf-8")  # response_body_bytes
-        except Exception as e_json_dump:
-            self.logger.critical(f"Error al convertir la respuesta a JSON: {e_json_dump}. Respuesta original: {response_data}", exc_info=True)
-            status = "500 Internal Server Error"
-            error_response = {"estado": "ERROR_SERVIDOR", "mensaje": "Error generando respuesta JSON."}
-            cuerpo_respuesta_bytes = json.dumps(error_response, ensure_ascii=False).encode("utf-8")
-
-        cabeceras.append(("Content-Length", str(len(cuerpo_respuesta_bytes))))
-
-        iniciar_respuesta(status, cabeceras)
-        return [cuerpo_respuesta_bytes]
 
     def _determinar_direccion_enlace(self) -> str:  # _determine_bind_address
         """Determina la dirección de enlace efectiva con validación."""
@@ -1128,7 +787,9 @@ class ServidorCallback:  # CallbackServer
             if not WAITRESS_DISPONIBLE and self.instancia_servidor:
                 # Esto es un intento, pero puede no ser suficiente para un shutdown inmediato de handle_request
                 # La mejor forma es que el bucle principal de handle_request chequee self._evento_parada.
-                self.logger.info("Intentando cerrar instancia de servidor wsgiref (puede requerir una solicitud final para desbloquear handle_request)...")
+                self.logger.info(
+                    "Intentando cerrar instancia de servidor wsgiref (puede requerir una solicitud final para desbloquear handle_request)..."
+                )
                 # self.instancia_servidor.shutdown() # shutdown() no funciona bien si está en handle_request
 
         # Intentar registrar señales comunes
@@ -1154,7 +815,9 @@ class ServidorCallback:  # CallbackServer
         self.logger.info(f"  Solicitudes procesadas exitosamente: {self._estadisticas['solicitudes_procesadas']}")
         self.logger.info(f"  Solicitudes fallidas (procesamiento/BD): {self._estadisticas['solicitudes_fallidas']}")
         if self._estadisticas["solicitudes_recibidas"] > 0:
-            tasa_exito_proc = (self._estadisticas["solicitudes_procesadas"] / self._estadisticas["solicitudes_recibidas"]) * 100  # processing_success_rate
+            tasa_exito_proc = (
+                self._estadisticas["solicitudes_procesadas"] / self._estadisticas["solicitudes_recibidas"]
+            ) * 100  # processing_success_rate
             self.logger.info(f"  Tasa de éxito de procesamiento: {tasa_exito_proc:.2f}%")
         self.logger.info("=" * 70)
 
@@ -1166,7 +829,9 @@ class ServidorCallback:  # CallbackServer
         self.logger.info("=" * 80)
         self.logger.info(f" Iniciando Servidor de Callbacks SAM (PID: {os.getpid()})")
         self.logger.info(f" Escuchando en: http://{host_efectivo}:{self.config.puerto}")
-        self.logger.info(f" Usando servidor: {'Waitress (recomendado para producción)' if WAITRESS_DISPONIBLE else 'wsgiref.simple_server (solo para desarrollo)'}")
+        self.logger.info(
+            f" Usando servidor: {'Waitress (recomendado para producción)' if WAITRESS_DISPONIBLE else 'wsgiref.simple_server (solo para desarrollo)'}"
+        )
         if WAITRESS_DISPONIBLE:
             self.logger.info(f" Hilos configurados para Waitress: {self.config.hilos}")
 
@@ -1285,6 +950,42 @@ class ServidorCallback:  # CallbackServer
                     print(f"Error cerrando handler de log: {e_handler_close}", file=sys.stderr)  # Usar print si el logger ya no funciona
 
         print("Servidor de Callbacks SAM: Proceso de limpieza final completado.", file=sys.stderr)
+
+    def _log_solicitud_completa(self, entorno: Dict[str, Any], cuerpo_str: str):
+        """
+        Registra en el log (a nivel DEBUG) los encabezados y el cuerpo de una solicitud.
+        Los encabezados sensibles como la autorización son ofuscados.
+        """
+        try:
+            # Extraer y formatear encabezados, ofuscando el de autorización
+            encabezados_formateados = ""
+            for clave, valor in entorno.items():
+                if clave.startswith("HTTP_"):
+                    nombre_header = clave[5:].replace("_", "-").title()
+                    if nombre_header.lower() == "x-authorization":
+                        valor_ofuscado = f"'{valor[:4]}...{valor[-4:]}'" if valor and len(valor) > 8 else "'***'"
+                        encabezados_formateados += f"  {nombre_header}: {valor_ofuscado}\n"
+                    else:
+                        encabezados_formateados += f"  {clave[5:].replace('_', '-').title()}: {valor}\n"
+
+            # Truncar el cuerpo del log si es demasiado largo
+            vista_previa_payload = cuerpo_str[: self.config.log_payload_max_caracteres]
+            if len(cuerpo_str) > self.config.log_payload_max_caracteres:
+                vista_previa_payload += "..."
+
+            # Construir el mensaje de log final
+            log_completo = (
+                f"--- Inicio de Detalles de la Solicitud ---\n"
+                f"Desde: {entorno.get('REMOTE_ADDR', 'Desconocida')}\n"
+                f"Encabezados:\n{encabezados_formateados.strip()}\n"
+                f"Cuerpo:\n  {vista_previa_payload}\n"
+                f"--- Fin de Detalles de la Solicitud ---"
+            )
+
+            self.logger.debug(log_completo)
+
+        except Exception as e:
+            self.logger.error(f"Error al intentar registrar los detalles de la solicitud: {e}", exc_info=False)
 
 
 def start_callback_server_main():  # main_entry_point

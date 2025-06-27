@@ -12,28 +12,10 @@ import traceback
 from datetime import datetime
 from datetime import time as dt_time
 from pathlib import Path
-from threading import RLock  # RLock para locks reentrantes si es necesario
+from threading import RLock
 from typing import Any, Dict, Optional
 
 import schedule
-
-# --- Configuración de Path ---
-LANZADOR_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(LANZADOR_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(LANZADOR_PROJECT_ROOT))
-
-# --- Carga de .env específica del Lanzador ---
-from dotenv import load_dotenv
-
-env_path_lanzador = LANZADOR_PROJECT_ROOT / "lanzador" / ".env"
-if os.path.exists(env_path_lanzador):
-    load_dotenv(dotenv_path=env_path_lanzador)
-else:  # O carga un .env general del proyecto SAM si existe
-    env_path_sam_root = LANZADOR_PROJECT_ROOT.parent / ".env"
-    if os.path.exists(env_path_sam_root):
-        load_dotenv(dotenv_path=env_path_sam_root)
-    else:
-        load_dotenv()
 
 # --- Importaciones de Módulos Comunes y Específicos ---
 from common.database.sql_client import DatabaseConnector
@@ -43,7 +25,7 @@ from common.utils.mail_client import EmailAlertClient
 from lanzador.clients.aa_client import AutomationAnywhereClient
 from lanzador.service.conciliador import ConciliadorImplementaciones
 
-# Configurar el logger principal para este módulo (service.main)
+# Configurar el logger principal para este módulo.
 log_cfg_main = ConfigManager.get_log_config()
 logger_name = "lanzador.service.main"
 logger = setup_logging(log_config=log_cfg_main, logger_name=logger_name, log_file_name_override=log_cfg_main.get("app_log_filename_lanzador"))
