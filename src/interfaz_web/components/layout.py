@@ -48,17 +48,17 @@ def AppLayout(*children):
         html.head(
             html.meta({"char_set": "utf-8"}),
             html.title("SAM Project"),
-            # html.link({"crossorigin": "", "rel": "preconnect", "href": "https://fonts.gstatic.com/"}),
-            # html.link(
-            #     {
-            #         "as": "style",
-            #         "rel": "stylesheet",
-            #         "href": "https://fonts.googleapis.com/css2?display=swap&amp;family=Inter%3Awght%40400%3B500%3B600%3B700%3B900&amp;family=Noto+Sans%3Awght%40400%3B500%3B700%3B900",
-            #         "onload": "this.rel='stylesheet'",
-            #     }
-            # ),
-            # html.link({"rel": "stylesheet", "href": "https://fonts.googleapis.com/css2?family=Material+Icons"}),
-            # html.script({"src": "https://cdn.tailwindcss.com?plugins=forms,container-queries"}),
+            html.link({"crossorigin": "", "rel": "preconnect", "href": "https://fonts.gstatic.com/"}),
+            html.link(
+                {
+                    "as": "style",
+                    "rel": "stylesheet",
+                    "href": "https://fonts.googleapis.com/css2?display=swap&amp;family=Inter%3Awght%40400%3B500%3B600%3B700%3B900&amp;family=Noto+Sans%3Awght%40400%3B500%3B700%3B900",
+                    "onload": "this.rel='stylesheet'",
+                }
+            ),
+            html.link({"rel": "stylesheet", "href": "https://fonts.googleapis.com/css2?family=Material+Icons"}),
+            html.script({"src": "https://cdn.tailwindcss.com?plugins=forms,container-queries"}),
             html.link({"rel": "stylesheet", "href": "/static/styles.css"}),
         ),
         html.div(

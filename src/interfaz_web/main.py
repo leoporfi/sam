@@ -3,29 +3,16 @@
 import sys
 import uuid
 from pathlib import Path
-
-# Quitamos HTMLResponse porque ya no la usaremos de esta forma
 from typing import Dict, List, Optional
 
 import pyodbc
 from fastapi import Body, FastAPI, HTTPException, Query
-
-# from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from reactpy import component, html, use_state
 from reactpy.backend.fastapi import configure
 
-# ===== AJUSTE DE RUTAS (se mantiene igual) =====
-SRC_ROOT = Path(__file__).resolve().parent.parent
-if str(SRC_ROOT) not in sys.path:
-    sys.path.append(str(SRC_ROOT))
-from dotenv import load_dotenv
-
-PROJECT_ROOT = SRC_ROOT.parent
-dotenv_path = PROJECT_ROOT / ".env"
-load_dotenv(dotenv_path=dotenv_path)
-
 # --- IMPORTS DE COMPONENTES Y LÓGICA ---
+# Estos imports ahora funcionan gracias a que ConfigLoader preparó el entorno.
 from common.database.sql_client import DatabaseConnector
 from common.utils.config_manager import ConfigManager
 
@@ -37,7 +24,9 @@ app = FastAPI()
 
 # ===== CONFIGURACIÓN DE BASE DE DATOS (se mantiene igual) =====
 db_config = ConfigManager.get_sql_server_config("SQL_SAM")
-db_connector = DatabaseConnector(servidor=db_config.get("server"), base_datos=db_config.get("database"), usuario=db_config.get("uid"), contrasena=db_config.get("pwd"))
+db_connector = DatabaseConnector(
+    servidor=db_config.get("server"), base_datos=db_config.get("database"), usuario=db_config.get("uid"), contrasena=db_config.get("pwd")
+)
 
 
 # -- modelos de datos --

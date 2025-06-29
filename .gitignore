@@ -22,3 +22,6 @@ build/
 *copy*
 node_modules/
 *_old
+src/service_templates.py
+src/*.css
+src/*.html
