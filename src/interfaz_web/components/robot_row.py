@@ -10,13 +10,10 @@ from .common.action_menu import ActionMenu
 @component
 def RobotRow(robot: Robot, on_action: Callable):
     """
-    Renderiza una única fila para la tabla de robots, con manejadores de eventos
-    asíncronos correctos.
+    Renderiza una única fila para la tabla de robots con clases de Bulma
+    y manejadores de eventos asíncronos.
     """
-    # --- INICIO DE LA CORRECCIÓN ---
 
-    # 1. Creamos funciones 'async def' con nombre para CADA acción.
-    #    ReactPy sabe cómo manejar estas funciones cuando se le pasan a un 'onClick'.
     async def handle_edit(event=None):
         await on_action("edit", robot)
 
@@ -32,44 +29,56 @@ def RobotRow(robot: Robot, on_action: Callable):
     async def handle_toggle_online(event=None):
         await on_action("toggle_online", robot)
 
-    # 2. Creamos la lista de acciones para el menú, pasando las NUEVAS funciones.
     actions = [
         {"label": "Editar Propiedades", "on_click": handle_edit},
         {"label": "Gestionar Asignaciones", "on_click": handle_assign},
         {"label": "Gestionar Programaciones", "on_click": handle_schedule},
     ]
 
-    # --- FIN DE LA CORRECCIÓN ---
-
+    # bulma-switch
     return html.tr(
-        {"key": robot["RobotId"]},
-        html.td({"className": "px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"}, robot["Robot"]),
-        html.td({"className": "px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"}, robot.get("CantidadEquiposAsignados", 0)),
+        {"key": robot["RobotId"], "className": "is-vcentered"},
+        html.td(robot["Robot"]),
+        html.td({"className": "has-text-centered"}, robot.get("CantidadEquiposAsignados", 0)),
+        # Celda para el interruptor "Activo"
         html.td(
-            {"className": "px-6 py-4 whitespace-nowrap text-sm"},
-            html.label(
-                {"className": "relative inline-flex items-center cursor-pointer"},
-                html.input({"type": "checkbox", "className": "sr-only peer", "checked": robot["Activo"], "onChange": handle_toggle_active}),
-                html.div(
+            html.div(
+                {"className": "field"},
+                html.input(
                     {
-                        "className": "w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
+                        "id": f"switch-activo-{robot['RobotId']}",
+                        "type": "checkbox",
+                        "className": "switch is-rounded is-small is-info",  # Clases de bulma-switch
+                        "checked": robot["Activo"],
+                        "onChange": handle_toggle_active,
                     }
                 ),
-            ),
+                html.label({"htmlFor": f"switch-activo-{robot['RobotId']}"}),
+            )
         ),
+        # Celda para el interruptor "Online"
         html.td(
-            {"className": "px-6 py-4 whitespace-nowrap text-sm"},
-            html.label(
-                {"className": "relative inline-flex items-center cursor-pointer"},
-                html.input({"type": "checkbox", "className": "sr-only peer", "checked": robot["EsOnline"], "onChange": handle_toggle_online}),
-                html.div(
+            html.div(
+                {"className": "field"},
+                html.input(
                     {
-                        "className": "w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
+                        "id": f"switch-online-{robot['RobotId']}",
+                        "type": "checkbox",
+                        "className": "switch is-rounded is-small is-success",  # Clases de bulma-switch
+                        "checked": robot["EsOnline"],
+                        "onChange": handle_toggle_online,
                     }
                 ),
-            ),
+                html.label({"htmlFor": f"switch-online-{robot['RobotId']}"}),
+            )
         ),
-        html.td({"className": "px-6 py-4 whitespace-nowrap text-sm text-gray-500"}, str(robot["PrioridadBalanceo"])),
-        html.td({"className": "px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"}, str(robot.get("TicketsPorEquipoAdicional", "N/A"))),
-        html.td({"className": "px-6 py-4 whitespace-nowrap text-sm font-medium text-right"}, ActionMenu(actions=actions)),
+        html.td(
+            html.span(
+                {"className": f"tag  {'is-info' if robot.get('TieneProgramacion') else 'is-primary'}"},
+                "Programado" if robot.get("TieneProgramacion") else "A Demanda",
+            )
+        ),
+        html.td(str(robot["PrioridadBalanceo"])),
+        html.td({"className": "has-text-centered"}, str(robot.get("TicketsPorEquipoAdicional", "N/A"))),
+        html.td({"className": "has-text-right"}, ActionMenu(actions=actions)),
     )
