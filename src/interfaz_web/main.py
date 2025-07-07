@@ -1,18 +1,14 @@
-# interfaz_web/main.py
-
-import sys
+# src/interfaz_web/main.py
 import uuid
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import pyodbc
 from fastapi import Body, FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from reactpy import component, html, use_state
-from reactpy.backend.fastapi import configure
+from reactpy.backend.fastapi import Options, configure
+from starlette.staticfiles import StaticFiles
 
-# --- IMPORTS DE COMPONENTES Y LÓGICA ---
-# Estos imports ahora funcionan gracias a que ConfigLoader preparó el entorno.
 from common.database.sql_client import DatabaseConnector
 from common.utils.config_manager import ConfigManager
 
@@ -20,6 +16,7 @@ from .components.dashboard import RobotDashboard
 from .components.layout import AppLayout
 from .components.notifications import NotificationContext, ToastContainer
 
+CURRENT_DIR = Path(__file__).parent
 app = FastAPI()
 
 # ===== CONFIGURACIÓN DE BASE DE DATOS (se mantiene igual) =====
@@ -81,12 +78,25 @@ def get_robots_with_assignments(
     name: Optional[str] = None,
     active: Optional[bool] = None,
     online: Optional[bool] = None,
-    # parámetros para paginación con valores por defecto
     page: int = Query(1, ge=1, description="Número de página"),
     size: int = Query(20, ge=1, le=100, description="Tamaño de la página"),
+    sort_by: Optional[str] = Query("Robot", description="Columna por la cual ordenar"),
+    sort_dir: Optional[str] = Query("asc", description="Dirección de ordenación (asc o desc)"),
 ):
+    # --- LÓGICA DE ORDENACIÓN SEGURA ---
+    sortable_columns = {
+        "Robot": "r.Robot",
+        "CantidadEquiposAsignados": "ISNULL(ea.Equipos, 0)",
+        "Activo": "r.Activo",
+        "EsOnline": "r.EsOnline",
+        "TieneProgramacion": "(CASE WHEN EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1) THEN 1 ELSE 0 END)",
+        "PrioridadBalanceo": "r.PrioridadBalanceo",
+        "TicketsPorEquipoAdicional": "r.TicketsPorEquipoAdicional",
+    }
+    # Validamos para evitar inyección SQL
+    order_by_column = sortable_columns.get(sort_by, "r.Robot")
+    order_by_direction = "DESC" if sort_dir.lower() == "desc" else "ASC"
     # --- LÓGICA DE PAGINACIÓN Y FILTROS MEJORADA ---
-
     # Partes reutilizables de la consulta
     select_from_clause = """
         FROM dbo.Robots r
@@ -130,15 +140,24 @@ def get_robots_with_assignments(
             ORDER BY r.Robot
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
+        # --- CONSULTA PRINCIPAL CON ORDENACIÓN DINÁMICA ---
+        main_query = f"""
+            SELECT
+                r.RobotId, r.Robot, r.Descripcion, r.MinEquipos, r.MaxEquipos,
+                r.EsOnline, r.Activo, r.PrioridadBalanceo,
+                r.TicketsPorEquipoAdicional, 
+                ISNULL(ea.Equipos, 0) as CantidadEquiposAsignados,
+                CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1) 
+                     THEN 1 ELSE 0 END AS BIT) AS TieneProgramacion
+            {select_from_clause}
+            {where_clause}
+            ORDER BY {order_by_column} {order_by_direction} -- Se añade la cláusula ORDER BY
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
 
-        # Añadimos los parámetros de paginación al final
         pagination_params = params + [offset, size]
-
         robots_data = db_connector.ejecutar_consulta(main_query, tuple(pagination_params), es_select=True)
-
-        # 3. Devolver una respuesta estructurada con los datos y la metainformación de paginación
         return {"total_count": total_count, "page": page, "size": size, "robots": robots_data}
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener robots: {str(e)}")
 
@@ -247,9 +266,6 @@ def get_robot_asignaciones(robot_id: int):
         raise HTTPException(status_code=500, detail=f"Error al obtener asignaciones: {str(e)}")
 
 
-# Reemplaza la función get_available_teams con esto:
-
-
 @app.get("/api/equipos/disponibles/{robot_id}")
 def get_available_teams(robot_id: int):
     """
@@ -290,68 +306,55 @@ def update_robot_asignaciones(robot_id: int, update_data: AssignmentUpdateReques
         raise HTTPException(status_code=500, detail=f"Error al actualizar asignaciones: {str(e)}")
 
 
-# -- Programaciones --
-# En interfaz_web/main.py, reemplaza la función get_robot_schedules existente:
-
-
 @app.get("/api/robots/{robot_id}/programaciones")
 def get_robot_schedules(robot_id: int):
     """
-    Versión robusta para obtener programaciones y sus equipos asignados.
-    Realiza dos consultas para evitar problemas de compatibilidad con STRING_AGG.
+    Versión robusta para obtener programaciones y sus equipos asignados de forma estructurada.
     """
     try:
         # 1. Obtener todas las programaciones para el robot
         query_schedules = "SELECT * FROM dbo.Programaciones WHERE RobotId = ? ORDER BY HoraInicio"
         schedules = db_connector.ejecutar_consulta(query_schedules, (robot_id,), es_select=True)
 
-        # 2. Si hay programaciones, obtener los equipos para cada una
         if schedules:
-            # Obtenemos todos los IDs de las programaciones de una vez
             schedule_ids = [s["ProgramacionId"] for s in schedules]
             placeholders = ",".join("?" for _ in schedule_ids)
 
+            # --- Obtenemos ID y Nombre del equipo ---
             query_teams = f"""
-                SELECT a.ProgramacionId, e.Equipo
+                SELECT a.ProgramacionId, e.EquipoId, e.Equipo
                 FROM dbo.Asignaciones a
                 JOIN dbo.Equipos e ON a.EquipoId = e.EquipoId
-                WHERE a.ProgramacionId IN ({placeholders})
+                WHERE a.ProgramacionId IN ({placeholders}) AND a.EsProgramado = 1
             """
-
             team_assignments = db_connector.ejecutar_consulta(query_teams, tuple(schedule_ids), es_select=True)
 
-            # Mapeamos los equipos a su ProgramacionId para una búsqueda rápida
             teams_map = {}
             for assignment in team_assignments:
                 pid = assignment["ProgramacionId"]
                 if pid not in teams_map:
                     teams_map[pid] = []
-                teams_map[pid].append(assignment["Equipo"])
+                # --- Guardamos el objeto completo del equipo ---
+                teams_map[pid].append({"EquipoId": assignment["EquipoId"], "Equipo": assignment["Equipo"]})
 
-            # Añadimos la lista de equipos a cada programación
             for schedule in schedules:
-                schedule["EquiposAsignados"] = ", ".join(teams_map.get(schedule["ProgramacionId"], []))
+                # --- Asignamos la lista de objetos, no un string ---
+                schedule["Equipos"] = teams_map.get(schedule["ProgramacionId"], [])
 
-        # Devolvemos la lista de programaciones, que será "[]" si no hay ninguna.
-        # Esto siempre es un JSON válido.
         return schedules
-
     except Exception as e:
-        # Logueamos el error en el servidor para tener más detalles
-        print(f"ERROR DETALLADO en get_robot_schedules: {e}")
         raise HTTPException(status_code=500, detail=f"Error al obtener programaciones: {str(e)}")
 
 
-@app.delete("/api/robots/{robot_id}/programaciones/{programacion_id}")
+@app.delete("/api/robots/{robot_id}/programaciones/{programacion_id}", status_code=204)
 def delete_schedule(robot_id: int, programacion_id: int):
     """
-    Elimina una programación llamando al Stored Procedure correspondiente.
+    Llama al Stored Procedure robusto para eliminar una programación y limpiar sus asignaciones.
     """
-    # El SP [EliminarProgramacionCompleta] se encarga de toda la lógica de borrado.
-    query = "EXEC dbo.EliminarProgramacionCompleta @ProgramacionId = ?, @RobotId = ?"
     try:
+        query = "EXEC dbo.EliminarProgramacionCompleta @ProgramacionId = ?, @RobotId = ?"
         db_connector.ejecutar_consulta(query, (programacion_id, robot_id), es_select=False)
-        return {"message": "Programación eliminada correctamente."}
+        # No se devuelve contenido en un DELETE exitoso (código 204)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar la programación: {str(e)}")
 
@@ -372,24 +375,36 @@ def create_schedule(data: ScheduleData):
 
     robot_nombre_result = db_connector.ejecutar_consulta("SELECT Robot FROM dbo.Robots WHERE RobotId = ?", (data.RobotId,), es_select=True)
     robot_str = robot_nombre_result[0]["Robot"] if robot_nombre_result else ""
-
-    sp_name = f"dbo.CargarProgramacion{data.TipoProgramacion}"
-    params = [robot_str, equipos_str]
-
-    if data.TipoProgramacion == "Diaria":
-        params.extend([data.HoraInicio, data.Tolerancia])
-    elif data.TipoProgramacion == "Semanal":
-        params.extend([data.DiasSemana, data.HoraInicio, data.Tolerancia])
-    elif data.TipoProgramacion == "Mensual":
-        params.extend([data.DiaDelMes, data.HoraInicio, data.Tolerancia])
-    elif data.TipoProgramacion == "Especifica":
-        params.extend([data.FechaEspecifica, data.HoraInicio, data.Tolerancia])
-    else:
+    # Mapeo de SP a sus parámetros requeridos
+    sp_map = {
+        "Diaria": ("dbo.CargarProgramacionDiaria", ["@Robot", "@Equipos", "@HoraInicio", "@Tolerancia"]),
+        "Semanal": ("dbo.CargarProgramacionSemanal", ["@Robot", "@Equipos", "@DiasSemana", "@HoraInicio", "@Tolerancia"]),
+        "Mensual": ("dbo.CargarProgramacionMensual", ["@Robot", "@Equipos", "@DiaDelMes", "@HoraInicio", "@Tolerancia"]),
+        "Especifica": ("dbo.CargarProgramacionEspecifica", ["@Robot", "@Equipos", "@FechaEspecifica", "@HoraInicio", "@Tolerancia"]),
+    }
+    if data.TipoProgramacion not in sp_map:
         raise HTTPException(status_code=400, detail="Tipo de programación no válido")
 
+    sp_name, sp_param_names = sp_map[data.TipoProgramacion]
+    # Construcción dinámica de parámetros para el SP
+    params_dict = {
+        "@Robot": robot_str,
+        "@Equipos": equipos_str,
+        "@HoraInicio": data.HoraInicio,
+        "@Tolerancia": data.Tolerancia,
+        "@DiasSemana": data.DiasSemana,
+        "@DiaDelMes": data.DiaDelMes,
+        "@FechaEspecifica": data.FechaEspecifica,
+    }
+
+    params_tuple = tuple(params_dict[p] for p in sp_param_names)
+
+    # Construcción de la llamada al SP
+    placeholders = ", ".join("?" for _ in params_tuple)
+    query = f"EXEC {sp_name} {placeholders}"
+
     try:
-        # Los SP `CargarProgramacion...` no son estándar, así que llamamos a la query directamente.
-        db_connector.ejecutar_consulta(f"EXEC {sp_name} @Robot=?, @Equipos=?, @HoraInicio=?, @Tolerancia=?", tuple(params), es_select=False)
+        db_connector.ejecutar_consulta(query, params_tuple, es_select=False)
         return {"message": "Programación creada con éxito."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear la programación: {str(e)}")
@@ -400,46 +415,41 @@ def update_schedule(programacion_id: int, data: ScheduleData):
     """
     Actualiza una programación existente usando el SP ActualizarProgramacionCompleta.
     """
-    # El SP necesita los nombres de los equipos como un string separado por comas
-    equipos_nombres_result = db_connector.ejecutar_consulta(
-        f"SELECT STRING_AGG(Equipo, ',') AS Nombres FROM dbo.Equipos WHERE EquipoId IN ({','.join('?' for _ in data.Equipos)})",
-        tuple(data.Equipos),
-        es_select=True,
-    )
-    equipos_str = equipos_nombres_result[0]["Nombres"] if equipos_nombres_result and equipos_nombres_result[0]["Nombres"] else ""
-
-    query = """
-        EXEC dbo.ActualizarProgramacionCompleta 
-            @ProgramacionId = ?, @RobotId = ?, @TipoProgramacion = ?, @HoraInicio = ?,
-            @DiaSemana = ?, @DiaDelMes = ?, @FechaEspecifica = ?, @Tolerancia = ?, @Equipos = ?
-    """
-    params = (
-        programacion_id,
-        data.RobotId,
-        data.TipoProgramacion,
-        data.HoraInicio,
-        data.DiasSemana,
-        data.DiaDelMes,
-        data.FechaEspecifica,
-        data.Tolerancia,
-        equipos_str,
-    )
     try:
+        equipos_str = ""
+        if data.Equipos:
+            # Obtenemos los nombres de los equipos como un string separado por comas
+            placeholders = ",".join("?" for _ in data.Equipos)
+            equipos_nombres_result = db_connector.ejecutar_consulta(
+                f"SELECT STRING_AGG(Equipo, ',') AS Nombres FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
+                tuple(data.Equipos),
+                es_select=True,
+            )
+            equipos_str = equipos_nombres_result[0]["Nombres"] if equipos_nombres_result and equipos_nombres_result[0]["Nombres"] else ""
+
+        # --- CORRECCIÓN: Llamada al SP sin nombrar los parámetros ---
+        query = "EXEC dbo.ActualizarProgramacionCompleta ?, ?, ?, ?, ?, ?, ?, ?, ?"
+
+        params = (
+            programacion_id,
+            data.RobotId,
+            data.TipoProgramacion,
+            data.HoraInicio,
+            data.DiasSemana,
+            data.DiaDelMes,
+            data.FechaEspecifica,
+            data.Tolerancia,
+            equipos_str,
+        )
+
         db_connector.ejecutar_consulta(query, params, es_select=False)
         return {"message": "Programación actualizada con éxito"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar la programación: {str(e)}")
 
 
-# ================== CONFIGURACIÓN DE FRONTEND (EL ENFOQUE CORRECTO) ==================
-
-
 @component
 def App():
-    """
-    El componente raíz que ahora contiene la lógica de las notificaciones.
-    """
-    # 1. Movemos el estado y las funciones de notificación aquí
     notifications, set_notifications = use_state([])
 
     def show_notification(message, style="success"):
@@ -451,16 +461,36 @@ def App():
 
     context_value = {"notifications": notifications, "show_notification": show_notification, "dismiss_notification": dismiss_notification}
 
-    # 2. El return ahora envuelve todo con el Contexto y renderiza un único elemento
     return NotificationContext(
-        html.div(
-            AppLayout(RobotDashboard()),
-            ToastContainer(),
-        ),
+        AppLayout(RobotDashboard()),
+        ToastContainer(),
         value=context_value,
     )
 
 
-# app.mount("/static", StaticFiles(directory=SRC_ROOT / "interfaz_web/static"), name="static")
-# Le decimos a FastAPI que use nuestro nuevo componente "App" como la aplicación principal.
-configure(app, App)
+# --- Elementos que inyectaremos en el <head> de la página ---
+# Aquí definimos todos nuestros estilos y scripts externos
+head = html.head(
+    html.title("SAM"),
+    html.meta({"charset": "utf-8"}),
+    html.meta({"name": "viewport", "content": "width=device-width, initial-scale=1"}),
+    # --- CORRECCIÓN: Rutas locales ---
+    # html.link({"rel": "stylesheet", "href": "/static/css/bulma.min.css"}), # tema oscuro
+    html.link({"rel": "stylesheet", "href": "/static/css/bulma-no-dark-mode.css"}),  # Tema claro
+    html.link({"rel": "stylesheet", "href": "/static/css/bulma-switch.min.css"}),
+    html.link({"rel": "stylesheet", "href": "/static/css/all.min.css"}),  # Font Awesome
+    html.link({"rel": "stylesheet", "href": "/static/custom.css"}),
+)
+
+# --- Montamos la carpeta 'static' para que /static/custom.css sea accesible ---
+# Esta línea es importante y se queda.
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+
+
+# --- Le decimos a ReactPy que configure la app, pasando nuestro <head> personalizado ---
+# ReactPy se encargará de la ruta raíz ("/") y de servir su propio JS.
+configure(
+    app,
+    App,
+    options=Options(head=head),
+)

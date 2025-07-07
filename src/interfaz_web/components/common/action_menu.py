@@ -1,46 +1,57 @@
 # src/interfaz_web/components/common/action_menu.py
-from typing import Callable, Dict, List
-
+from typing import List, Dict
 from reactpy import component, html, use_state
 
 
 @component
 def ActionMenu(actions: List[Dict[str, any]]):
     """
-    Menú desplegable de acciones genérico.
-    Ahora es más simple, solo llama a la función que recibe.
+    Menú desplegable de acciones genérico, estilizado con el componente 'dropdown' de Bulma.
     """
     is_visible, set_is_visible = use_state(False)
 
-    # El 'onClick' de cada botón ahora llamará directamente a la función 'async'
-    # que le pasamos desde RobotRow, y ReactPy la ejecutará correctamente.
+    def handle_item_click(action_callback):
+        # Función wrapper para ejecutar la acción y luego cerrar el menú.
+        async def do_action(event=None):
+            await action_callback(event)
+            set_is_visible(False)
 
-    # --- INICIO DE LA CORRECCIÓN ---
-    # Ya no necesitamos la función 'handle_click' aquí.
-    # --- FIN DE LA CORRECCIÓN ---
+        return do_action
+
+    # Clases para el dropdown, se añade 'is-active' para mostrarlo.
+    dropdown_class = f"dropdown is-right {'is-active' if is_visible else ''}"
 
     return html.div(
-        {"className": "relative inline-block text-left"},
-        html.button(
-            {
-                "className": "inline-flex justify-center w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50",
-                "onClick": lambda event: set_is_visible(not is_visible),
-            },
-            "Acciones",
-            html.span({"className": "-mr-1 ml-2 h-5 w-5"}, "▼"),
-        ),
+        {"className": dropdown_class},
+        # El botón que activa el dropdown
         html.div(
-            {"className": f"origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10 {'block' if is_visible else 'hidden'}"},
+            {"className": "dropdown-trigger"},
+            html.button(
+                {
+                    "className": "button is-small",  # Botón estándar de Bulma
+                    "aria-haspopup": "true",
+                    "aria-controls": "dropdown-menu",
+                    "onClick": lambda event: set_is_visible(not is_visible),
+                },
+                html.span("Acciones"),
+                html.span(
+                    {"className": "icon is-small"},
+                    html.i({"className": "fas fa-angle-down", "aria-hidden": "true"}),
+                ),
+            ),
+        ),
+        # El menú desplegable que se muestra u oculta
+        html.div(
+            {"className": "dropdown-menu", "id": "dropdown-menu", "role": "menu"},
             html.div(
-                {"className": "py-1", "role": "menu"},
+                {"className": "dropdown-content"},
+                # Se renderizan las acciones que vienen por props
                 *[
                     html.button(
                         {
                             "key": action["label"],
-                            "className": "block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100",
-                            "role": "menuitem",
-                            # Simplemente pasamos la función del prop 'on_click' directamente
-                            "onClick": action["on_click"],
+                            "className": "dropdown-item has-text-left",  # 'dropdown-item' es la clase clave
+                            "onClick": handle_item_click(action["on_click"]),
                         },
                         action["label"],
                     )
