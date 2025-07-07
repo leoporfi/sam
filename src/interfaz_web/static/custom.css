@@ -1,0 +1,8 @@
+/* src/interfaz_web/static/custom.css */
+.toast-container {
+    position: fixed;
+    top: 40px;
+    right: 40px;
+    z-index: 9999;
+    width: 320px;
+}

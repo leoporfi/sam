@@ -25,3 +25,5 @@ node_modules/
 src/service_templates.py
 src/*.css
 src/*.html
+*.zip
+*.pdf
