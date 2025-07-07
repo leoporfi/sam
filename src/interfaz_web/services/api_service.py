@@ -36,7 +36,9 @@ class APIService:
             self._client = httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, headers={"Content-Type": "application/json"})
         return self._client
 
-    async def _make_request(self, method: str, endpoint: str, params: Optional[Dict] = None, json_data: Optional[Dict] = None, retries: int = 3) -> Any:
+    async def _make_request(
+        self, method: str, endpoint: str, params: Optional[Dict] = None, json_data: Optional[Dict] = None, retries: int = 3
+    ) -> Any:
         """
         Realiza una petición HTTP con reintentos y manejo de errores
         """
@@ -78,35 +80,22 @@ class APIService:
     # MÉTODOS PARA ROBOTS
     # =========================
 
-    async def get_robots(self, filters: Optional[RobotFilters] = None) -> Dict[str, Any]:
+    async def get_robots(self, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Obtiene la lista de robots con filtros opcionales
-        Retorna: {"robots": List[Robot], "total_count": int}
+        Obtiene la lista de robots con filtros y parámetros de ordenación opcionales.
+        Retorna: {"robots": List[Robot], "total_count": int, ...}
         """
-        params = {}
-
-        if filters:
-            if filters.get("name"):
-                params["name"] = filters.get("name")
-            if filters.get("active") is not None:
-                params["active"] = filters.get("active")
-            if filters.get("online") is not None:
-                params["online"] = filters.get("online")
-            if filters.get("page"):
-                params["page"] = filters.get("page")
-            if filters.get("size"):
-                params["size"] = filters.get("size")
-
         try:
+            # Ahora simplemente pasamos el diccionario de parámetros directamente.
             data = await self._make_request("GET", "/api/robots", params=params)
 
-            # Si la API devuelve directamente la lista (compatibilidad hacia atrás)
             if isinstance(data, list):
-                return {"robots": data, "total_count": len(data), "page": 1, "size": len(data)}
+                return {"robots": data, "total_count": len(data)}
 
-            # Si la API devuelve un objeto con metadatos
-            return {"robots": data.get("robots", []), "total_count": data.get("total_count", 0), "page": data.get("page", 1), "size": data.get("size", 20)}
-
+            return {
+                "robots": data.get("robots", []),
+                "total_count": data.get("total_count", 0),
+            }
         except Exception as e:
             raise APIException(f"Error al obtener robots: {str(e)}")
 

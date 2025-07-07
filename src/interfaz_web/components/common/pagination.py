@@ -7,9 +7,9 @@ from reactpy import component, html
 @component
 def Pagination(current_page: int, total_pages: int, on_page_change: Callable):
     """
-    Un componente reutilizable para la navegación por páginas.
+    Un componente reutilizable para la navegación por páginas, estilizado con Bulma.
     """
-    # Lógica para deshabilitar los botones si estamos en la primera o última página
+    # La lógica de Python para manejar el estado no necesita cambios.
     is_first_page = current_page == 1
     is_last_page = current_page == total_pages
 
@@ -21,43 +21,30 @@ def Pagination(current_page: int, total_pages: int, on_page_change: Callable):
         if not is_last_page:
             on_page_change(current_page + 1)
 
-    # Estilos para los botones
-    button_style = "relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-    disabled_button_style = "relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed"
-
+    # --- CORRECCIÓN: Se utiliza 'buttons is-centered' para centrar la paginación ---
     return html.nav(
-        {"className": "flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-b-lg"},
-        # Botón Anterior
+        {"className": "py-4"},
         html.div(
+            {"className": "buttons is-centered"},
             html.button(
                 {
-                    "className": disabled_button_style if is_first_page else button_style,
+                    "className": "button is-small",
                     "onClick": handle_previous,
                     "disabled": is_first_page,
                 },
                 "Anterior",
-            )
-        ),
-        # Contador de Página
-        html.div(
-            {"className": "hidden sm:block"},
-            html.p(
-                {"className": "text-sm text-gray-700"},
-                "Página ",
-                html.span({"className": "font-medium"}, current_page),
-                " de ",
-                html.span({"className": "font-medium"}, total_pages),
             ),
-        ),
-        # Botón Siguiente
-        html.div(
+            html.p(
+                {"className": "is-size-7 mx-4", "style": {"align-self": "center"}},
+                f"Página {current_page} de {total_pages}",
+            ),
             html.button(
                 {
-                    "className": disabled_button_style if is_last_page else button_style,
+                    "className": "button is-small",
                     "onClick": handle_next,
                     "disabled": is_last_page,
                 },
                 "Siguiente",
-            )
+            ),
         ),
     )

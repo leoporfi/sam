@@ -15,9 +15,15 @@ SRC_ROOT = SAM_PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-# Ahora se importa y utiliza ConfigLoader.
+
+# --- AÑADIR ESTA LÍNEA PARA ACTIVAR EL MODO DEBUG ---
+# import reactpy
+
+# reactpy.config.REACTPY_DEBUG_MODE.current = True
+
 from common.utils.config_loader import ConfigLoader
 
+# Ahora se importa y utiliza ConfigLoader.
 # Inicializa el servicio 'interfaz_web'.
 ConfigLoader.initialize_service("interfaz_web", __file__)
 
@@ -31,16 +37,16 @@ from common.utils.config_manager import ConfigManager
 # === EJECUCIÓN DEL SERVICIO ===
 if __name__ == "__main__":
     # Opcional: Imprime un resumen de la configuración para verificar los valores.
-    print("--- Resumen de Configuración para 'Interfaz Web' ---")
-    ConfigManager.print_config_summary("interfaz_web")
-    print("-------------------------------------------------")
+    # print("--- Resumen de Configuración para 'Interfaz Web' ---")
+    # ConfigManager.print_config_summary("interfaz_web")
+    # print("-------------------------------------------------")
 
     # Obtenemos la configuración del servidor web desde ConfigManager.
     # Esto permite controlar el host, puerto y modo debug/reload desde los archivos .env.
     web_config = ConfigManager.get_interfaz_web_config()
 
     host = web_config.get("host", "127.0.0.1")
-    port = web_config.get("port", 8080)
+    port = web_config.get("port", 8000)
     # El modo 'reload' es ideal para desarrollo y se activa con INTERFAZ_WEB_DEBUG=true
     reload = web_config.get("debug", False)
 
