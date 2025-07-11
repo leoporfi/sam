@@ -3,8 +3,8 @@ from typing import Any, Dict, Optional
 
 from reactpy import use_callback, use_effect, use_memo, use_state
 
-from ..schemas.robot_types import RobotFilters
-from ..services.api_service import get_api_service
+from ..client.api_service import get_api_service
+from ..client.schemas.robot_types import RobotFilters
 
 PAGE_SIZE = 20
 INITIAL_FILTERS = {"name": None, "active": True, "online": None}

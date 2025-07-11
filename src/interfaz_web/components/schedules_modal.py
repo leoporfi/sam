@@ -4,9 +4,9 @@ import asyncio
 from typing import Any, Callable, Dict, List, Set
 
 import httpx
-from reactpy import component, event, html, use_context, use_effect, use_state, use_memo, use_callback
+from reactpy import component, event, html, use_callback, use_context, use_effect, use_memo, use_state
 
-from ..config.settings import Settings
+from ..client.config.settings import Settings
 from .notifications import NotificationContext
 
 URL_BASE = Settings.API_BASE_URL
@@ -61,19 +61,19 @@ def DeleteButton(schedule_id: int, robot_id: int, on_delete_success: Callable):
     handle_click = use_callback(delete_schedule, [schedule_id, robot_id, is_deleting])
 
     return html.button(
-        {"className": f"button is-danger is-light is-small {'is-loading' if is_deleting else ''}", "onClick": handle_click, "disabled": is_deleting},
+        {"className": "secondary outline", "onClick": handle_click, "disabled": is_deleting, "aria-busy": is_deleting},
         "Eliminar",
     )
 
 
 @component
 def TeamSelector(available_teams: List[Dict], selected_teams: List[int], on_change: Callable):
-    """Componente separado para la selección de equipos"""
+    """Componente separado para la selección de equipos usando checkboxes"""
 
     # Asegurar que selected_teams es siempre una lista
     safe_selected_teams = list(selected_teams) if selected_teams else []
 
-    # Memoizar conjuntos para evitar recálculos, pero convertir a lista al final
+    # Memoizar conjuntos para evitar recálculos
     selected_teams_set = use_memo(lambda: set(safe_selected_teams), [safe_selected_teams])
     all_available_ids_set = use_memo(lambda: {team["EquipoId"] for team in available_teams}, [available_teams])
     are_all_teams_selected = use_memo(
@@ -96,41 +96,30 @@ def TeamSelector(available_teams: List[Dict], selected_teams: List[int], on_chan
         # Convertir a lista antes de pasar al callback
         on_change(list(current_teams))
 
-    return html.div(
-        {"className": "field mt-4"},
-        html.label({"className": "label"}, "Asignar Equipos"),
+    return html.fieldset(
         # Checkbox para seleccionar todos
-        html.div(
-            {"className": "field"},
-            html.label(
-                {"className": "checkbox is-small"},
-                html.input({"type": "checkbox", "checked": are_all_teams_selected, "onChange": handle_select_all_teams}),
-                " Seleccionar Todos / Deseleccionar Todos",
-            ),
+        # html.legend("Asignar Equipos"),
+        html.label(
+            html.input({"type": "checkbox", "checked": are_all_teams_selected, "onChange": handle_select_all_teams}),
+            "Asignar Equipos",
         ),
         # Lista de equipos con scroll
         html.div(
-            {"className": "control"},
-            html.div(
-                {"className": "box", "style": {"maxHeight": "20vh", "overflowY": "auto"}},
-                *[
-                    html.div(
-                        {"key": team["EquipoId"]},
-                        html.label(
-                            {"className": "checkbox"},
-                            html.input(
-                                {
-                                    "type": "checkbox",
-                                    "checked": team["EquipoId"] in selected_teams_set,
-                                    "onChange": lambda e, tid=team["EquipoId"]: handle_team_select(tid, e["target"]["checked"]),
-                                }
-                            ),
-                            f" {team['Equipo']}",
-                        ),
-                    )
-                    for team in available_teams
-                ],
-            ),
+            {"style": {"maxHeight": "200px", "overflowY": "auto"}},
+            *[
+                html.label(
+                    {"key": team["EquipoId"]},
+                    html.input(
+                        {
+                            "type": "checkbox",
+                            "checked": team["EquipoId"] in selected_teams_set,
+                            "onChange": lambda e, tid=team["EquipoId"]: handle_team_select(tid, e["target"]["checked"]),
+                        }
+                    ),
+                    team["Equipo"],
+                )
+                for team in available_teams
+            ],
         ),
     )
 
@@ -154,80 +143,48 @@ def ScheduleForm(form_data: Dict, available_teams: List[Dict], is_loading: bool,
         safe_teams = list(teams) if teams else []
         on_change("Equipos", safe_teams)
 
-    return html.form(
-        {"onSubmit": event(on_submit, prevent_default=True)},
-        # Fila 1: Tipo, Hora, Tolerancia
-        html.div(
-            {"className": "columns"},
+    return html._(
+        html.form(
+            {"onSubmit": event(on_submit, prevent_default=True)},
+            # Fila 1: Tipo, Hora, Tolerancia
+            html.label(
+                "Tipo de Programación",
+                html.select({"value": tipo, "onChange": lambda e: handle_form_change("TipoProgramacion", e["target"]["value"])}, *schedule_options),
+            ),
             html.div(
-                {"className": "column is-one-third"},
-                html.div(
-                    {"className": "field"},
-                    html.label({"className": "label"}, "Tipo de Programación"),
-                    html.div(
-                        {"className": "control"},
-                        html.div(
-                            {"className": "select is-fullwidth"},
-                            html.select(
-                                {"value": tipo, "onChange": lambda e: handle_form_change("TipoProgramacion", e["target"]["value"])}, *schedule_options
-                            ),
-                        ),
+                {"className": "grid"},
+                html.label(
+                    "Hora Inicio",
+                    html.input(
+                        {
+                            "type": "time",
+                            "value": form_data.get("HoraInicio"),
+                            "onChange": lambda e: handle_form_change("HoraInicio", e["target"]["value"]),
+                        }
+                    ),
+                ),
+                html.label(
+                    "Tolerancia (min)",
+                    html.input(
+                        {
+                            "type": "number",
+                            "min": "0",
+                            "max": "60",
+                            "value": form_data.get("Tolerancia"),
+                            "onChange": lambda e: handle_form_change("Tolerancia", int(e["target"]["value"]) if e["target"]["value"] else 0),
+                        }
                     ),
                 ),
             ),
+            # Campos condicionales según el tipo
+            ConditionalFields(tipo, form_data, handle_form_change),
+            # Selección de equipos
+            TeamSelector(available_teams, form_data.get("Equipos", []), handle_team_change),
+            # Botones de acción
             html.div(
-                {"className": "column"},
-                html.div(
-                    {"className": "field"},
-                    html.label({"className": "label"}, "Hora Inicio"),
-                    html.div(
-                        {"className": "control"},
-                        html.input(
-                            {
-                                "type": "time",
-                                "className": "input",
-                                "value": form_data.get("HoraInicio"),
-                                "onChange": lambda e: handle_form_change("HoraInicio", e["target"]["value"]),
-                            }
-                        ),
-                    ),
-                ),
-            ),
-            html.div(
-                {"className": "column"},
-                html.div(
-                    {"className": "field"},
-                    html.label({"className": "label"}, "Tolerancia (min)"),
-                    html.div(
-                        {"className": "control"},
-                        html.input(
-                            {
-                                "type": "number",
-                                "className": "input",
-                                "value": form_data.get("Tolerancia"),
-                                "onChange": lambda e: handle_form_change("Tolerancia", int(e["target"]["value"]) if e["target"]["value"] else 0),
-                            }
-                        ),
-                    ),
-                ),
-            ),
-        ),
-        # Campos condicionales según el tipo
-        ConditionalFields(tipo, form_data, handle_form_change),
-        # Selección de equipos
-        TeamSelector(available_teams, form_data.get("Equipos", []), handle_team_change),
-        # Botones de acción
-        html.div(
-            {"className": "field is-grouped is-grouped-right mt-5"},
-            html.div(
-                {"className": "control"},
-                html.button({"type": "button", "className": "button", "onClick": lambda e: on_cancel(), "disabled": is_loading}, "Cancelar"),
-            ),
-            html.div(
-                {"className": "control"},
-                html.button(
-                    {"type": "submit", "className": f"button is-link {'is-loading' if is_loading else ''}", "disabled": is_loading}, "Guardar"
-                ),
+                {"className": "grid"},
+                html.button({"type": "button", "className": "secondary", "onClick": lambda e: on_cancel(), "disabled": is_loading}, "Cancelar"),
+                html.button({"type": "submit", "disabled": is_loading, "aria-busy": is_loading}, "Guardar"),
             ),
         ),
     )
@@ -238,53 +195,38 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
     """Campos condicionales según el tipo de programación"""
 
     if tipo == "Semanal":
-        return html.div(
-            {"className": "field"},
-            html.label({"className": "label"}, "Días (ej: Lu,Ma,Mi)"),
-            html.div(
-                {"className": "control"},
-                html.input(
-                    {
-                        "type": "text",
-                        "className": "input",
-                        "value": form_data.get("DiasSemana", ""),
-                        "onChange": lambda e: on_change("DiasSemana", e["target"]["value"]),
-                    }
-                ),
+        return html.label(
+            "Días (ej: Lu,Ma,Mi)",
+            html.input(
+                {
+                    "type": "text",
+                    "value": form_data.get("DiasSemana", ""),
+                    "onChange": lambda e: on_change("DiasSemana", e["target"]["value"]),
+                }
             ),
         )
     elif tipo == "Mensual":
-        return html.div(
-            {"className": "field"},
-            html.label({"className": "label"}, "Día del Mes"),
-            html.div(
-                {"className": "control"},
-                html.input(
-                    {
-                        "type": "number",
-                        "min": 1,
-                        "max": 31,
-                        "className": "input",
-                        "value": form_data.get("DiaDelMes", 1),
-                        "onChange": lambda e: on_change("DiaDelMes", int(e["target"]["value"]) if e["target"]["value"] else 1),
-                    }
-                ),
+        return html.label(
+            "Día del Mes",
+            html.input(
+                {
+                    "type": "number",
+                    "min": 1,
+                    "max": 31,
+                    "value": form_data.get("DiaDelMes", 1),
+                    "onChange": lambda e: on_change("DiaDelMes", int(e["target"]["value"]) if e["target"]["value"] else 1),
+                }
             ),
         )
     elif tipo == "Especifica":
-        return html.div(
-            {"className": "field"},
-            html.label({"className": "label"}, "Fecha Específica"),
-            html.div(
-                {"className": "control"},
-                html.input(
-                    {
-                        "type": "date",
-                        "className": "input",
-                        "value": form_data.get("FechaEspecifica", ""),
-                        "onChange": lambda e: on_change("FechaEspecifica", e["target"]["value"]),
-                    }
-                ),
+        return html.label(
+            "Fecha Específica",
+            html.input(
+                {
+                    "type": "date",
+                    "value": form_data.get("FechaEspecifica", ""),
+                    "onChange": lambda e: on_change("FechaEspecifica", e["target"]["value"]),
+                }
             ),
         )
 
@@ -313,12 +255,14 @@ def SchedulesList(schedules: List[Dict], robot_id: int, on_edit: Callable, on_de
                 html.td(format_schedule_details(s)),
                 html.td(", ".join([team["Equipo"] for team in s.get("Equipos", [])]) or "Ninguno"),
                 html.td(
-                    {"className": "buttons are-small is-justify-content-flex-end"},
-                    html.button({"className": "button is-light", "onClick": lambda e, sch=s: on_edit(sch)}, "Editar"),
-                    DeleteButton(
-                        schedule_id=s["ProgramacionId"],
-                        robot_id=robot_id,
-                        on_delete_success=on_delete_success,
+                    html.div(
+                        {"className": "grid"},
+                        html.button({"className": "outline", "onClick": lambda e, sch=s: on_edit(sch)}, "Editar"),
+                        DeleteButton(
+                            schedule_id=s["ProgramacionId"],
+                            robot_id=robot_id,
+                            on_delete_success=on_delete_success,
+                        ),
                     ),
                 ),
             )
@@ -329,9 +273,8 @@ def SchedulesList(schedules: List[Dict], robot_id: int, on_edit: Callable, on_de
 
     return html.div(
         html.table(
-            {"className": "table is-fullwidth is-hoverable is-striped"},
             html.thead(html.tr(html.th("Detalles"), html.th("Equipos"), html.th("Acciones"))),
-            html.tbody(rows if rows else html.tr(html.td({"colSpan": 3, "className": "has-text-centered"}, "No hay programaciones."))),
+            html.tbody(rows if rows else html.tr(html.td({"colSpan": 3}, "No hay programaciones."))),
         ),
     )
 
@@ -350,35 +293,46 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
     form_data, set_form_data = use_state(DEFAULT_FORM_STATE)
     is_loading, set_is_loading = use_state(False)
 
-    # Definir la función async por separado
-    async def load_data():
+    # Función para cargar datos
+    def load_data():
         if not robot:
             return
 
-        set_is_loading(True)
-        try:
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-                # Usar asyncio.gather para peticiones paralelas
-                schedules_task = client.get(f"{URL_BASE}/api/robots/{robot['RobotId']}/programaciones", headers=HTTP_HEADERS)
-                teams_task = client.get(f"{URL_BASE}/api/equipos/disponibles/{robot['RobotId']}", headers=HTTP_HEADERS)
+        async def fetch():
+            set_is_loading(True)
+            try:
+                async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+                    # Usar asyncio.gather para peticiones paralelas
+                    schedules_task = client.get(f"{URL_BASE}/api/robots/{robot['RobotId']}/programaciones", headers=HTTP_HEADERS)
+                    teams_task = client.get(f"{URL_BASE}/api/equipos/disponibles/{robot['RobotId']}", headers=HTTP_HEADERS)
 
-                schedules_res, teams_res = await asyncio.gather(schedules_task, teams_task)
-                schedules_res.raise_for_status()
-                teams_res.raise_for_status()
+                    schedules_res, teams_res = await asyncio.gather(schedules_task, teams_task)
+                    schedules_res.raise_for_status()
+                    teams_res.raise_for_status()
 
-                set_schedules(schedules_res.json())
-                set_available_teams(teams_res.json())
+                    set_schedules(schedules_res.json())
+                    set_available_teams(teams_res.json())
 
-        except httpx.HTTPError as e:
-            show_notification(f"Error de conexión: {e}", "error")
-            set_schedules([])
-            set_available_teams([])
-        except Exception as e:
-            show_notification(f"Error inesperado: {e}", "error")
-            set_schedules([])
-            set_available_teams([])
-        finally:
-            set_is_loading(False)
+            except httpx.HTTPError as e:
+                show_notification(f"Error de conexión: {e}", "error")
+                set_schedules([])
+                set_available_teams([])
+            except Exception as e:
+                show_notification(f"Error inesperado: {e}", "error")
+                set_schedules([])
+                set_available_teams([])
+            finally:
+                set_is_loading(False)
+
+        # Crear la tarea pero no retornarla
+        task = asyncio.create_task(fetch())
+
+        # Retornar función de limpieza
+        def cleanup():
+            if not task.done():
+                task.cancel()
+
+        return cleanup
 
     # Función optimizada para cargar datos
     fetch_data = use_callback(load_data, [robot])
@@ -388,6 +342,14 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
     # Definir la función async para submit por separado
     async def submit_form(event):
         set_is_loading(True)
+
+        # Validar que haya al menos un equipo seleccionado
+        equipos_list = list(form_data.get("Equipos", []))
+        if not equipos_list:
+            show_notification("Debe seleccionar al menos un equipo.", "error")
+            set_is_loading(False)
+            return
+
         # Crear payload asegurando que todos los valores sean serializables
         payload = {
             "ProgramacionId": form_data.get("ProgramacionId"),
@@ -398,7 +360,7 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
             "DiasSemana": form_data.get("DiasSemana"),
             "DiaDelMes": form_data.get("DiaDelMes"),
             "FechaEspecifica": form_data.get("FechaEspecifica"),
-            "Equipos": list(form_data.get("Equipos", [])),  # Asegurar que es lista
+            "Equipos": equipos_list,  # Ya validado que no está vacío
         }
 
         try:
@@ -416,7 +378,7 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                 show_notification(message, "success")
 
                 set_view_mode("list")
-                await fetch_data()
+                load_data()()  # Llamar la función directamente
                 await on_save_success()
 
         except httpx.HTTPError as e:
@@ -427,7 +389,7 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
             set_is_loading(False)
 
     # Manejadores de eventos optimizados
-    handle_form_submit = use_callback(submit_form, [form_data, robot, fetch_data, on_save_success])
+    handle_form_submit = use_callback(submit_form, [form_data, robot, on_save_success])
 
     def handle_edit_click(schedule_to_edit):
         # Asegurar que equipos_ids es siempre una lista
@@ -462,30 +424,15 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
     if not robot:
         return None
 
-    return html.div(
-        {"className": "modal is-active"},
-        html.div({"className": "modal-background", "onClick": on_close}),
-        html.div(
-            {"className": "modal-card", "style": {"width": "70%", "maxWidth": "960px"}},
+    return html.dialog(
+        {"open": True, "style": {"width": "90vw", "maxWidth": "800px"}},  # Modal más ancho
+        html.article(
             html.header(
-                {"className": "modal-card-head"},
-                html.div(
-                    {"className": "level is-mobile", "style": {"width": "100%"}},
-                    html.div({"className": "level-left"}, html.p({"className": "modal-card-title"}, "Gestionar Programaciones")),
-                    html.div(
-                        {"className": "level-right"},
-                        html.button(
-                            {"className": "button is-link", "onClick": lambda e: handle_new_click()},
-                            html.span({"className": "icon"}, html.i({"className": "fas fa-plus"})),
-                            html.span("Nueva Programación"),
-                        )
-                        if view_mode == "list"
-                        else None,
-                    ),
-                ),
+                html.button({"aria-label": "Close", "rel": "prev", "onClick": event(on_close, prevent_default=True)}),
+                html.h5(f"Programaciones del robot {robot.get('Robot', '')}"),
             ),
-            html.section(
-                {"className": "modal-card-body"},
+            # Contenido principal
+            html.main(
                 SchedulesList(schedules=schedules, robot_id=robot["RobotId"], on_edit=handle_edit_click, on_delete_success=on_save_success)
                 if view_mode == "list"
                 else ScheduleForm(
@@ -497,414 +444,15 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                     on_change=handle_form_change,
                 ),
             ),
+            # El footer solo es visible en la vista de lista
             html.footer(
-                {"className": "modal-card-foot is-justify-content-flex-end"},
-                html.button({"className": "button", "onClick": on_close}, "Cerrar"),
-            ),
+                html.div(
+                    {"className": "grid"},
+                    html.div(),  # Placeholder para alinear el botón a la derecha
+                    html.button({"onClick": lambda e: handle_new_click()}, "Crear nueva programación"),
+                )
+            )
+            if view_mode == "list"
+            else None,
         ),
     )
-
-
-"""VERSION ANTERIOR"""
-# # interfaz_web/components/schedules_modal.py
-
-# import asyncio
-# from typing import Any, Callable, Dict
-
-# import httpx
-# from reactpy import component, event, html, use_context, use_effect, use_state
-
-# from ..config.settings import Settings
-# from .notifications import NotificationContext
-
-# URL_BASE = Settings.API_BASE_URL
-
-
-# @component
-# def DeleteButton(schedule_id: int, robot_id: int, on_delete_success: Callable):
-#     """
-#     Botón de borrado autocontenido que maneja su lógica de clic
-#     y notifica al componente padre tras el éxito.
-#     """
-#     notification_ctx = use_context(NotificationContext)
-#     show_notification = notification_ctx["show_notification"]
-
-#     async def handle_click(event):
-#         try:
-#             # Aquí se podría añadir un diálogo de confirmación
-#             async with httpx.AsyncClient() as client:
-#                 await client.delete(f"{URL_BASE}/api/robots/{robot_id}/programaciones/{schedule_id}")
-#             show_notification("Programación eliminada.", "success")
-
-#             # Llamamos a la función que nos pasó el padre para refrescar toda la UI
-#             await on_delete_success()
-
-#         except Exception as e:
-#             show_notification(f"Error al eliminar: {e}", "error")
-
-#     return html.button({"className": "button is-danger is-light is-small", "onClick": handle_click}, "Eliminar")
-
-
-# # Valores por defecto para un nuevo formulario de programación
-# DEFAULT_FORM_STATE = {
-#     "ProgramacionId": None,
-#     "TipoProgramacion": "Diaria",
-#     "HoraInicio": "09:00",
-#     "Tolerancia": 60,
-#     "DiasSemana": "Lu,Ma,Mi,Ju,Vi",
-#     "DiaDelMes": 1,
-#     "FechaEspecifica": "",
-#     "Equipos": [],
-# }
-
-
-# @component
-# def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_success: Callable):
-#     notification_ctx = use_context(NotificationContext)
-#     show_notification = notification_ctx["show_notification"]
-
-#     # --- Estados del componente ---
-#     view_mode, set_view_mode = use_state("list")  # 'list' o 'form'
-#     schedules, set_schedules = use_state([])
-#     available_teams, set_available_teams = use_state([])
-#     form_data, set_form_data = use_state(DEFAULT_FORM_STATE)
-#     is_loading, set_is_loading = use_state(False)
-
-#     # --- Lógica de Datos ---
-#     async def fetch_data():
-#         if not robot:
-#             return
-#         set_is_loading(True)
-#         try:
-#             async with httpx.AsyncClient() as client:
-#                 # Usamos el puerto 8080 donde corre uvicorn
-#                 schedules_task = client.get(f"{URL_BASE}/api/robots/{robot['RobotId']}/programaciones")
-#                 teams_task = client.get(f"{URL_BASE}/api/equipos/disponibles/{robot['RobotId']}")
-#                 schedules_res, teams_res = await asyncio.gather(schedules_task, teams_task)
-#                 schedules_res.raise_for_status()
-#                 teams_res.raise_for_status()
-#                 set_schedules(schedules_res.json())
-#                 set_available_teams(teams_res.json())
-#         except Exception as e:
-#             show_notification(f"Error al cargar datos de programaciones: {e}", "error")
-#             set_schedules([])
-#             set_available_teams([])
-#         finally:
-#             set_is_loading(False)
-
-#     use_effect(fetch_data, [robot])
-
-#     # --- Manejadores de Eventos ---
-#     async def handle_form_submit(event):
-#         set_is_loading(True)
-#         payload = form_data.copy()
-#         payload["RobotId"] = robot["RobotId"]
-#         try:
-#             async with httpx.AsyncClient() as client:
-#                 if "ProgramacionId" in payload and payload["ProgramacionId"]:
-#                     url = f"{URL_BASE}/api/programaciones/{payload['ProgramacionId']}"
-#                     await client.put(url, json=payload, timeout=30)
-#                     show_notification("Programación actualizada con éxito.", "success")
-#                 else:
-#                     url = f"{URL_BASE}/api/programaciones"
-#                     await client.post(url, json=payload, timeout=30)
-#                     show_notification("Programación creada con éxito.", "success")
-#             set_view_mode("list")
-#             await fetch_data()
-#             await on_save_success()
-#         except Exception as e:
-#             show_notification(f"Error al guardar: {e}", "error")
-#         finally:
-#             set_is_loading(False)
-
-#     def handle_edit_click(schedule_to_edit):
-#         equipos_ids = [team["EquipoId"] for team in schedule_to_edit.get("Equipos", [])]
-
-#         form_state = {
-#             "ProgramacionId": schedule_to_edit.get("ProgramacionId"),
-#             "TipoProgramacion": schedule_to_edit.get("TipoProgramacion", "Diaria"),
-#             "HoraInicio": (schedule_to_edit.get("HoraInicio") or "09:00")[:5],
-#             "Tolerancia": schedule_to_edit.get("Tolerancia", 60),
-#             "DiasSemana": schedule_to_edit.get("DiasSemana", ""),
-#             "DiaDelMes": schedule_to_edit.get("DiaDelMes"),
-#             "FechaEspecifica": (schedule_to_edit.get("FechaEspecifica") or "")[:10],
-#             "Equipos": equipos_ids,
-#         }
-#         set_form_data(form_state)
-#         set_view_mode("form")
-
-#     def handle_form_change(field, value):
-#         set_form_data(lambda old: {**old, field: value})
-
-#     def handle_team_select(team_id, checked):
-#         current_teams = set(form_data.get("Equipos", []))
-#         if checked:
-#             current_teams.add(team_id)
-#         else:
-#             current_teams.discard(team_id)
-#         handle_form_change("Equipos", list(current_teams))
-
-#     def handle_new_click():
-#         set_form_data(DEFAULT_FORM_STATE)
-#         set_view_mode("form")
-
-#     # --- Funciones de Renderizado ---
-#     def render_list():
-#         rows = [
-#             html.tr(
-#                 {"key": s["ProgramacionId"]},
-#                 html.td(format_schedule_details(s)),
-#                 html.td(", ".join([team["Equipo"] for team in s.get("Equipos", [])]) or "Ninguno"),
-#                 html.td(
-#                     {"className": "buttons are-small is-justify-content-flex-end"},
-#                     html.button({"className": "button is-light", "onClick": lambda e, sch=s: handle_edit_click(sch)}, "Editar"),
-#                     DeleteButton(
-#                         schedule_id=s["ProgramacionId"],
-#                         robot_id=robot["RobotId"],
-#                         on_delete_success=on_save_success,  # Pasamos la función de refresco del padre
-#                     ),
-#                 ),
-#             )
-#             for s in schedules
-#         ]
-#         return html.div(
-#             html.table(
-#                 {"className": "table is-fullwidth is-hoverable is-striped"},
-#                 html.thead(html.tr(html.th("Detalles"), html.th("Equipos"), html.th("Acciones"))),
-#                 html.tbody(rows if rows else html.tr(html.td({"colSpan": 3, "className": "has-text-centered"}, "No hay programaciones."))),
-#             ),
-#         )
-
-#     def render_form():
-#         tipo = form_data.get("TipoProgramacion")
-
-#         # --- NUEVA LÓGICA PARA EL CHECKBOX "SELECCIONAR TODOS" ---
-#         selected_teams_set = set(form_data.get("Equipos", []))
-#         all_available_ids_set = {team["EquipoId"] for team in available_teams}
-#         are_all_teams_selected = all_available_ids_set and all_available_ids_set.issubset(selected_teams_set)
-
-#         def handle_select_all_teams(event):
-#             is_checked = event["target"]["checked"]
-#             if is_checked:
-#                 handle_form_change("Equipos", list(all_available_ids_set))
-#             else:
-#                 handle_form_change("Equipos", [])
-
-#         return html.form(
-#             {"onSubmit": event(handle_form_submit, prevent_default=True)},
-#             # Fila 1: Tipo, Hora, Tolerancia
-#             html.div(
-#                 {"className": "columns"},
-#                 html.div(
-#                     {"className": "column is-one-third"},
-#                     html.div(
-#                         {"className": "field"},
-#                         html.label({"className": "label"}, "Tipo de Programación"),
-#                         html.div(
-#                             {"className": "control"},
-#                             html.div(
-#                                 {"className": "select is-fullwidth"},
-#                                 html.select(
-#                                     {"value": tipo, "onChange": lambda e: handle_form_change("TipoProgramacion", e["target"]["value"])},
-#                                     html.option("Diaria"),
-#                                     html.option("Semanal"),
-#                                     html.option("Mensual"),
-#                                     html.option("Especifica"),
-#                                 ),
-#                             ),
-#                         ),
-#                     ),
-#                 ),
-#                 html.div(
-#                     {"className": "column"},
-#                     html.div(
-#                         {"className": "field"},
-#                         html.label({"className": "label"}, "Hora Inicio"),
-#                         html.div(
-#                             {"className": "control"},
-#                             html.input(
-#                                 {
-#                                     "type": "time",
-#                                     "className": "input",
-#                                     "value": form_data.get("HoraInicio"),
-#                                     "onChange": lambda e: handle_form_change("HoraInicio", e["target"]["value"]),
-#                                 },
-#                             ),
-#                         ),
-#                     ),
-#                 ),
-#                 html.div(
-#                     {"className": "column"},
-#                     html.div(
-#                         {"className": "field"},
-#                         html.label({"className": "label"}, "Tolerancia (min)"),
-#                         html.div(
-#                             {"className": "control"},
-#                             html.input(
-#                                 {
-#                                     "type": "number",
-#                                     "className": "input",
-#                                     "value": form_data.get("Tolerancia"),
-#                                     "onChange": lambda e: handle_form_change("Tolerancia", e["target"]["value"]),
-#                                 },
-#                             ),
-#                         ),
-#                     ),
-#                 ),
-#             ),
-#             # Fila 2: Campos Condicionales
-#             html.div(
-#                 {"style": {"display": "block" if tipo == "Semanal" else "none"}},
-#                 html.div(
-#                     {"className": "field"},
-#                     html.label({"className": "label"}, "Días (ej: Lu,Ma,Mi)"),
-#                     html.div(
-#                         {"className": "control"},
-#                         html.input(
-#                             {
-#                                 "type": "text",
-#                                 "className": "input",
-#                                 "value": form_data.get("DiasSemana"),
-#                                 "onChange": lambda e: handle_form_change("DiasSemana", e["target"]["value"]),
-#                             },
-#                         ),
-#                     ),
-#                 ),
-#             ),
-#             html.div(
-#                 {"style": {"display": "block" if tipo == "Mensual" else "none"}},
-#                 html.div(
-#                     {"className": "field"},
-#                     html.label({"className": "label"}, "Día del Mes"),
-#                     html.div(
-#                         {"className": "control"},
-#                         html.input(
-#                             {
-#                                 "type": "number",
-#                                 "min": 1,
-#                                 "max": 31,
-#                                 "className": "input",
-#                                 "value": form_data.get("DiaDelMes"),
-#                                 "onChange": lambda e: handle_form_change("DiaDelMes", e["target"]["value"]),
-#                             },
-#                         ),
-#                     ),
-#                 ),
-#             ),
-#             html.div(
-#                 {"style": {"display": "block" if tipo == "Especifica" else "none"}},
-#                 html.div(
-#                     {"className": "field"},
-#                     html.label({"className": "label"}, "Fecha Específica"),
-#                     html.div(
-#                         {"className": "control"},
-#                         html.input(
-#                             {
-#                                 "type": "date",
-#                                 "className": "input",
-#                                 "value": form_data.get("FechaEspecifica"),
-#                                 "onChange": lambda e: handle_form_change("FechaEspecifica", e["target"]["value"]),
-#                             },
-#                         ),
-#                     ),
-#                 ),
-#             ),
-#             # Fila 3: Selección de Equipos
-#             html.div(
-#                 {"className": "field mt-4"},
-#                 html.label({"className": "label"}, "Asignar Equipos"),
-#                 # Checkbox para seleccionar todos
-#                 html.div(
-#                     {"className": "field"},
-#                     html.label(
-#                         {"className": "checkbox is-small"},
-#                         html.input({"type": "checkbox", "checked": are_all_teams_selected, "onChange": handle_select_all_teams}),
-#                         " Seleccionar Todos / Deseleccionar Todos",
-#                     ),
-#                 ),
-#                 # Lista de equipos con scroll
-#                 html.div(
-#                     {"className": "control"},
-#                     html.div(
-#                         {"className": "box", "style": {"maxHeight": "20vh", "overflowY": "auto"}},
-#                         *[
-#                             html.div(
-#                                 {"key": team["EquipoId"]},
-#                                 html.label(
-#                                     {"className": "checkbox"},
-#                                     html.input(
-#                                         {
-#                                             "type": "checkbox",
-#                                             "checked": team["EquipoId"] in selected_teams_set,
-#                                             "onChange": lambda e, tid=team["EquipoId"]: handle_team_select(tid, e["target"]["checked"]),
-#                                         }
-#                                     ),
-#                                     f" {team['Equipo']}",
-#                                 ),
-#                             )
-#                             for team in available_teams
-#                         ],
-#                     ),
-#                 ),
-#             ),
-#             # Fila 4: Botones de Acción
-#             html.div(
-#                 {"className": "field is-grouped is-grouped-right mt-5"},
-#                 html.div(
-#                     {"className": "control"},
-#                     html.button(
-#                         {"type": "button", "className": "button", "onClick": lambda e: set_view_mode("list"), "disabled": is_loading}, "Cancelar"
-#                     ),
-#                 ),
-#                 html.div(
-#                     {"className": "control"},
-#                     html.button(
-#                         {"type": "submit", "className": f"button is-link {'is-loading' if is_loading else ''}", "disabled": is_loading}, "Guardar"
-#                     ),
-#                 ),
-#             ),
-#         )
-
-#     def format_schedule_details(schedule):
-#         details = f"{schedule.get('TipoProgramacion', 'N/A')} a las {schedule.get('HoraInicio', '')}"
-#         if schedule.get("TipoProgramacion") == "Semanal":
-#             details += f" los días {schedule.get('DiasSemana', '')}"
-#         elif schedule.get("TipoProgramacion") == "Mensual":
-#             details += f" el día {schedule.get('DiaDelMes', '')} de cada mes"
-#         elif schedule.get("TipoProgramacion") == "Especifica":
-#             details += f" en la fecha {schedule.get('FechaEspecifica', '')}"
-#         return details
-
-#     if not robot:
-#         return None
-
-#     return html.div(
-#         {"className": "modal is-active"},
-#         html.div({"className": "modal-background", "onClick": on_close}),
-#         html.div(
-#             {"className": "modal-card", "style": {"width": "70%", "maxWidth": "960px"}},
-#             html.header(
-#                 {"className": "modal-card-head"},
-#                 html.div(
-#                     {"className": "level is-mobile", "style": {"width": "100%"}},
-#                     html.div({"className": "level-left"}, html.p({"className": "modal-card-title"}, "Gestionar Programaciones")),
-#                     html.div(
-#                         {"className": "level-right"},
-#                         html.button(
-#                             {"className": "button is-link", "onClick": lambda e: handle_new_click()},
-#                             html.span({"className": "icon"}, html.i({"className": "fas fa-plus"})),
-#                             html.span("Nueva Programación"),
-#                         )
-#                         if view_mode == "list"
-#                         else None,
-#                     ),
-#                 ),
-#                 # html.button({"className": "delete", "aria-label": "close", "onClick": on_close}),
-#             ),
-#             html.section({"className": "modal-card-body"}, render_list() if view_mode == "list" else render_form()),
-#             html.footer(
-#                 {"className": "modal-card-foot is-justify-content-flex-end"},
-#                 html.button({"className": "button", "onClick": on_close}, "Cerrar"),
-#             ),
-#         ),
-#     )
