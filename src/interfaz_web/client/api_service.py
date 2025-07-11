@@ -6,10 +6,10 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from ..config.settings import Settings
-from ..schemas.robot_types import Robot, RobotFilters, RobotUpdateData
-from ..utils.exceptions import APIException, ValidationException
-from ..utils.validation import validate_robot_data
+from .config.settings import Settings
+from .schemas.robot_types import Robot, RobotFilters, RobotUpdateData
+from .utils.exceptions import APIException, ValidationException
+from .utils.validation import validate_robot_data
 
 
 class APIService:
@@ -87,7 +87,12 @@ class APIService:
         """
         try:
             # Ahora simplemente pasamos el diccionario de parámetros directamente.
-            data = await self._make_request("GET", "/api/robots", params=params)
+            data = await self._make_request("GET", "/api/robots/", params=params)
+            if not isinstance(data, dict):
+                # Si la respuesta no es un diccionario, es un error inesperado del backend.
+                # Lanza una excepción clara.
+                error_preview = str(data)[:200]  # Muestra los primeros 200 caracteres del error
+                raise APIException(f"La respuesta del servidor no es un JSON válido. Contenido: '{error_preview}...'")
 
             if isinstance(data, list):
                 return {"robots": data, "total_count": len(data)}
@@ -151,7 +156,7 @@ class APIService:
     async def get_robot_assignments(self, robot_id: int) -> List[Dict[str, Any]]:
         """Obtiene las asignaciones de un robot"""
         try:
-            return await self._make_request("GET", f"/api/robots/{robot_id}/asignaciones")
+            return await self._make_request("GET", f"/api/robots/{robot_id}/asignaciones/")
         except Exception as e:
             raise APIException(f"Error al obtener asignaciones del robot {robot_id}: {str(e)}")
 
@@ -166,7 +171,7 @@ class APIService:
         """Actualiza las asignaciones de un robot"""
         try:
             data = {"assign_team_ids": assign_team_ids, "unassign_team_ids": unassign_team_ids}
-            return await self._make_request("POST", f"/api/robots/{robot_id}/asignaciones", json_data=data)
+            return await self._make_request("POST", f"/api/robots/{robot_id}/asignaciones/", json_data=data)
         except Exception as e:
             raise APIException(f"Error al actualizar asignaciones del robot {robot_id}: {str(e)}")
 
@@ -177,14 +182,14 @@ class APIService:
     async def get_robot_schedules(self, robot_id: int) -> List[Dict[str, Any]]:
         """Obtiene las programaciones de un robot"""
         try:
-            return await self._make_request("GET", f"/api/robots/{robot_id}/programaciones")
+            return await self._make_request("GET", f"/api/robots/{robot_id}/programaciones/")
         except Exception as e:
             raise APIException(f"Error al obtener programaciones del robot {robot_id}: {str(e)}")
 
     async def create_schedule(self, schedule_data: Dict[str, Any]) -> Dict[str, str]:
         """Crea una nueva programación"""
         try:
-            return await self._make_request("POST", "/api/programaciones", json_data=schedule_data)
+            return await self._make_request("POST", "/api/programaciones/", json_data=schedule_data)
         except Exception as e:
             raise APIException(f"Error al crear programación: {str(e)}")
 
@@ -209,7 +214,7 @@ class APIService:
     async def health_check(self) -> Dict[str, Any]:
         """Verifica el estado de la API"""
         try:
-            return await self._make_request("GET", "/health")
+            return await self._make_request("GET", "/health/")
         except Exception as e:
             raise APIException(f"Error en health check: {str(e)}")
 

@@ -1,49 +1,44 @@
 # src/interfaz_web/components/common/pagination.py
 from typing import Callable
 
-from reactpy import component, html
+from reactpy import component, event, html
 
 
 @component
 def Pagination(current_page: int, total_pages: int, on_page_change: Callable):
     """
-    Un componente reutilizable para la navegación por páginas, estilizado con Bulma.
+    Componente de paginación refactorizado para Pico.css usando un grid.
     """
-    # La lógica de Python para manejar el estado no necesita cambios.
     is_first_page = current_page == 1
     is_last_page = current_page == total_pages
 
-    def handle_previous(event=None):
+    def handle_previous(e):
         if not is_first_page:
             on_page_change(current_page - 1)
 
-    def handle_next(event=None):
+    def handle_next(e):
         if not is_last_page:
             on_page_change(current_page + 1)
 
-    # --- CORRECCIÓN: Se utiliza 'buttons is-centered' para centrar la paginación ---
     return html.nav(
-        {"className": "py-4"},
+        {"className": "grid"},
+        # Botón Anterior (a la izquierda)
         html.div(
-            {"className": "buttons is-centered"},
             html.button(
-                {
-                    "className": "button is-small",
-                    "onClick": handle_previous,
-                    "disabled": is_first_page,
-                },
+                {"className": "secondary", "onClick": handle_previous, "disabled": is_first_page},
                 "Anterior",
-            ),
-            html.p(
-                {"className": "is-size-7 mx-4", "style": {"align-self": "center"}},
-                f"Página {current_page} de {total_pages}",
-            ),
+            )
+        ),
+        # Contador de Página (centrado)
+        html.div(
+            {"style": {"textAlign": "center", "lineHeight": "2.5rem"}},
+            f"Página {current_page} de {total_pages}",
+        ),
+        # Botón Siguiente (a la derecha)
+        html.div(
+            {"style": {"textAlign": "right"}},
             html.button(
-                {
-                    "className": "button is-small",
-                    "onClick": handle_next,
-                    "disabled": is_last_page,
-                },
+                {"className": "secondary", "onClick": handle_next, "disabled": is_last_page},
                 "Siguiente",
             ),
         ),
