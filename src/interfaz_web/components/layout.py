@@ -1,63 +1,48 @@
 # src/interfaz_web/components/layout.py
-from reactpy import component, html, use_state
+from typing import Callable
+
+from reactpy import component, html
+
+# Importamos el nuevo componente
+from .common.theme_switcher import ThemeSwitcher
 
 
 @component
-def AppLayout(*children):
+def AppLayout(children, theme_is_dark: bool, on_theme_toggle: Callable):
     """
-    Layout principal, ahora solo se preocupa por la estructura visual.
+    Layout principal que ahora recibe y pasa los props del tema.
     """
-    return html.section(
-        {"className": "section"},
-        html.div(
+    return html._(
+        Header(theme_is_dark=theme_is_dark, on_theme_toggle=on_theme_toggle),
+        html.main(
             {"className": "container"},
-            Header(),
-            html.main(*children),
+            *children,
         ),
     )
 
 
 @component
-def Header():
+def Header(theme_is_dark: bool, on_theme_toggle: Callable):
     """
-    Componente Header refactorizado con Bulma y preparado para tema oscuro.
+    Header que ahora recibe los props y renderiza el ThemeSwitcher.
     """
-    is_active, set_is_active = use_state(False)
-    navbar_menu_class = f"navbar-menu {'is-active' if is_active else ''}"
-
-    return html.nav(
-        # La clase 'is-dark' adapta el navbar al tema oscuro
-        {"className": "navbar", "role": "navigation", "aria-label": "main navigation"},
-        html.div(
-            {"className": "navbar-brand"},
-            html.a(
-                {"className": "navbar-item"},
-                # Placeholder para el logo
-                # html.div({"className": "box has-background-info", "style": {"width": "28px", "height": "28px", "padding": "0"}}),
-                html.h2({"className": "title is-1"}, "SAM"),
+    return html.header(
+        {"className": "container"},
+        html.a({"aria-label": "SAM", "data-discover": "true", "href": "/"}),
+        html.nav(
+            # Lado izquierdo: Logo y Links
+            html.ul(
+                html.li(html.strong(html.a({"href": "/", "className": "contrast"}, "SAM"))),
+                # html.li(html.a({"href": "#"}, "Robots")),
+                # html.li(html.a({"href": "#", "className": "secondary"}, "Equipos")),
+                # html.li(html.a({"href": "#", "className": "secondary"}, "Asignaciones")),
+                # html.li(html.a({"href": "#", "className": "secondary"}, "Programaciones")),
             ),
-            # html.a(
-            #     {
-            #         "role": "button",
-            #         "className": f"navbar-burger {'is-active' if is_active else ''}",
-            #         "aria-label": "menu",
-            #         "aria-expanded": "false",
-            #         "onClick": lambda e: set_is_active(not is_active),
-            #     },
-            #     html.span(),
-            #     html.span(),
-            #     html.span(),
-            #     html.span(),  # Spans para el ícono de hamburguesa
-            # ),
+            # Lado derecho: Interruptor del tema
+            html.ul(html.li(ThemeSwitcher(is_dark=theme_is_dark, on_toggle=on_theme_toggle))),
         ),
-        # html.div(
-        #     {"className": navbar_menu_class},
-        #     html.div(
-        #         {"className": "navbar-start"},
-        #         html.a({"className": "navbar-item is-active"}, "Robots"),
-        #         html.a({"className": "navbar-item"}, "Equipos"),
-        #         html.a({"className": "navbar-item"}, "Asignaciones"),
-        #         html.a({"className": "navbar-item"}, "Programaciones"),
-        #     ),
-        # ),
     )
+
+
+@component
+def Footer(): ...

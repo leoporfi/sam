@@ -82,50 +82,47 @@ def RobotDashboard():
             set_modal_view("schedule")
 
     # LÓGICA DE RENDERIZADO
-    # --- LÓGICA DE RENDERIZADO (CON CORRECCIÓN) ---
     if error:
-        # --- CORRECCIÓN: Usamos el componente 'notification' de Bulma para errores ---
-        content = html.div({"className": "notification is-danger is-light"}, f"Error al cargar datos: {error}")
+        content = html.article(f"Error al cargar datos: {error}", aria_invalid="true")
     elif loading and not robots:
         content = LoadingSpinner()
     else:
         content = RobotTable(robots=robots, on_action=handle_robot_action, sort_by=sort_by, sort_dir=sort_dir, on_sort=handle_sort)
 
     return html._(
-        # La cabecera con el 'level' ya estaba bien.
-        html.div(
-            {"className": "level mb-5"},
+        html.section(
+            {"aria-label": "Controles de Búsqueda y Filtros"},
+            html.h1("Gestión de Robots"),
             html.div(
-                {"className": "level-left"},
-                html.div({"className": "level-item"}, html.h1({"className": "title is-2"}, "Gestión de Robots")),
-            ),
-            html.div(
-                {"className": "level-right"},
+                {"className": "grid"},
                 html.div(
-                    {"className": "level-item"},
+                    {"style": {"textAlign": "right"}},
                     html.button(
-                        {"className": "button is-link", "onClick": handle_create_robot},
-                        html.span({"className": "icon"}, html.i({"className": "fas fa-plus"})),
-                        html.span("Añadir Robot"),
+                        {"onClick": handle_create_robot},
+                        html.i({"className": "fa-solid fa-plus"}),
+                        " Añadir Robot",
                     ),
                 ),
             ),
         ),
-        # El componente de filtros ya estaba bien.
-        RobotFiltersComponent(
-            search_term=search_term,
-            active_filter="all" if filters.get("active") is None else str(filters.get("active")).lower(),
-            online_filter="all" if filters.get("online") is None else str(filters.get("online")).lower(),
-            on_search_change=set_search_term,
-            on_active_change=handle_active_filter_change,
-            on_online_change=handle_online_filter_change,
+        html.section(
+            {"aria-label": "Controles de Búsqueda y Filtros"},
+            # Pasamos los props al componente de filtros, que también vamos a refactorizar.
+            RobotFiltersComponent(
+                search_term=search_term,
+                active_filter="all" if filters.get("active") is None else str(filters.get("active")).lower(),
+                online_filter="all" if filters.get("online") is None else str(filters.get("online")).lower(),
+                on_search_change=set_search_term,
+                on_active_change=handle_active_filter_change,
+                on_online_change=handle_online_filter_change,
+            ),
         ),
-        # --- CORRECCIÓN ---
-        html.div(
+        # El contenido principal (tabla o spinner) y la paginación
+        html._(
             content,
             Pagination(current_page=current_page, total_pages=total_pages, on_page_change=set_current_page) if total_pages > 1 else None,
         ),
-        # Los modales no cambian, su lógica es interna.
+        # Los modales se mantienen igual, su lógica es interna por ahora.
         RobotEditModal(robot=selected_robot if modal_view == "edit" else None, on_close=handle_modal_close, on_save_success=handle_save_and_refresh),
         AssignmentsModal(
             robot=selected_robot if modal_view == "assign" else None, on_close=handle_modal_close, on_save_success=handle_save_and_refresh
