@@ -8,6 +8,7 @@ from ..client.api_service import get_api_service
 from .notifications import NotificationContext
 
 
+# AssignmentsModal
 @component
 def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_success: Callable):
     # El estado se inicializa correctamente con listas
@@ -56,6 +57,13 @@ def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_s
     if not robot:
         return None
 
+    def get_estado(team: Dict) -> tuple[str, str]:
+        if team.get("EsProgramado"):
+            return ("Programado", "tag-programado")
+        if team.get("Reservado"):
+            return ("Reservado", "tag-reservado")
+        return ("Dinámico", "tag-dinamico")
+
     return html.dialog(
         {"open": True},
         html.article(
@@ -71,7 +79,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_s
                 html.div(
                     html.h5("Equipos Asignados"),
                     html.div(
-                        {"style": {"maxHeight": "40vh", "overflow-y": "auto"}},
+                        {"style": {"maxHeight": "40vh", "overflow-y": "auto", "font-size": "0.90rem"}},
                         html.table(
                             html.thead(
                                 html.tr(
@@ -86,6 +94,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_s
                                         )
                                     ),
                                     html.th("Nombre Equipo"),
+                                    html.th("Estado"),
                                 )
                             ),
                             html.tbody(
@@ -104,6 +113,13 @@ def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_s
                                             )
                                         ),
                                         html.td(team["Equipo"]),
+                                        html.td(
+                                            # Usamos un <span> para poder darle estilo si queremos
+                                            html.span(
+                                                {"className": f"tag {get_estado(team)[1]}"},
+                                                get_estado(team)[0],  # Llamamos a la función para obtener el texto
+                                            )
+                                        ),
                                     )
                                     for team in assigned_teams
                                     if isinstance(team, dict)
@@ -116,7 +132,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_s
                 html.div(
                     html.h5("Equipos Disponibles"),
                     html.div(
-                        {"style": {"maxHeight": "40vh", "overflowY": "auto"}},
+                        {"style": {"maxHeight": "40vh", "overflow-y": "auto", "font-size": "0.90rem"}},
                         html.table(
                             html.thead(
                                 html.tr(
