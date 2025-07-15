@@ -43,7 +43,6 @@ def RobotTable(robots: List[Robot], on_action: Callable, sort_by: str, sort_dir:
         html.div(
             {"className": "table-container"},  # Para que la tabla sea responsive en pantallas pequeñas
             html.table(
-                {"className": "striped"},
                 html.thead(html.tr(*[render_header(h) for h in table_headers])),
                 html.tbody(
                     *[RobotRow(robot=robot, on_action=on_action) for robot in robots]

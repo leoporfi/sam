@@ -1,19 +1,16 @@
 # src/interfaz_web/api/equipos.py
-from fastapi import APIRouter, HTTPException, Depends
-from ..dependencies import get_db_connector
-from ..services import equipo_service
+from fastapi import APIRouter, Depends, HTTPException
+
 from common.database.sql_client import DatabaseConnector
 
-router = APIRouter(
-    prefix="/api/equipos",
-    tags=["Equipos"]
-)
+from ..dependencies import get_db_connector
+from ..services import equipo_service
+
+router = APIRouter(prefix="/api/equipos", tags=["Equipos"])
+
 
 @router.get("/disponibles/{robot_id}")
-def get_available_teams(
-    robot_id: int,
-    db: DatabaseConnector = Depends(get_db_connector)
-):
+def get_available_teams(robot_id: int, db: DatabaseConnector = Depends(get_db_connector)):
     """
     Obtiene la lista de equipos disponibles para ser asignados a un robot.
     """
