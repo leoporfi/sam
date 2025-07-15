@@ -90,37 +90,40 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
         html.article(
             html.header(
                 html.button({"aria-label": "Close", "rel": "prev", "onClick": event(on_close, prevent_default=True)}),
-                "Editar Robot" if is_edit_mode else "Crear Nuevo Robot",
+                html.h2("Editar Robot") if is_edit_mode else html.h2("Crear Nuevo Robot"),
             ),
             html.form(
                 {"id": "robot-form", "onSubmit": event(handle_save, prevent_default=True)},
-                # Campo Robot ID
-                html.label(
-                    {"htmlFor": "robot-id"},
-                    "Robot ID (de A360)",
-                    html.input(
-                        {
-                            "id": "robot-id",
-                            "type": "number",
-                            "value": form_data.get("RobotId", ""),
-                            "onChange": lambda e: handle_form_change("RobotId", e["target"]["value"]),
-                            "required": not is_edit_mode,
-                            "disabled": is_edit_mode,
-                        }
+                html.div(
+                    {"className": "grid"},
+                    # Campo Nombre
+                    html.label(
+                        {"htmlFor": "robot-name"},
+                        "Nombre",
+                        html.input(
+                            {
+                                "id": "robot-name",
+                                "type": "text",
+                                "value": form_data.get("Robot", ""),
+                                "onChange": lambda e: handle_form_change("Robot", e["target"]["value"]),
+                                "required": True,
+                            }
+                        ),
                     ),
-                ),
-                # Campo Nombre
-                html.label(
-                    {"htmlFor": "robot-name"},
-                    "Nombre",
-                    html.input(
-                        {
-                            "id": "robot-name",
-                            "type": "text",
-                            "value": form_data.get("Robot", ""),
-                            "onChange": lambda e: handle_form_change("Robot", e["target"]["value"]),
-                            "required": True,
-                        }
+                    # Campo Robot ID
+                    html.label(
+                        {"htmlFor": "robot-id"},
+                        "Robot ID (de A360)",
+                        html.input(
+                            {
+                                "id": "robot-id",
+                                "type": "number",
+                                "value": form_data.get("RobotId", ""),
+                                "onChange": lambda e: handle_form_change("RobotId", e["target"]["value"]),
+                                "required": not is_edit_mode,
+                                "disabled": is_edit_mode,
+                            }
+                        ),
                     ),
                 ),
                 # Campo Descripción
@@ -141,27 +144,43 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                     html.label(
                         {"htmlFor": "min-equipos"},
                         "Mín. Equipos",
-                        html.input(
-                            {
-                                "id": "min-equipos",
-                                "type": "range",
-                                "min": "0",
-                                "value": form_data.get("MinEquipos", ""),
-                                "onChange": lambda e: handle_form_change("MinEquipos", e["target"]["value"]),
-                            }
+                        html.div(
+                            {"className": "range"},
+                            html.output(
+                                form_data.get("MinEquipos", "0"),
+                            ),
+                            html.input(
+                                {
+                                    "id": "min-equipos",
+                                    "type": "range",
+                                    "min": "0",
+                                    "max": "99",
+                                    "value": form_data.get("MinEquipos", ""),
+                                    "onChange": lambda e: handle_form_change("MinEquipos", e["target"]["value"]),
+                                    "style": {"flexGrow": "1"},
+                                }
+                            ),
                         ),
                     ),
                     html.label(
                         {"htmlFor": "max-equipos"},
                         "Máx. Equipos",
-                        html.input(
-                            {
-                                "id": "max-equipos",
-                                "type": "range",
-                                "min": "-1",
-                                "value": form_data.get("MaxEquipos", ""),
-                                "onChange": lambda e: handle_form_change("MaxEquipos", e["target"]["value"]),
-                            }
+                        html.div(
+                            {"className": "range"},
+                            html.output(
+                                form_data.get("MaxEquipos", "0"),
+                            ),
+                            html.input(
+                                {
+                                    "id": "max-equipos",
+                                    "type": "range",
+                                    "min": "-1",
+                                    "max": "100",
+                                    "value": form_data.get("MaxEquipos", ""),
+                                    "onChange": lambda e: handle_form_change("MaxEquipos", e["target"]["value"]),
+                                    "style": {"flexGrow": "1"},
+                                }
+                            ),
                         ),
                     ),
                 ),
@@ -170,29 +189,45 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                     html.label(
                         {"htmlFor": "prioridad"},
                         "Prioridad",
-                        html.input(
-                            {
-                                "id": "prioridad",
-                                "type": "range",
-                                "min": "0",
-                                "max": "100",
-                                "step": "10",
-                                "value": form_data.get("PrioridadBalanceo", ""),
-                                "onChange": lambda e: handle_form_change("PrioridadBalanceo", e["target"]["value"]),
-                            }
+                        html.div(
+                            {"className": "range"},
+                            html.output(
+                                {"className": "button"},
+                                form_data.get("PrioridadBalanceo", "0"),
+                            ),
+                            html.input(
+                                {
+                                    "id": "prioridad",
+                                    "type": "range",
+                                    "min": "0",
+                                    "max": "100",
+                                    "step": "10",
+                                    "value": form_data.get("PrioridadBalanceo", ""),
+                                    "onChange": lambda e: handle_form_change("PrioridadBalanceo", e["target"]["value"]),
+                                    "style": {"flexGrow": "1"},
+                                }
+                            ),
                         ),
                     ),
                     html.label(
                         {"htmlFor": "tickets"},
                         "Tickets/Equipo Adic.",
-                        html.input(
-                            {
-                                "id": "tickets",
-                                "type": "number",
-                                "min": "0",
-                                "value": form_data.get("TicketsPorEquipoAdicional", ""),
-                                "onChange": lambda e: handle_form_change("TicketsPorEquipoAdicional", e["target"]["value"]),
-                            }
+                        html.div(
+                            {"className": "range"},
+                            html.output(
+                                form_data.get("TicketsPorEquipoAdicional", "0"),
+                            ),
+                            html.input(
+                                {
+                                    "id": "tickets",
+                                    "type": "range",
+                                    "min": "1",
+                                    "max": "100",
+                                    "value": form_data.get("TicketsPorEquipoAdicional", ""),
+                                    "onChange": lambda e: handle_form_change("TicketsPorEquipoAdicional", e["target"]["value"]),
+                                    "style": {"flexGrow": "1"},
+                                }
+                            ),
                         ),
                     ),
                 ),

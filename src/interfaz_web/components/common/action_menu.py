@@ -14,7 +14,10 @@ def ActionMenu(actions: List[Dict[str, any]]):
         # La clase 'dropdown' le da el estilo y posicionamiento correcto.
         {"className": "dropdown"},
         # Esto es lo que se ve siempre: el icono de 3 puntos.
-        html.summary({"role": "button", "className": "outline"}, html.i({"className": "fas fa-ellipsis-v"})),
+        html.summary(
+            {"role": "", "className": "outline"},
+            # html.i({"className": "fas fa-ellipsis-v"}),
+        ),
         # Esto es lo que se despliega.
         html.ul(
             {"role": "listbox"},

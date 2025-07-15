@@ -334,7 +334,8 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
         html.article(
             html.header(
                 html.button({"aria-label": "Close", "rel": "prev", "onClick": event(on_close, prevent_default=True)}),
-                html.h5(f"Programaciones del robot {robot.get('Robot', '')}"),
+                html.h2("Programación de Robots"),
+                html.p(f"{robot.get('Robot', '')}"),
             ),
             # Contenido principal
             html._(
