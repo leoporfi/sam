@@ -115,6 +115,7 @@ class APIService:
         """Crea un nuevo robot"""
         # Validar datos antes de enviar
         validation_result = validate_robot_data(robot_data)
+
         if not validation_result.is_valid:
             raise ValidationException("Datos inválidos", validation_result.errors)
 
@@ -182,14 +183,14 @@ class APIService:
     async def get_robot_schedules(self, robot_id: int) -> List[Dict[str, Any]]:
         """Obtiene las programaciones de un robot"""
         try:
-            return await self._make_request("GET", f"/api/robots/{robot_id}/programaciones/")
+            return await self._make_request("GET", f"/api/robots/{robot_id}/programaciones")
         except Exception as e:
             raise APIException(f"Error al obtener programaciones del robot {robot_id}: {str(e)}")
 
     async def create_schedule(self, schedule_data: Dict[str, Any]) -> Dict[str, str]:
         """Crea una nueva programación"""
         try:
-            return await self._make_request("POST", "/api/programaciones/", json_data=schedule_data)
+            return await self._make_request("POST", "/api/programaciones", json_data=schedule_data)
         except Exception as e:
             raise APIException(f"Error al crear programación: {str(e)}")
 
