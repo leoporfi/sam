@@ -91,7 +91,7 @@ def RobotDashboard():
 
     return html._(
         html.section(
-            {"aria-label": "Controles de Búsqueda y Filtros"},
+            {"aria-label": "Agregar Robot"},
             html.h1("Gestión de Robots"),
             html.div(
                 {"className": "grid"},

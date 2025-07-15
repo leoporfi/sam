@@ -44,6 +44,7 @@ def App():
         value=context_value,
     )
 
+
 # --- Elementos que inyectaremos en el <head> de la página ---
 head = html.head(
     html.title("SAM"),
