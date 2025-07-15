@@ -1,5 +1,36 @@
-/* --- SISTEMA DE NOTIFICACIONES --- */
+.range{display: "flex"; align-items: "center"; gap: "1rem";}
 
+.tag {
+    display: inline-block;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.75rem;
+    font-weight: bold;
+    line-height: 1.25;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: var(--pico-border-radius);
+  }
+  
+  /* Estado Dinámico (Verde) */
+  .tag-dinamico {
+    color: #198754; /* Un verde oscuro y legible */
+    background-color: rgba(40, 167, 69, 0.2);
+  }
+  
+  /* Estado Programado (Azul) */
+  .tag-programado {
+    color: #0d6efd; /* Azul primario */
+    background-color: rgba(13, 110, 253, 0.2);
+  }
+  
+  /* Estado Reservado (Naranja) */
+  .tag-reservado {
+    color: #fd7e14; /* Naranja */
+    background-color: rgba(253, 126, 20, 0.2);
+  }
+
+  
 /* Contenedor principal de notificaciones */
 .toast-container {
     position: fixed;
@@ -188,16 +219,18 @@
     }
 }
 
-
+/* Tabla responsiba*/
 .table-container {
     overflow: auto;
 }
 
+/*  tipogracias y estilo nuevo */
 :root {
-    --pico-border-radius: 2rem;
+    --pico-border-radius: 1rem;
     --pico-typography-spacing-vertical: 1.5rem;
     --pico-form-element-spacing-vertical: 1rem;
     --pico-form-element-spacing-horizontal: 1.25rem;
+    --pico-font-size: 0.98rem;
 }
 
 h1 {
@@ -217,3 +250,41 @@ a {
 table thead th a:hover {
     --pico-text-decoration: none;
 }
+
+
+/* --- AJUSTE PARA REDUCIR ALTURA DE FILAS DE LA TABLA --- */
+
+/* 1. Reduce el padding vertical de TODAS las celdas de la tabla */
+table td, table th {
+    --pico-table-cell-padding: 0.5rem 1rem; /* Reducimos de 0.75rem a 0.5rem arriba y abajo */
+  }
+  
+  /* 2. Elimina el margen inferior de los fieldset dentro de la tabla */
+  /* Esto compacta los interruptores "Activo" y "Online" verticalmente. */
+  table td fieldset {
+    margin-bottom: 0;
+  }
+
+  /* --- AJUSTE PARA BOTONES MÁS PEQUEÑOS Y COMPACTOS --- */
+
+/* Esta regla se aplica a todos los botones y al menú de acciones */
+button, 
+details summary {
+    /* Reduce el tamaño del texto (por defecto es 1rem) */
+  --pico-font-size: 0.75rem; 
+  /* Reduce la altura (por defecto es 0.75rem) */
+  --pico-form-element-padding-vertical: 0.5rem; 
+  /* Puedes ajustar el ancho si lo deseas */
+  --pico-form-element-padding-horizontal: 0.5rem; 
+}
+
+/* Ajusta el tamaño de los iconos dentro de los botones */
+button i.fa-solid { 
+    /* Un poco más pequeño que el texto del botón */
+    font-size: 0.8rem; 
+    /* Ajusta el espacio entre el ícono y el texto */
+    margin-right: 0.35rem; 
+}
+
+
+/* --- ESTILO PARA TAGS/BADGES DE ESTADO --- */

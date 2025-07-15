@@ -69,9 +69,8 @@ def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_s
         html.article(
             html.header(
                 html.button({"aria-label": "Close", "rel": "prev", "onClick": event(on_close, prevent_default=True)}),
-                html.p(
-                    html.strong(f"Asignaciones del robot {robot.get('Robot', '')}"),
-                ),
+                html.h2("Asignación de Robots"),
+                html.p(f"{robot.get('Robot', '')}"),
             ),
             html.div(
                 {"className": "grid"},
