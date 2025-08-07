@@ -10,6 +10,8 @@ Autor: Equipo SAM
 Fecha: 2024
 """
 
+import asyncio
+import signal
 import sys
 from pathlib import Path
 
@@ -21,6 +23,7 @@ if str(SRC_ROOT) not in sys.path:
 
 # Ahora podemos importar y usar ConfigLoader de forma segura
 from common.utils.config_loader import ConfigLoader
+from lanzador.service.main import handle_shutdown_signal, start_lanzador
 
 # Inicializa el servicio. ConfigLoader se encarga de:
 # 1. Determinar las rutas del proyecto.
@@ -35,10 +38,15 @@ from lanzador.service.main import start_lanzador
 
 # === EJECUCIÓN DEL SERVICIO ===
 if __name__ == "__main__":
-    # Opcional: Imprimir un resumen de la configuración cargada para este servicio.
-    print("--- Resumen de Configuración para 'Lanzador' ---")
-    ConfigManager.print_config_summary("lanzador")
-    print("-------------------------------------------------")
+    # Configurar manejo de señales para un cierre limpio
+    signal.signal(signal.SIGINT, lambda s, f: handle_shutdown_signal())
+    signal.signal(signal.SIGTERM, lambda s, f: handle_shutdown_signal())
 
-    # Llama a la función que inicia toda la lógica del servicio Lanzador.
-    start_lanzador()
+    print("Iniciando Servicio Lanzador Asíncrono...")
+
+    # --- CAMBIO PRINCIPAL AQUÍ ---
+    # Usamos asyncio.run() para iniciar la función asíncrona principal
+    try:
+        asyncio.run(start_lanzador())
+    except KeyboardInterrupt:
+        print("Apagado forzado por el usuario.")
