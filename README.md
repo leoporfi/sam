@@ -2,8 +2,8 @@
 
 ## **📜 Visión General**
 
-**SAM (Sistema Automático de Robots)** es un proyecto integral diseñado para la **implementación, distribución y orquestación automática de robots RPA (Robotic Process Automation) en máquinas virtuales (VMs)**. El sistema se compone de cuatro servicios independientes que operan en conjunto y se ejecutan de forma continua, gestionados a través de una configuración centralizada y un conjunto de módulos comunes que garantizan la estabilidad y mantenibilidad del ecosistema.  
-SAM centraliza la gestión de robots, sincroniza información de forma inteligente con **Automation Anywhere A360 (AA360)**, lanza ejecuciones según la demanda o programaciones, y optimiza la asignación de recursos (VMs) basándose en la carga de trabajo pendiente. Adicionalmente, cuenta con una **interfaz web de mantenimiento** para gestionar la configuración y las operaciones del sistema directamente desde un navegador.  
+**SAM (Sistema Automático de Robots)** es un proyecto integral diseñado para la **implementación, distribución y orquestación automática de robots RPA (Robotic Process Automation) en máquinas virtuales (VMs)**. El sistema se compone de cuatro servicios independientes que operan en conjunto y se ejecutan de forma continua, gestionados a través de una configuración centralizada y un conjunto de módulos comunes que garantizan la estabilidad y mantenibilidad del ecosistema.
+SAM centraliza la gestión de robots, sincroniza información de forma inteligente con **Automation Anywhere A360 (AA360)**, lanza ejecuciones según la demanda o programaciones, y optimiza la asignación de recursos (VMs) basándose en la carga de trabajo pendiente, segmentando los recursos en pools dedicados o generales para un control granular. Adicionalmente, cuenta con una **interfaz web de mantenimiento** para gestionar la configuración y las operaciones del sistema directamente desde un navegador.
 
 ---
 ## **🚀 Servicios Principales**
@@ -14,49 +14,52 @@ El proyecto SAM se articula en torno a los siguientes servicios independientes:
 
 Actúa como el brazo ejecutor y el cerebro de sincronización con el Control Room de AA360. Es un servicio multifacético con tres responsabilidades clave que se ejecutan en ciclos independientes y configurables:
 
-* **Sincronización Inteligente de Tablas Maestras**: Mantiene las tablas dbo.Robots y dbo.Equipos de SAM actualizadas con la realidad de AA360.  
-  * **Sincronización de Equipos (VMs)**: Obtiene la lista de *devices* conectados desde A360, cruza la información con los datos de los usuarios asignados para determinar la licencia (`ATTENDEDRUNTIME`, etc.) y calcula un estado de actividad (`Activo_SAM`) antes de actualizar la tabla dbo.Equipos mediante una operación MERGE.  
-  * **Sincronización de Robots**: Importa únicamente los *taskbots* que cumplen con criterios específicos de nombre y ubicación en el repositorio de A360, aplicando filtros por prefijo de nombre (`P\*`) y una expresión regular para asegurar la consistencia del catálogo de robots en SAM.  
+* **Sincronización Inteligente de Tablas Maestras**: Mantiene las tablas dbo.Robots y dbo.Equipos de SAM actualizadas con la realidad de AA360.
+  * **Sincronización de Equipos (VMs)**: Obtiene la lista de *devices* conectados desde A360, cruza la información con los datos de los usuarios asignados para determinar la licencia (`ATTENDEDRUNTIME`, etc.) y calcula un estado de actividad (`Activo_SAM`) antes de actualizar la tabla dbo.Equipos.
+  * **Sincronización de Robots**: Importa únicamente los *taskbots* que cumplen con criterios específicos de nombre y ubicación en el repositorio de A360.  
 * **Lanzamiento de Robots**: Es el núcleo ejecutor del servicio.  
   * **Lógica Centralizada en BD**: Su comportamiento se basa en los resultados del Stored Procedure dbo.ObtenerRobotsEjecutables, que determina qué robots deben ejecutarse en cada momento, ya sea por programación o por asignación dinámica del balanceador.  
-  * **Ejecución Concurrente y con Reintentos**: Lanza múltiples robots en paralelo utilizando un ThreadPoolExecutor. Si un despliegue falla por una causa reintentable (ej. un problema de red o de dispositivo temporalmente ocupado), el sistema intentará lanzar el robot una segunda vez tras una breve pausa.  
-  * **Pausa Operacional**: Se puede configurar una ventana de tiempo (ej. 23:00 a 05:00) durante la cual el servicio de lanzamiento se pausará para no iniciar nuevas ejecuciones, facilitando tareas de mantenimiento.  
+  * **Ejecución Concurrente y con Reintentos**: Lanza múltiples robots en paralelo utilizando un ThreadPoolExecutor.  
+  * **Pausa Operacional**: Se puede configurar una ventana de tiempo durante la cual el servicio no iniciará nuevas ejecuciones.
 * **Conciliación de Estados**: De forma periódica, el Conciliador revisa las ejecuciones que figuran como activas en la base de datos de SAM. Consulta su estado real en A360 y actualiza los registros locales. Si una ejecución ya no se encuentra en la API de A360 (posiblemente finalizada hace tiempo), se marca con el estado UNKNOWN para evitar que quede indefinidamente "activa".
 
 ### **⚖️ Servicio Balanceador**
 
 El servicio **Balanceador** se encarga de la gestión estratégica e inteligente de los recursos (VMs), asignándolos dinámicamente a los robots en función de la carga de trabajo real. Su objetivo es maximizar la eficiencia y el rendimiento del clúster de RPA.
 
-#### **Adquisición de Carga y Pool de Recursos**
+#### **Gestión de Pools de Recursos y Carga de Trabajo**
 
-Para tomar decisiones, el Balanceador primero recopila toda la información necesaria sobre los recursos disponibles y la demanda existente:
+**El sistema de balanceo ahora opera sobre una jerarquía de pools de recursos para ofrecer un control granular sobre la asignación de VMs.**
 
-* **Gestión del Pool de VMs**: Identifica las máquinas virtuales disponibles para asignación dinámica consultando la tabla `dbo.Equipos`. Un equipo se considera parte del pool dinámico solo si cumple con todos estos criterios:  
-  * Tiene una licencia de tipo `ATTENDEDRUNTIME`.  
-  * Está marcado como `Activo_SAM = 1`.  
-  * Tiene el flag `PermiteBalanceoDinamico = 1`.  
-  * No tiene asignaciones fijas (es decir, ni `Reservado = 1` ni `EsProgramado = 1` en `dbo.Asignaciones`).  
-* **Adquisición de Carga de Trabajo Concurrente**: Determina la cantidad de "tickets" o tareas pendientes para cada robot. Para ser eficiente, obtiene esta información de **dos fuentes de datos distintas de forma paralela** usando un ThreadPoolExecutor:  
-  * **SQL Server (rpa360)**: Ejecuta el Stored Procedure `dbo.usp_obtener_tickets_pendientes_por_robot` en una base de datos externa.  
-  * **MySQL (clouders)**: Utiliza un cliente SSH (MySQLSSHClient) que gestiona un pool de conexiones, ejecuta comandos de forma remota y parsea los resultados para obtener la carga desde una base de datos MySQL remota.  
-* **Mapeo de Nombres de Robots**: Utiliza un diccionario de mapeo definido en la variable de entorno `MAPA_ROBOTS` para conciliar los nombres de los robots que vienen de la base de datos "clouders" con los nombres estándar utilizados en SAM, asegurando la consistencia.
+* **Pools Dedicados**: Es posible crear grupos nombrados de recursos (ej. "Pool de Contabilidad"). Un **Pool Dedicado** consiste en:  
+  * Un conjunto específico de **Equipos** (VMs) asignados a ese pool.  
+  * Un conjunto específico de **Robots** asignados a ese pool.  
+  * **Lógica de Prioridad:** Los robots de un pool dedicado **siempre intentarán satisfacer su demanda utilizando los equipos de su propio pool primero.**  
+* **Pool General**:  
+  * Cualquier robot o equipo que **no** esté asignado a un pool específico (PoolId IS NULL) pertenece automáticamente al Pool General.  
+  * Funciona como en la versión anterior para los robots generales, pero además actúa como un **reservorio de recursos para desborde (overflow)**.
+
+* **Adquisición de Carga de Trabajo Concurrente**: El método para determinar la cantidad de "tickets" o tareas pendientes para cada robot se mantiene, obteniendo información de **dos fuentes de datos distintas de forma paralela** (SQL Server y MySQL).
 
 #### **Lógica de Balanceo Avanzada y Multifásica**
 
-El núcleo del servicio es su algoritmo de balanceo, encapsulado en la clase Balanceo, que se ejecuta en varias fases secuenciales para garantizar un orden lógico en la toma de decisiones:
+El núcleo del servicio es su algoritmo de balanceo, que ahora opera con una lógica jerárquica para respetar los pools, manteniendo su estructura multifásica.
 
-* **Pre-Fase: Validación de Asignaciones**: Antes de cualquier cálculo, el sistema verifica que todos los equipos asignados dinámicamente en ciclos anteriores sigan siendo válidos (es decir, que aún pertenezcan al pool dinámico). Si un equipo ya no es válido, se intenta desasignar.  
-* **Fase 0: Limpieza de Robots No Candidatos**: Libera todos los equipos asignados dinámicamente a robots que han sido marcados como `Activo = 0` o `EsOnline = 0` en la tabla `dbo.Robots`. Esto asegura que los recursos no queden bloqueados por robots que no están operativos.  
-* **Fase 1: Satisfacción de Mínimos**: Asegura que cada robot candidato con carga de trabajo alcance su MinEquipos funcional, asignándole máquinas del pool de recursos libres y priorizando según la PrioridadBalanceo.  
-* **Fase 2: Desasignación de Excedentes Reales**: Evalúa los robots que, tras la Fase 1, tienen más equipos de los que necesitan para su carga de trabajo actual. Los equipos sobrantes se desasignan y devuelven al pool libre.  
-* **Fase 3: Asignación de Demanda Adicional**: Los equipos que queden en el pool libre se distribuyen entre los robots que todavía tienen demanda de trabajo, ordenados por prioridad y necesidad, hasta alcanzar su necesidad calculada o su `MaxEquipos`.
+* **Etapa 1: Limpieza Global (Pre-Fase y Fase 0)**: Antes de cualquier cálculo, el sistema valida **todas** las asignaciones dinámicas existentes. Libera recursos de robots que han sido marcados como inactivos u offline y de equipos que ya no son válidos para el balanceo.  
+* **Etapa 2: Balanceo Interno de Pools (Fase 1 y 2)**: El algoritmo itera sobre cada pool (primero el general y luego cada pool dedicado). En cada iteración:  
+  * **Satisface Mínimos**: Asegura que cada robot del pool alcance su MinEquipos funcional, asignándole máquinas **de su propio pool**.  
+  * **Desasigna Excedentes**: Libera los equipos sobrantes de cada robot, devolviéndolos **a su pool de origen**.  
+* **Etapa 3: Asignación Global por Desborde y Prioridad (Fase 3)**: Esta es la fase final y más crítica.  
+  * **Cálculo de Demanda Restante**: Se identifican las necesidades de equipos no cubiertas de los robots de pools dedicados (demanda de **desborde**) y la demanda adicional de los robots del pool general.  
+  * **Competencia por Recursos**: Toda esta demanda restante se consolida en una única lista ordenada por PrioridadBalanceo.  
+  * **Asignación desde el Pool General**: El algoritmo asigna los equipos **libres y restantes del Pool General** a los robots de la lista consolidada, dando preferencia a los de mayor prioridad, sin importar si su origen era un pool dedicado o el general.
 
 #### **Mecanismos de Control y Auditoría**
 
 Para garantizar un funcionamiento estable y transparente, el Balanceador implementa dos mecanismos clave:
 
-* **Mecanismo de Enfriamiento (`CoolingManager`)**: Previene el "thrashing" (asignar y desasignar recursos a un mismo robot de forma repetida y frecuente). Impone un período de enfriamiento después de una operación de ampliación o reducción para un robot. Este enfriamiento puede ser ignorado si se detecta una variación drástica en la carga de tickets (por defecto, >30% de aumento o >40% de disminución), permitiendo una reacción rápida ante cambios significativos.  
-* **Registro Histórico (`HistoricoBalanceoClient`)**: Cada decisión de asignación o desasignación, junto con su justificación (ej. `ASIGNAR_MIN_POOL`, `DESASIGNAR_EXC_REAL`, `DESASIGNAR_INACTIVO_OFFLINE`), se registra en la tabla `dbo.HistoricoBalanceo`. Esto proporciona una trazabilidad completa de todas las acciones del Balanceador para fines de auditoría y análisis de rendimiento.
+* **Mecanismo de Enfriamiento (`CoolingManager`)**: Previene el "thrashing" (asignar y desasignar recursos a un mismo robot de forma repetida y frecuente). Impone un período de enfriamiento después de una operación de ampliación o reducción para un robot. Este enfriamiento puede ser ignorado si se detecta una variación drástica en la carga de tickets (por defecto, >30% de aumento o >40% de disminución), permitiendo una reacción rápida ante cambios significativos. 
+* **Registro Histórico (`HistoricoBalanceoClient`)**: Cada decisión de asignación o desasignación se registra en la tabla dbo.HistoricoBalanceo, **ahora incluyendo el PoolId afectado** para una auditoría más detallada.
 
 ### **📞 Servicio de Callbacks**
 
@@ -68,11 +71,12 @@ Un servidor web ligero y dedicado cuya única responsabilidad es escuchar notifi
 
 ### **🖥️ Interfaz Web de Mantenimiento**
 
-Una aplicación web que provee una interfaz de usuario para la administración y monitorización del sistema SAM. Permite a los operadores realizar tareas de mantenimiento críticas sin necesidad de acceder directamente a la base de datos.
+Una aplicación web que provee una interfaz de usuario para la administración y monitorización del sistema SAM.
 
 * **Gestión de Robots**: Permite visualizar la lista completa de robots con filtros y paginación, modificar sus propiedades (ej. `Activo`, `EsOnline`, `PrioridadBalanceo`, `MinEquipos`), y crear nuevos robots.  
 * **Gestión de Asignaciones**: Ofrece un modal interactivo para asignar o desasignar equipos (VMs) a un robot de forma manual, marcándolos como Reservado para excluirlos del balanceo dinámico.  
 * **Gestión de Programaciones**: Proporciona una interfaz completa para crear, visualizar, editar y eliminar programaciones de ejecución (diarias, semanales, mensuales o específicas) para cualquier robot, asignando los equipos correspondientes para cada tarea programada.
+* **(Futuro) Gestión de Pools de Recursos: Se añadirán interfaces para crear, modificar y eliminar pools, así como para asignar robots y equipos a dichos pools, completando la administración de esta nueva característica.**
 
 ---
 
