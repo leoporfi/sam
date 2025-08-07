@@ -2,7 +2,7 @@
 
 import logging
 import threading
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from balanceador.database.historico_client import HistoricoBalanceoClient
 from balanceador.service.cooling_manager import CoolingManager
@@ -68,6 +68,7 @@ class Balanceo:
         self,
         robot_id: int,
         equipo_id: int,
+        robot_pool_id: Optional[int],
         carga_trabajo_por_robot: Dict[int, int],
         mapa_equipos_asignados_dinamicamente: Dict[int, List[int]],
     ) -> bool:
@@ -78,6 +79,16 @@ class Balanceo:
 
         if can_sd:
             if self._realizar_desasignacion_db(robot_id, equipo_id):
+                # Usamos el robot_pool_id que recibimos como parámetro
+                self.historico_client.registrar_decision_balanceo(
+                    robot_id,
+                    robot_pool_id,  # ¡Ahora esta variable sí existe!
+                    tickets_robot,
+                    num_actual_din_robot,
+                    len(mapa_equipos_asignados_dinamicamente.get(robot_id, [])),
+                    "DESASIGNAR_MAQUINA_INVALIDA",
+                    f"Equipo ya no es válido para el pool dinámico. JustCool: {just_sd}",
+                )
                 return True
             else:
                 logger.error(
@@ -100,6 +111,7 @@ class Balanceo:
         self,
         mapa_equipos_asignados_dinamicamente: Dict[int, List[int]],  # IN-OUT
         pool_dinamico_maquinas_validas_ids: Set[int],
+        mapa_config_robots: Dict[int, Dict[str, Any]],
         robot_state: Dict[str, Any],  # contiene carga_trabajo_por_robot y equipos_en_uso_por_robot
     ):
         logger.info("Balanceo - Pre-Fase: Validando Asignaciones Dinámicas Existentes por Validez de Máquina...")
@@ -117,6 +129,11 @@ class Balanceo:
             equipos_validados_a_mantener = []
             maquinas_invalidas_desasignadas_count = 0
 
+            # Obtenemos la configuración específica del robot actual del mapa
+            config_robot_actual = mapa_config_robots.get(robot_id, {})
+            # Y de ahí sacamos su PoolId
+            robot_pool_id = config_robot_actual.get("PoolId")
+
             for equipo_id in equipos_originalmente_asignados:
                 if equipo_id in pool_dinamico_maquinas_validas_ids:
                     equipos_validados_a_mantener.append(equipo_id)
@@ -124,7 +141,9 @@ class Balanceo:
                     logger.warning(
                         f"Pre-Fase: EquipoId {equipo_id} (asignado a RobotId {robot_id}) ya no es válido para el pool dinámico. Intentando desasignar.",
                     )
-                    if self._procesar_equipo_invalido(robot_id, equipo_id, carga_trabajo_por_robot, mapa_equipos_asignados_dinamicamente):
+                    if self._procesar_equipo_invalido(
+                        robot_id, equipo_id, robot_pool_id, carga_trabajo_por_robot, mapa_equipos_asignados_dinamicamente
+                    ):
                         maquinas_invalidas_desasignadas_count += 1
                     else:
                         equipos_validados_a_mantener.append(equipo_id)
@@ -136,6 +155,7 @@ class Balanceo:
                 self.cooling_manager.registrar_reduccion(robot_id, carga_trabajo_por_robot.get(robot_id, 0), maquinas_invalidas_desasignadas_count)
                 self.historico_client.registrar_decision_balanceo(
                     robot_id,
+                    robot_pool_id,
                     carga_trabajo_por_robot.get(robot_id, 0),
                     len(equipos_originalmente_asignados),
                     len(equipos_validados_a_mantener),
@@ -163,6 +183,7 @@ class Balanceo:
     def _liberar_equipos_robot_no_candidato(
         self,
         robot_id: int,
+        robot_pool_id: Optional[int],
         equipos_asignados: List[int],
         equipos_en_uso: Set[int],
         carga_trabajo: int,
@@ -190,6 +211,7 @@ class Balanceo:
             self.cooling_manager.registrar_reduccion(robot_id, carga_trabajo, liberados_count)
             self.historico_client.registrar_decision_balanceo(
                 robot_id,
+                robot_pool_id,
                 carga_trabajo,
                 num_actual_din,
                 num_actual_din - liberados_count,
@@ -234,9 +256,10 @@ class Balanceo:
                 tickets_robot: int = carga_trabajo_por_robot.get(robot_id, 0)
                 equipos_en_uso: Set[int] = equipos_en_uso_por_robot.get(robot_id, set())
                 num_actual_din: int = len(equipos_asignados)
-
+                robot_pool_id = estado_robot.get("PoolId") if estado_robot else None
                 liberados = self._liberar_equipos_robot_no_candidato(
                     robot_id,
+                    robot_pool_id,
                     equipos_asignados,
                     equipos_en_uso,
                     tickets_robot,
@@ -301,11 +324,13 @@ class Balanceo:
         )
 
     def _obtener_robots_candidatos(self) -> Dict[int, Dict[str, Any]]:
-        """Obtiene la configuración de robots candidatos para balanceo."""
-        query = """SELECT RobotId, Robot, MinEquipos, MaxEquipos, PrioridadBalanceo, TicketsPorEquipoAdicional 
+        """Obtiene la configuración de robots candidatos para balanceo, incluyendo su PoolId."""
+        query = """
+        SELECT RobotId, Robot, MinEquipos, MaxEquipos, PrioridadBalanceo, TicketsPorEquipoAdicional, PoolId
         FROM dbo.Robots 
         WHERE Activo = 1 AND EsOnline = 1
-        ORDER BY PrioridadBalanceo DESC, RobotId;"""  # noqa: W291
+        ORDER BY PrioridadBalanceo DESC, RobotId;
+        """
         robots_candidatos_config_list = self.db_sam.ejecutar_consulta(query, es_select=True) or []
         return {r["RobotId"]: r for r in robots_candidatos_config_list}
 
@@ -317,7 +342,7 @@ class Balanceo:
     ) -> List[Tuple[int, int, int, Dict[str, Any], int, int]]:
         """Procesa la fase de satisfacción de mínimos y retorna la lista de necesidades."""
         logger.info("Balanceo - Fase 1: Satisfacción de Mínimos con Reasignación...")
-        min_needs_list: List[Tuple[int, int, int, Dict[str, Any], int, int]] = []
+        min_needs_list: List[Tuple[int, int, int, int, Dict[str, Any], int, int]] = []
 
         for r_id, r_cfg in mapa_config_robots.items():
             if self.balanceador._is_shutting_down:
@@ -333,7 +358,9 @@ class Balanceo:
                 faltante_para_min = min_req - num_actual_din
                 can_add, just_add_min = self.cooling_manager.puede_ampliarse(r_id, tickets, num_actual_din)
                 if can_add:
-                    min_needs_list.append((r_id, faltante_para_min, r_cfg.get("PrioridadBalanceo", 100), r_cfg, tickets, num_actual_din))
+                    min_needs_list.append(
+                        (r_id, faltante_para_min, r_cfg.get("PrioridadBalanceo", 100), r_cfg.get("PoolId"), r_cfg, tickets, num_actual_din)
+                    )
                     logger.info(
                         f"Fase 1: RobotId {r_id} necesita {faltante_para_min} para min ({min_req}). Actuales Din: {num_actual_din}. JustCool: {just_add_min}",
                     )
@@ -390,6 +417,7 @@ class Balanceo:
                         self.cooling_manager.registrar_reduccion(r_id, tickets, liberados_f2_count)
                         self.historico_client.registrar_decision_balanceo(
                             r_id,
+                            r_cfg.get("PoolId"),
                             tickets,
                             num_actual_din,
                             num_actual_din - liberados_f2_count,
@@ -423,7 +451,7 @@ class Balanceo:
                 can_add_f3, just_add_f3 = self.cooling_manager.puede_ampliarse(r_id, tickets, num_actual_din_post_f2)
                 if can_add_f3:
                     necesidades_adicionales_final.append(
-                        (r_id, necesidad_final, r_cfg.get("PrioridadBalanceo", 100), r_cfg, tickets, num_actual_din_post_f2),
+                        (r_id, necesidad_final, r_cfg.get("PrioridadBalanceo", 100), r_cfg.get("PoolId"), r_cfg, tickets, num_actual_din_post_f2),
                     )
                 else:
                     logger.info(f"Fase 3: RobotId {r_id} necesita {necesidad_final} adic, pero CoolingManager impide. JustCool: {just_add_f3}")
@@ -435,33 +463,36 @@ class Balanceo:
         necesidades_adicionales: List[Tuple[int, int, int, Dict[str, Any], int, int]],
         equipos_libres: List[int],
         mapa_equipos_asignados_dinamicamente: Dict[int, List[int]],
+        motivo_asignacion: str,
     ):
-        for r_id, nec_adic, prio, _, tks, num_asig_antes_f3 in necesidades_adicionales:
+        for r_id, nec_adic, prio, pool_id, _, tks, num_asig_antes in necesidades_adicionales:
             if self.balanceador._is_shutting_down:
                 break
             if not equipos_libres:
                 break
 
             a_asignar_final: int = min(nec_adic, len(equipos_libres))
-            asignados_f3_count = 0
+            asignados_count = 0
             for _ in range(a_asignar_final):
                 if not equipos_libres:
                     break
                 eq_id_asig_final = equipos_libres.pop(0)
-                if self._realizar_asignacion_db(r_id, eq_id_asig_final, "ASIGNAR_DEM_ADIC"):
+
+                if self._realizar_asignacion_db(r_id, eq_id_asig_final, motivo_asignacion):
                     mapa_equipos_asignados_dinamicamente.setdefault(r_id, []).append(eq_id_asig_final)
-                    asignados_f3_count += 1
+                    asignados_count += 1
                 else:
                     equipos_libres.insert(0, eq_id_asig_final)
 
-            if asignados_f3_count > 0:
-                self.cooling_manager.registrar_ampliacion(r_id, tks, asignados_f3_count)
+            if asignados_count > 0:
+                self.cooling_manager.registrar_ampliacion(r_id, tks, asignados_count)
                 self.historico_client.registrar_decision_balanceo(
                     r_id,
+                    pool_id,
                     tks,
-                    num_asig_antes_f3,
-                    num_asig_antes_f3 + asignados_f3_count,
-                    "ASIGNAR_DEM_ADIC",
+                    num_asig_antes,
+                    num_asig_antes + asignados_count,
+                    motivo_asignacion,
                     f"Prio:{prio}",
                 )
 
@@ -487,6 +518,81 @@ class Balanceo:
             mapa_equipos_asignados_dinamicamente,
         )
         self._asignar_equipos_adicionales(necesidades_adicionales, equipos_libres_final_pool, mapa_equipos_asignados_dinamicamente)
+
+    def _obtener_recursos_para_pool(self, pool_id: Optional[int]) -> Dict[str, Any]:
+        """Obtiene los robots y equipos que pertenecen a un pool específico."""
+
+        # Query para robots
+        if pool_id is None:
+            query_robots = "SELECT * FROM dbo.Robots WHERE Activo = 1 AND EsOnline = 1 AND PoolId IS NULL ORDER BY PrioridadBalanceo DESC;"
+        else:
+            query_robots = f"SELECT * FROM dbo.Robots WHERE Activo = 1 AND EsOnline = 1 AND PoolId = {pool_id} ORDER BY PrioridadBalanceo DESC;"
+
+        robots_list = self.db_sam.ejecutar_consulta(query_robots, es_select=True) or []
+        mapa_robots = {r["RobotId"]: r for r in robots_list}
+
+        # Query para equipos
+        if pool_id is None:
+            query_equipos = "SELECT EquipoId FROM dbo.Equipos WHERE PermiteBalanceoDinamico = 1 AND PoolId IS NULL;"
+        else:
+            query_equipos = f"SELECT EquipoId FROM dbo.Equipos WHERE PermiteBalanceoDinamico = 1 AND PoolId = {pool_id};"
+
+        equipos_list = self.db_sam.ejecutar_consulta(query_equipos, es_select=True) or []
+        set_equipos = {eq["EquipoId"] for eq in equipos_list}
+
+        return {"robots": mapa_robots, "equipos": set_equipos}
+
+    def _obtener_estado_inicial_global(self):
+        """
+        Obtiene una fotografía completa y consistente del estado del sistema
+        directamente desde la base de datos al inicio del ciclo de balanceo.
+        """
+        logger.debug("Obteniendo estado inicial global de todo el sistema...")
+
+        # 1. Obtener TODOS los equipos que pueden ser usados para balanceo dinámico
+        query_equipos = "SELECT EquipoId FROM dbo.Equipos WHERE PermiteBalanceoDinamico = 1 AND Activo_SAM = 1;"
+        equipos_dinamicos_list = self.db_sam.ejecutar_consulta(query_equipos, es_select=True) or []
+        pool_dinamico_completo_ids = {eq["EquipoId"] for eq in equipos_dinamicos_list}
+
+        # 2. Obtener TODAS las asignaciones actuales para separar las dinámicas de las fijas
+        query_asignaciones = "SELECT RobotId, EquipoId, Reservado, EsProgramado FROM dbo.Asignaciones;"
+        asignaciones_actuales_list = self.db_sam.ejecutar_consulta(query_asignaciones, es_select=True) or []
+
+        mapa_equipos_asignados_dinamicamente: Dict[int, List[int]] = {}
+        all_fixed_assigned_equipo_ids: Set[int] = set()
+
+        for asignacion in asignaciones_actuales_list:
+            robot_id = asignacion.get("RobotId")
+            equipo_id = asignacion.get("EquipoId")
+
+            if not robot_id or not equipo_id:
+                continue
+
+            # Es una asignación fija (manual o programada)
+            if asignacion.get("Reservado") or asignacion.get("EsProgramado"):
+                all_fixed_assigned_equipo_ids.add(equipo_id)
+            # Es una asignación dinámica del balanceador
+            else:
+                mapa_equipos_asignados_dinamicamente.setdefault(robot_id, []).append(equipo_id)
+
+        # 3. Obtener equipos actualmente en ejecución
+        query_ejecuciones = "SELECT RobotId, EquipoId FROM dbo.Ejecuciones WHERE Estado IN ('PENDING_EXECUTION', 'DEPLOYED', 'RUNNING', 'UPDATE', 'RUN_PAUSED', 'QUEUED');"
+        ejecuciones_activas_list = self.db_sam.ejecutar_consulta(query_ejecuciones, es_select=True) or []
+        equipos_en_uso_por_robot: Dict[int, Set[int]] = {}
+        for ejecucion in ejecuciones_activas_list:
+            if ejecucion.get("RobotId") and ejecucion.get("EquipoId"):
+                equipos_en_uso_por_robot.setdefault(ejecucion["RobotId"], set()).add(ejecucion["EquipoId"])
+
+        # 4. Obtener la carga de trabajo (esto sí lo delegamos al orquestador)
+        carga_trabajo_por_robot = self.balanceador._obtener_carga_de_trabajo_consolidada()
+
+        return (
+            pool_dinamico_completo_ids,
+            carga_trabajo_por_robot,
+            mapa_equipos_asignados_dinamicamente,
+            all_fixed_assigned_equipo_ids,
+            equipos_en_uso_por_robot,
+        )
 
     def ejecutar_balanceo(self):
         if hasattr(self.balanceador, "_is_shutting_down") and self.balanceador._is_shutting_down:
@@ -583,3 +689,140 @@ class Balanceo:
                         )
                     except Exception as email_ex:
                         logger.error(f"Fallo también al enviar email de notificación de error crítico del Balanceador: {email_ex}")
+
+    def obtener_pools_activos(self) -> List[Dict[str, Any]]:
+        """Obtiene todos los pools activos de la base de datos."""
+        try:
+            logger.info("Obteniendo la lista de pools de balanceo activos...")
+            query = "SELECT PoolId, Nombre FROM dbo.Pools WHERE Activo = 1 ORDER BY Nombre;"
+            pools = self.db_sam.ejecutar_consulta(query, es_select=True)
+            logger.info(f"Se encontraron {len(pools or [])} pools activos.")
+            return pools or []
+        except Exception as e:
+            logger.error(f"Error crítico al obtener pools activos: {e}", exc_info=True)
+            return []
+
+    def ejecutar_limpieza_global(self) -> Tuple[Dict[int, List[int]], Set[int], Dict[int, int], Dict[int, Set[int]]]:
+        """
+        Ejecuta las fases de limpieza (Pre-Fase y Fase 0) sobre todos los recursos.
+        Devuelve el estado limpio para las fases siguientes.
+        """
+        logger.info("Balanceo - Iniciando ETAPA DE LIMPIEZA GLOBAL...")
+        (
+            pool_dinamico_completo_ids,
+            carga_trabajo_por_robot,
+            mapa_equipos_asignados_dinamicamente,
+            all_fixed_assigned_equipo_ids,
+            equipos_en_uso_por_robot,
+        ) = self._obtener_estado_inicial_global()
+
+        # Obtenemos la configuración completa de los robots una sola vez
+        mapa_config_robots = self._obtener_robots_candidatos()
+        robot_state = {"carga_trabajo_por_robot": carga_trabajo_por_robot, "equipos_en_uso_por_robot": equipos_en_uso_por_robot}
+        # Pre-Fase: Validar asignaciones por validez de la máquina
+        self._validar_y_limpiar_asignaciones_por_validez_maquina(
+            mapa_equipos_asignados_dinamicamente,
+            pool_dinamico_completo_ids,
+            mapa_config_robots,
+            robot_state,
+        )
+
+        # Fase 0: Limpiar asignaciones de robots que ya no son candidatos para balanceo
+        self._limpiar_asignaciones_robots_no_candidatos(
+            mapa_equipos_asignados_dinamicamente,
+            carga_trabajo_por_robot,
+            equipos_en_uso_por_robot,
+        )
+
+        logger.info("Balanceo - ETAPA DE LIMPIEZA GLOBAL completada.")
+        return {
+            "mapa_equipos_asignados_dinamicamente": mapa_equipos_asignados_dinamicamente,
+            "pool_dinamico_completo_ids": pool_dinamico_completo_ids,
+            "carga_trabajo_por_robot": carga_trabajo_por_robot,
+            "equipos_en_uso_por_robot": equipos_en_uso_por_robot,
+            "mapa_config_robots": mapa_config_robots,
+            "all_fixed_assigned_equipo_ids": all_fixed_assigned_equipo_ids,
+        }
+
+    def ejecutar_balanceo_interno_de_pool(self, pool_id: Optional[int], estado_global: Dict[str, Any]):
+        """
+        Ejecuta las Fases 1 y 2 (satisfacer mínimos y liberar excedentes)
+        para un pool específico, usando solo sus propios recursos.
+        """
+        pool_nombre = f"PoolId {pool_id}" if pool_id is not None else "Pool General"
+        logger.info(f"Balanceo - Iniciando ETAPA DE BALANCEO INTERNO para {pool_nombre}...")
+
+        # Extraer estado del diccionario global
+        mapa_equipos_asignados_dinamicamente = estado_global["mapa_equipos_asignados_dinamicamente"]
+        carga_trabajo_por_robot = estado_global["carga_trabajo_por_robot"]
+        all_fixed_assigned_equipo_ids = estado_global["all_fixed_assigned_equipo_ids"]
+        equipos_en_uso_por_robot = estado_global["equipos_en_uso_por_robot"]
+
+        # Obtener recursos específicos para este pool
+        recursos_pool = self._obtener_recursos_para_pool(pool_id)
+        mapa_config_robots_pool = recursos_pool["robots"]
+        pool_dinamico_ids_pool = recursos_pool["equipos"]
+
+        if not mapa_config_robots_pool:
+            logger.info(f"No hay robots candidatos para balanceo en {pool_nombre}. Saltando balanceo interno.")
+            return
+
+        # Fase 1: Satisfacción de Mínimos (solo con recursos del pool)
+        # (El código de _procesar_fase_satisfaccion_minimos y _asignar_equipos_adicionales se reutiliza)
+        min_needs_list = self._procesar_fase_satisfaccion_minimos(
+            mapa_config_robots_pool, carga_trabajo_por_robot, mapa_equipos_asignados_dinamicamente
+        )
+
+        # Equipos libres solo de este pool
+        current_all_assigned_dyn_ids = {eq_id for subl in mapa_equipos_asignados_dinamicamente.values() for eq_id in subl}
+
+        # Ahora, al calcular los equipos libres, también excluimos los fijos.
+        equipos_libres_pool = [
+            eq_id for eq_id in pool_dinamico_ids_pool if eq_id not in current_all_assigned_dyn_ids and eq_id not in all_fixed_assigned_equipo_ids
+        ]
+
+        self._asignar_equipos_adicionales(min_needs_list, equipos_libres_pool, mapa_equipos_asignados_dinamicamente, "ASIGNAR_MIN_POOL")
+
+        # Fase 2: Desasignación de Excedentes (solo dentro del pool)
+        self._procesar_fase_desasignacion_excedentes(
+            mapa_config_robots_pool, carga_trabajo_por_robot, mapa_equipos_asignados_dinamicamente, equipos_en_uso_por_robot
+        )
+        logger.info(f"Balanceo - ETAPA DE BALANCEO INTERNO para {pool_nombre} completada.")
+
+    def ejecutar_fase_de_desborde_global(self, estado_global: Dict[str, Any]):
+        """
+        Ejecuta la Fase 3, donde la demanda no cubierta de todos los pools
+        compite por los recursos sobrantes del Pool General.
+        """
+        logger.info("Balanceo - Iniciando ETAPA DE DESBORDE Y DEMANDA ADICIONAL GLOBAL...")
+
+        # Extraer estado
+        mapa_equipos_asignados_dinamicamente = estado_global["mapa_equipos_asignados_dinamicamente"]
+        carga_trabajo_por_robot = estado_global["carga_trabajo_por_robot"]
+        all_fixed_assigned_equipo_ids = estado_global["all_fixed_assigned_equipo_ids"]
+
+        # Obtener todos los robots candidatos (de todos los pools)
+        mapa_config_robots_global = self._obtener_robots_candidatos()
+
+        # Obtener los equipos libres únicamente del pool general
+        recursos_pool_general = self._obtener_recursos_para_pool(None)
+        pool_dinamico_ids_general = recursos_pool_general["equipos"]
+
+        current_all_assigned_dyn_ids = {eq_id for subl in mapa_equipos_asignados_dinamicamente.values() for eq_id in subl}
+
+        # Al calcular los equipos libres del pool general, también excluimos los fijos.
+        equipos_libres_final_pool_general = [
+            eq_id for eq_id in pool_dinamico_ids_general if eq_id not in current_all_assigned_dyn_ids and eq_id not in all_fixed_assigned_equipo_ids
+        ]
+        logger.info(f"Fase Desborde: {len(equipos_libres_final_pool_general)} equipos disponibles en Pool General para desborde y demanda adicional.")
+
+        # Calcular necesidades finales de todos los robots y ordenar por prioridad
+        necesidades_adicionales_globales = self._obtener_necesidades_adicionales(
+            mapa_config_robots_global, carga_trabajo_por_robot, mapa_equipos_asignados_dinamicamente
+        )
+
+        # Asignar desde el pool general según prioridad
+        self._asignar_equipos_adicionales(
+            necesidades_adicionales_globales, equipos_libres_final_pool_general, mapa_equipos_asignados_dinamicamente, "ASIGNAR_DESBORDE_O_ADICIONAL"
+        )
+        logger.info("Balanceo - ETAPA DE DESBORDE Y DEMANDA ADICIONAL GLOBAL completada.")

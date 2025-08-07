@@ -19,9 +19,12 @@ class HistoricoBalanceoClient:
         """
         self.db = db_connector
 
+    # En historico_client.py, dentro de la clase HistoricoBalanceoClient
+
     def registrar_decision_balanceo(
         self,
         robot_id: int,
+        pool_id: Optional[int],
         tickets_pendientes: int,
         equipos_antes: int,
         equipos_despues: int,
@@ -30,26 +33,21 @@ class HistoricoBalanceoClient:
     ) -> bool:
         """
         Registra una decisión de balanceo en la tabla HistoricoBalanceo.
-
-        Args: robot_id: ID del robot
-            tickets_pendientes: Cantidad de tickets pendientes
-            equipos_antes: Cantidad de equipos asignados antes del balanceo
-            equipos_despues: Cantidad de equipos asignados después del balanceo
-            accion: Acción tomada (ej. "ASIGNAR", "DESASIGNAR", "MANTENER")
-            justificacion: Justificación de la decisión
-
-        Returns: bool: True si se registró correctamente, False en caso contrario
         """
         try:
+            # La query ahora incluye la nueva columna PoolId
             query = """
             INSERT INTO dbo.HistoricoBalanceo 
-            (RobotId, TicketsPendientes, EquiposAsignadosAntes, EquiposAsignadosDespues, AccionTomada, Justificacion)
-            VALUES (?, ?, ?, ?, ?, ?);
-            """  # noqa: W291
+            (RobotId, PoolId, TicketsPendientes, EquiposAsignadosAntes, EquiposAsignadosDespues, AccionTomada, Justificacion)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+            """
 
-            self.db.ejecutar_consulta(query, (robot_id, tickets_pendientes, equipos_antes, equipos_despues, accion, justificacion), es_select=False)
+            # El tuple de parámetros ahora incluye pool_id
+            params = (robot_id, pool_id, tickets_pendientes, equipos_antes, equipos_despues, accion, justificacion)
 
-            logger.info(f"Registrada decisión de balanceo para RobotId {robot_id}: {accion}")
+            self.db.ejecutar_consulta(query, params, es_select=False)
+
+            logger.info(f"Registrada decisión de balanceo para RobotId {robot_id} en PoolId {pool_id or 'General'}: {accion}")
             return True
         except Exception as e:
             logger.error(f"Error al registrar decisión de balanceo: {e}", exc_info=True)
