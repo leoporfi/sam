@@ -39,7 +39,9 @@ logger = logging.getLogger(f"SAM.{Path(__file__).parent.name}.{Path(__file__).st
 
 
 class DatabaseConnector:
-    def __init__(self, servidor: str, base_datos: str, usuario: str, contrasena: str, db_config_prefix: str = "SQL_SAM"):  # db_config_prefix para leer reintentos, etc.
+    def __init__(
+        self, servidor: str, base_datos: str, usuario: str, contrasena: str, db_config_prefix: str = "SQL_SAM"
+    ):  # db_config_prefix para leer reintentos, etc.
         # Obtener la configuración SQL específica usando el prefijo.
         # El ConfigManager centralizado ya debería tener un método para esto.
         # Si get_sql_server_config toma un prefijo, es perfecto.
@@ -78,9 +80,7 @@ class DatabaseConnector:
             except pyodbc.Error as e_close:
                 logger.warning(f"Hilo {threading.get_ident()}: Error menor al cerrar conexión previa: {e_close}")
 
-        connection_string = (
-            f"Driver={self.driver};Server={self.servidor};Database={self.base_datos};UID={self.usuario};PWD={self.contrasena};Connection Timeout={self.timeout_conexion_inicial};"
-        )
+        connection_string = f"Driver={self.driver};Server={self.servidor};Database={self.base_datos};UID={self.usuario};PWD={self.contrasena};Connection Timeout={self.timeout_conexion_inicial};"
         try:
             conn = pyodbc.connect(connection_string, autocommit=False)
             self._set_current_thread_connection(conn)
@@ -163,12 +163,16 @@ class DatabaseConnector:
         """
         if es_select is None:
             query_lower = query.strip().lower()
-            es_select = query_lower.startswith("select") or (query_lower.startswith("exec") and ("obtener" in query_lower or "consultar" in query_lower))
+            es_select = query_lower.startswith("select") or (
+                query_lower.startswith("exec") and ("obtener" in query_lower or "consultar" in query_lower)
+            )
 
         for intento in range(1, self.max_reintentos_query + 1):
             try:
                 with self.obtener_cursor() as cursor:  # obtener_cursor maneja la conexión y el commit/rollback básico
-                    logger.debug(f"Intento {intento}/{self.max_reintentos_query} - Ejecutando query: {query[:150]}... con params: {str(parametros)[:150]}...")
+                    logger.debug(
+                        f"Intento {intento}/{self.max_reintentos_query} - Ejecutando query: {query[:150]}... con params: {str(parametros)[:150]}..."
+                    )
                     if parametros:
                         cursor.execute(query, parametros)
                     else:
@@ -196,7 +200,9 @@ class DatabaseConnector:
                 es_error_reintentable = sql_state in self.codigos_sqlstate_reintentables or "deadlock" in error_msg_lower
 
                 if es_error_reintentable:
-                    logger.warning(f"Intento {intento}/{self.max_reintentos_query} falló con error de BD REINTENTABLE (SQLSTATE: {sql_state}): {db_err}")
+                    logger.warning(
+                        f"Intento {intento}/{self.max_reintentos_query} falló con error de BD REINTENTABLE (SQLSTATE: {sql_state}): {db_err}"
+                    )
                     if intento < self.max_reintentos_query:
                         # Backoff exponencial
                         sleep_time = self.delay_reintento_query_base_seg * (2 ** (intento - 1))
@@ -204,7 +210,9 @@ class DatabaseConnector:
                         time.sleep(sleep_time)
                         # La conexión podría haberse cerrado; obtener_cursor intentará reconectar en el próximo intento.
                     else:
-                        logger.error(f"Máximo de reintentos ({self.max_reintentos_query}) alcanzado para error de BD reintentable. Query: {query[:150]}")
+                        logger.error(
+                            f"Máximo de reintentos ({self.max_reintentos_query}) alcanzado para error de BD reintentable. Query: {query[:150]}"
+                        )
                         raise  # Relanzar la última excepción después de agotar reintentos
                 else:
                     # Error de BD no reintentable por esta lógica (ej. violación de constraint, sintaxis SQL)
@@ -221,157 +229,6 @@ class DatabaseConnector:
         # es un estado anómalo.
         logger.critical(f"Lógica de reintentos en ejecutar_consulta finalizó inesperadamente para query: {query[:150]}")
         raise Exception(f"Fallo inesperado en la lógica de reintentos de ejecutar_consulta para query: {query[:150]}")
-
-    def merge_equipos(self, lista_equipos_procesados: List[Dict[str, Any]]):
-        if not lista_equipos_procesados:
-            logger.info("merge_equipos: Lista de equipos procesados vacía, no se realiza MERGE.")
-            return 0
-
-        # Query asumiendo que dbo.Equipos tiene EquipoId (PK, A360 DeviceId), Equipo, UserId (A360 UserId, NOT NULL), UserName, Licencia
-        # Y una columna Activo BIT (recomendada)
-        query = """
-        MERGE dbo.Equipos AS T
-        USING (SELECT 
-                   CAST(? AS INT) AS EquipoId_S,         -- 1. EquipoId (PK, A360 Device ID)
-                   CAST(? AS NVARCHAR(100)) AS Equipo_S,  -- 2. Equipo (Nombre del Device/Host)
-                   CAST(? AS INT) AS UserId_S,            -- 3. UserId (A360 User ID) - DEBE SER NOT NULL
-                   CAST(? AS NVARCHAR(50)) AS UserName_S, -- 4. UserName (A360 User Name)
-                   CAST(? AS NVARCHAR(50)) AS Licencia_S -- 5. Licencia
-                   -- CAST(? AS BIT) AS Activo_S          -- 6. Activo_SAM (si la columna existe)
-              ) AS S ON T.EquipoId = S.EquipoId_S
-        WHEN MATCHED AND (
-                T.Equipo <> S.Equipo_S OR
-                T.UserId <> S.UserId_S OR -- UserId es NOT NULL, no necesita ISNULL para comparación directa si S.UserId_S tampoco es NULL
-                ISNULL(T.UserName, N'') <> ISNULL(S.UserName_S, N'') OR
-                ISNULL(T.Licencia, N'') <> ISNULL(S.Licencia_S, N'')
-                -- OR ISNULL(T.Activo, 0) <> S.Activo_S -- Si existe T.Activo
-               ) THEN
-            UPDATE SET 
-                T.Equipo = S.Equipo_S,
-                T.UserId = S.UserId_S,
-                T.UserName = S.UserName_S,
-                T.Licencia = S.Licencia_S
-                -- , T.Activo = S.Activo_S -- Si existe T.Activo
-        WHEN NOT MATCHED BY TARGET THEN
-            INSERT (EquipoId, Equipo, UserId, UserName, Licencia) -- Añadir Activo si existe
-            VALUES (S.EquipoId_S, S.Equipo_S, S.UserId_S, S.UserName_S, S.Licencia_S); -- Añadir S.Activo_S
-        """  # noqa: W291
-
-        datos_para_merge = []
-        for eq_data in lista_equipos_procesados:
-            if eq_data.get("EquipoId") is None:
-                logger.warning(f"MERGE EQUIPOS: Registro omitido por falta de EquipoId (A360 DeviceId): {eq_data}")
-                continue
-            # Dado que Equipos.UserId es NOT NULL en tu BD SAM:
-            if eq_data.get("UserId") is None:
-                logger.warning(f"MERGE EQUIPOS: Registro omitido para EquipoId {eq_data.get('EquipoId')} por falta de UserId (A360 UserID): {eq_data}")
-                continue
-
-            params_tupla = (
-                eq_data.get("EquipoId"),
-                eq_data.get("Equipo"),
-                eq_data.get("UserId"),  # Debe ser un INT no nulo
-                eq_data.get("UserName"),
-                eq_data.get("Licencia", "NO_ASIGNADA"),
-                # eq_data.get("Activo_SAM", 1) # Descomentar y ajustar si añades la columna Activo
-            )
-            datos_para_merge.append(params_tupla)
-
-        if not datos_para_merge:
-            logger.info("merge_equipos: No hay datos válidos para MERGE después de la preparación y validación de UserId.")
-            return 0
-
-        total_filas_afectadas = 0
-        try:
-            logger.info(f"Iniciando MERGE para {len(datos_para_merge)} registros en dbo.Equipos...")
-            for params_eq in datos_para_merge:
-                filas_iter = self.ejecutar_consulta(query, params_eq, es_select=False)
-                total_filas_afectadas += filas_iter if isinstance(filas_iter, int) and filas_iter != -1 else 1
-            logger.info(f"merge_equipos completado. Filas afectadas/procesadas aprox: {total_filas_afectadas}")
-            return total_filas_afectadas
-        except Exception as e:
-            logger.error(f"Error durante merge_equipos: {e}", exc_info=True)
-            raise
-
-    def merge_robots(self, lista_robots_api: List[Dict[str, Any]]):  # Nombre sin _sam
-        """
-        Actualiza (MERGE) la tabla dbo.Robots en SAM con datos de la API.
-        - RobotId (FileID de A360) es la clave de unión.
-        - Robot (nombre) y Descripcion se actualizan si cambian en la API.
-        - EsOnline y Activo NO se actualizan si el robot ya existe; se mantienen los valores de la BD.
-        - Para robots NUEVOS, EsOnline y Activo se insertan con valores por defecto.
-        - Parametros se inserta con NULL para nuevos robots y no se actualiza para existentes.
-
-        Campos esperados en cada dict de lista_robots_api:
-        "RobotId", "Robot" (nombre), "Descripcion".
-        """
-        if not lista_robots_api:
-            logger.info("merge_robots: Lista de robots de API vacía, no se realiza MERGE.")
-            return 0
-
-        DEFAULT_ESONLINE_NUEVO_ROBOT = 0  # False
-        DEFAULT_ACTIVO_NUEVO_ROBOT = 1  # True
-
-        query = """
-        MERGE dbo.Robots AS T
-        USING (SELECT 
-                CAST(? AS INT) AS RobotId_S,          -- 1. RobotId (PK, A360 FileID)
-                CAST(? AS NVARCHAR(100)) AS Robot_S,   -- 2. Robot (Nombre desde API)
-                CAST(? AS NVARCHAR(4000)) AS Descripcion_S, -- 3. Descripcion desde API
-                CAST(? AS BIT) AS EsOnline_Default_S,  -- 4. Default para EsOnline (SOLO para INSERT)
-                CAST(? AS BIT) AS Activo_Default_S     -- 5. Default para Activo (SOLO para INSERT)
-            ) AS S ON T.RobotId = S.RobotId_S      -- Clave de unión: RobotId (A360 FileID)
-        WHEN MATCHED AND (
-                -- Solo actualizar si el nombre o la descripción han cambiado.
-                -- NO se compara T.EsOnline ni T.Activo aquí.
-                T.Robot <> S.Robot_S OR
-                ISNULL(T.Descripcion, N'') <> ISNULL(S.Descripcion_S, N'') 
-            ) THEN
-            UPDATE SET 
-                T.Robot = S.Robot_S,         -- Actualizar nombre del robot
-                T.Descripcion = S.Descripcion_S -- Actualizar descripción
-                -- NO SE ACTUALIZAN T.EsOnline NI T.Activo. Se mantienen los valores existentes en la BD.
-        WHEN NOT MATCHED BY TARGET THEN
-            INSERT (RobotId, Robot, Descripcion, EsOnline, Activo, Parametros) 
-            VALUES (S.RobotId_S, S.Robot_S, S.Descripcion_S, 
-                    S.EsOnline_Default_S, -- Usar el default para EsOnline para nuevos robots
-                    S.Activo_Default_S,   -- Usar el default para Activo para nuevos robots
-                    NULL);                -- Parametros se inserta con NULL para nuevos robots
-        """  # noqa: W291
-
-        datos_para_merge = []
-        for bot_data_api in lista_robots_api:
-            if bot_data_api.get("RobotId") is None:
-                logger.warning(f"MERGE ROBOTS: Registro omitido por falta de RobotId (A360 FileID): {bot_data_api}")
-                continue
-
-            params_tupla = (
-                bot_data_api.get("RobotId"),
-                bot_data_api.get("Robot"),
-                bot_data_api.get("Descripcion"),
-                # Estos dos siguientes valores solo se usan en la cláusula INSERT del MERGE
-                # Si quieres que los defaults vengan de la llamada, tendrías que pasarlos en bot_data_api
-                # con claves como "EsOnline_SAM_default", "Activo_SAM_default"
-                DEFAULT_ESONLINE_NUEVO_ROBOT,
-                DEFAULT_ACTIVO_NUEVO_ROBOT,
-            )
-            datos_para_merge.append(params_tupla)
-
-        if not datos_para_merge:
-            logger.info("merge_robots: No hay datos válidos para MERGE después de la preparación.")
-            return 0
-
-        total_filas_afectadas = 0
-        try:
-            logger.info(f"Iniciando MERGE para {len(datos_para_merge)} registros en dbo.Robots...")
-            for params_bot in datos_para_merge:
-                filas_iter = self.ejecutar_consulta(query, params_bot, es_select=False)
-                total_filas_afectadas += filas_iter if isinstance(filas_iter, int) and filas_iter != -1 else 1
-            logger.info(f"merge_robots completado. Filas afectadas/procesadas aprox: {total_filas_afectadas}")
-            return total_filas_afectadas
-        except Exception as e:
-            logger.error(f"Error durante merge_robots: {e}", exc_info=True)
-        raise
 
     def obtener_robots_ejecutables(self) -> List[Dict[str, Any]]:  # Especificar tipo de retorno
         try:
@@ -393,9 +250,13 @@ class DatabaseConnector:
             logger.error(f"Error al obtener ejecuciones en curso: {e}", exc_info=True)
             return []
 
-    def insertar_registro_ejecucion(self, id_despliegue: str, db_robot_id: int, db_equipo_id: int, a360_user_id: int, marca_tiempo_programada: Optional[Any], estado: str):
+    def insertar_registro_ejecucion(
+        self, id_despliegue: str, db_robot_id: int, db_equipo_id: int, a360_user_id: int, marca_tiempo_programada: Optional[Any], estado: str
+    ):
         if id_despliegue is None:
-            logger.error(f"Intento de insertar ejecución con DeploymentId NULO para RobotID(SAM): {db_robot_id}, EquipoID(SAM): {db_equipo_id}. Operación abortada.")
+            logger.error(
+                f"Intento de insertar ejecución con DeploymentId NULO para RobotID(SAM): {db_robot_id}, EquipoID(SAM): {db_equipo_id}. Operación abortada."
+            )
             return
 
         hora_db: Optional[datetime.time] = None
@@ -430,7 +291,9 @@ class DatabaseConnector:
             logger.error(f"Error al insertar ejecución para DeploymentId {id_despliegue}: {e}", exc_info=True)
             # Considera si relanzar la excepción
 
-    def lanzar_robots(self, robots_a_ejecutar: List[Dict[str, Any]], aa_client: "AutomationAnywhereClient", botInput_plantilla: Optional[dict] = None) -> List[Dict[str, Any]]:
+    def lanzar_robots(
+        self, robots_a_ejecutar: List[Dict[str, Any]], aa_client: "AutomationAnywhereClient", botInput_plantilla: Optional[dict] = None
+    ) -> List[Dict[str, Any]]:
         robots_fallidos_detalle = []
         for robot_info in robots_a_ejecutar:
             db_robot_id = robot_info.get("RobotId")
@@ -458,15 +321,21 @@ class DatabaseConnector:
                 error_lanzamiento = resultado_despliegue.get("error")
 
                 if a360_deployment_id:
-                    self.insertar_registro_ejecucion(a360_deployment_id, db_robot_id, db_equipo_id, a360_user_id, hora_programada_obj, "LAUNCHED")  # Cambiado a LAUNCHED
+                    self.insertar_registro_ejecucion(
+                        a360_deployment_id, db_robot_id, db_equipo_id, a360_user_id, hora_programada_obj, "LAUNCHED"
+                    )  # Cambiado a LAUNCHED
                 else:
                     # error_lanzamiento ya fue asignado desde resultado_despliegue.get("error")
-                    logger.warning(f"Fallo en API de despliegue para RobotID(SAM):{db_robot_id}, UserID(A360):{a360_user_id}. Error: {error_lanzamiento}")
+                    logger.warning(
+                        f"Fallo en API de despliegue para RobotID(SAM):{db_robot_id}, UserID(A360):{a360_user_id}. Error: {error_lanzamiento}"
+                    )
             except Exception as e:
                 error_lanzamiento = str(e)
                 logger.error(f"Excepción al procesar/lanzar RobotID(SAM):{db_robot_id}, UserID(A360):{a360_user_id}: {e}", exc_info=True)
             if error_lanzamiento:
-                robots_fallidos_detalle.append({"robot_id": db_robot_id, "equipo_id": db_equipo_id, "user_id": a360_user_id, "error": error_lanzamiento})
+                robots_fallidos_detalle.append(
+                    {"robot_id": db_robot_id, "equipo_id": db_equipo_id, "user_id": a360_user_id, "error": error_lanzamiento}
+                )
         return robots_fallidos_detalle
 
     def _obtener_detalles_robot(self, robot_id: int) -> str:
@@ -605,7 +474,9 @@ class DatabaseConnector:
             rowcount = self.ejecutar_consulta(query, params, es_select=False)
 
             if rowcount is not None and rowcount > 0:
-                logger.info(f"Callback recibido y procesado para DeploymentId: {deployment_id}. Nuevo Estado: {estado_callback}. Filas afectadas: {rowcount}")
+                logger.info(
+                    f"Callback recibido y procesado para DeploymentId: {deployment_id}. Nuevo Estado: {estado_callback}. Filas afectadas: {rowcount}"
+                )
                 return True
             elif rowcount == 0:
                 logger.warning(
@@ -613,7 +484,9 @@ class DatabaseConnector:
                 )
                 return False
             else:  # rowcount es None o -1 (éxito pero sin conteo claro)
-                logger.info(f"Callback recibido y procesado para DeploymentId: {deployment_id}. Nuevo Estado: {estado_callback}. (Rowcount no definitivo)")
+                logger.info(
+                    f"Callback recibido y procesado para DeploymentId: {deployment_id}. Nuevo Estado: {estado_callback}. (Rowcount no definitivo)"
+                )
                 return True
 
         except Exception as e:
@@ -689,3 +562,89 @@ class DatabaseConnector:
 
     def cerrar_conexion(self):
         self.cerrar_conexion_hilo_actual()
+
+    def merge_robots(self, lista_robots_api: List[Dict[str, Any]]):
+        """
+        Actualiza (MERGE) la tabla dbo.Robots llamando al Stored Procedure
+        dbo.MergeRobots con una lista de robots (TVP).
+        """
+        if not lista_robots_api:
+            logger.info("merge_robots: Lista de robots de API vacía, no se llama al SP.")
+            return 0
+
+        try:
+            # 1. Preparamos los datos: Convertimos la lista de diccionarios a una lista de tuplas.
+            #    El orden de las tuplas DEBE COINCIDIR con el orden de las columnas en el TYPE dbo.RobotListType.
+            datos_para_sp = [
+                (bot_data.get("RobotId"), bot_data.get("Robot"), bot_data.get("Descripcion"))
+                for bot_data in lista_robots_api
+                if bot_data.get("RobotId") is not None  # Un filtro de seguridad
+            ]
+
+            if not datos_para_sp:
+                logger.warning("merge_robots: No hay datos válidos para enviar al SP después de la preparación.")
+                return 0
+
+            # 2. Definimos la llamada al Stored Procedure.
+            #    Usamos la sintaxis estándar de ODBC para SPs. El '?' es el marcador para nuestro parámetro TVP.
+            sql = "{CALL dbo.MergeRobots(?)}"
+
+            logger.info(f"Llamando a dbo.MergeRobots con {len(datos_para_sp)} registros.")
+
+            # 3. Ejecutamos la consulta.
+            #    Pasamos la lista de tuplas como el único parámetro.
+            #    El segundo argumento debe ser una tupla de parámetros, por eso (datos_para_sp,).
+            self.ejecutar_consulta(sql, (datos_para_sp,), es_select=False)
+
+            logger.info("dbo.MergeRobots ejecutado exitosamente.")
+            # Devolvemos el número de filas procesadas para mantener la consistencia.
+            return len(datos_para_sp)
+
+        except Exception as e:
+            logger.error(f"Error durante la llamada al SP dbo.MergeRobots: {e}", exc_info=True)
+            raise  # Relanzamos la excepción para que la capa superior la maneje.
+
+    def merge_equipos(self, lista_equipos_procesados: List[Dict[str, Any]]):
+        """
+        Actualiza (MERGE) la tabla dbo.Equipos llamando al Stored Procedure
+        dbo.MergeEquipos con una lista de equipos (TVP).
+        """
+        if not lista_equipos_procesados:
+            logger.info("merge_equipos: Lista de equipos vacía, no se llama al SP.")
+            return 0
+
+        try:
+            # 1. Preparamos los datos: Convertimos la lista de diccionarios a una lista de tuplas.
+            #    El orden DEBE COINCIDIR con el TYPE dbo.EquipoListType en la BD.
+            datos_para_sp = [
+                (
+                    eq.get("EquipoId"),
+                    eq.get("Equipo"),
+                    eq.get("UserId"),
+                    eq.get("UserName"),
+                    eq.get("Licencia"),
+                    eq.get("Activo_SAM", True),  # Asumir True si no se especifica
+                )
+                for eq in lista_equipos_procesados
+                # Filtro de seguridad para asegurar que los datos esenciales existan
+                if eq.get("EquipoId") is not None and eq.get("UserId") is not None
+            ]
+
+            if not datos_para_sp:
+                logger.warning("merge_equipos: No hay datos válidos para enviar al SP después de la preparación.")
+                return 0
+
+            # 2. Definimos la llamada al Stored Procedure.
+            sql = "{CALL dbo.MergeEquipos(?)}"
+
+            logger.info(f"Llamando a dbo.MergeEquipos con {len(datos_para_sp)} registros.")
+
+            # 3. Ejecutamos la consulta, pasando la lista de tuplas como el único parámetro.
+            self.ejecutar_consulta(sql, (datos_para_sp,), es_select=False)
+
+            logger.info("dbo.MergeEquipos ejecutado exitosamente.")
+            return len(datos_para_sp)
+
+        except Exception as e:
+            logger.error(f"Error durante la llamada al SP dbo.MergeEquipos: {e}", exc_info=True)
+            raise

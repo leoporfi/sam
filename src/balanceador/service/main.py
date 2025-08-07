@@ -110,44 +110,6 @@ class Balanceador:
 
         logger.info(f"Tarea de balanceo programada cada {intervalo} segundos.")
 
-    def _obtener_pool_dinamico_disponible(self) -> List[Dict[str, Any]]:
-        """
-        Obtiene el pool de equipos disponibles para balanceo dinámico.
-
-        Returns: List[Dict[str, Any]]: Lista de equipos disponibles
-        """
-        logger.debug("Obteniendo pool dinámico de equipos disponibles...")
-        query = """
-        SELECT E.EquipoId, E.Equipo, E.UserId, E.UserName, E.Licencia, E.PermiteBalanceoDinamico
-        FROM dbo.Equipos E
-        WHERE
-            E.Licencia = 'ATTENDEDRUNTIME'
-            AND E.Activo_SAM = 1
-            AND E.PermiteBalanceoDinamico = 1
-            AND (
-                NOT EXISTS (
-                    SELECT 1
-                    FROM dbo.Asignaciones A_any
-                    WHERE A_any.EquipoId = E.EquipoId
-                )
-                OR
-                NOT EXISTS (
-                    SELECT 1
-                    FROM dbo.Asignaciones A_fixed
-                    WHERE A_fixed.EquipoId = E.EquipoId
-                      AND (A_fixed.Reservado = 1 OR A_fixed.EsProgramado = 1)
-                )
-            )
-        ORDER BY E.Equipo;
-        """
-        try:
-            equipos_disponibles = self.db_sam.ejecutar_consulta(query, es_select=True)
-            logger.info(f"Pool dinámico disponible: {len(equipos_disponibles or [])} equipos.")
-            return equipos_disponibles or []
-        except Exception as e:
-            logger.error(f"Error obteniendo pool dinámico de equipos: {e}", exc_info=True)
-            return []
-
     def _obtener_carga_de_trabajo_consolidada(self) -> Dict[int, int]:
         """
         Obtiene la carga de trabajo consolidada de todas las fuentes.
@@ -303,15 +265,50 @@ class Balanceador:
         return equipos_necesarios
 
     def ejecutar_ciclo_balanceo(self):
-        """Ejecuta el ciclo de balanceo."""
+        """
+        Ejecuta el ciclo de balanceo completo, orquestando las diferentes etapas.
+        """
         if self._is_shutting_down:
             logger.info("SAM Balanceador: Ciclo abortado (cierre general).")
             return
 
-        logger.info("SAM Balanceador: Iniciando ciclo de balanceo...")
+        logger.info("=" * 20 + " INICIANDO CICLO DE BALANCEO " + "=" * 20)
 
-        # Usar el algoritmo de balanceo
-        self.balanceo.ejecutar_balanceo()
+        # Invocar la nueva secuencia de lógica de balanceo
+        try:
+            # Etapa 1: Limpieza Global
+            # Este método ahora devuelve el estado limpio y consolidado
+            estado_limpio = self.balanceo.ejecutar_limpieza_global()
+            if self._is_shutting_down:
+                return
+
+            # Etapa 2: Balanceo Interno de cada Pool
+            pools_activos = self.balanceo.obtener_pools_activos()
+
+            # Procesar cada pool específico
+            for pool in pools_activos:
+                self.balanceo.ejecutar_balanceo_interno_de_pool(pool["PoolId"], estado_limpio)
+                if self._is_shutting_down:
+                    return
+
+            # Procesar el Pool General
+            self.balanceo.ejecutar_balanceo_interno_de_pool(None, estado_limpio)
+            if self._is_shutting_down:
+                return
+
+            # Etapa 3: Desborde y Demanda Adicional Global
+            self.balanceo.ejecutar_fase_de_desborde_global(estado_limpio)
+
+        except Exception as e:
+            logger.critical(f"Error fatal durante la orquestación del ciclo de balanceo: {e}", exc_info=True)
+            # Aquí podrías agregar una notificación por email
+            self.notificador.send_alert(
+                subject="Error Crítico en Ciclo de Balanceador SAM",
+                message=f"Se ha producido un error irrecuperable en el ciclo principal del balanceador.\n\nError: {e}",
+                is_critical=True,
+            )
+
+        logger.info("=" * 20 + " CICLO DE BALANCEO COMPLETADO " + "=" * 20)
 
     def limpiar_al_salir(self):
         """Realiza limpieza de recursos al salir."""
