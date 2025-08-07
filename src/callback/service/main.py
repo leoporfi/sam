@@ -24,35 +24,35 @@ from wsgiref.simple_server import make_server
 try:
     from waitress import serve
 
-    WAITRESS_DISPONIBLE = True
+    WAITRESS_AVAILABLE = True
 except ImportError:
-    WAITRESS_DISPONIBLE = False
+    WAITRESS_AVAILABLE = False
 
 
 # --- Configuración de constantes ---
 @dataclass
-class ConfiguracionServidorCallback:
+class CallbackServerConfiguration:
     """Clase de datos para la configuración del servidor de callbacks."""
 
     host: str = "0.0.0.0"
-    puerto: int = 8008
-    hilos: int = 8  # threads
-    tiempo_espera_canal: int = 120  # timeout (para waitress channel_timeout)
-    intervalo_limpieza_waitress: int = 30  # cleanup_interval (para waitress)
-    longitud_max_contenido: int = 1024 * 1024  # Límite de 1MB
-    log_payload_max_caracteres: int = 1000
+    port: int = 8008
+    threads: int = 8  # hilos
+    channel_timeout: int = 120  # timeout (para waitress channel_timeout)
+    cleanup_interval: int = 30  # cleanup_interval (para waitress)
+    max_content_length: int = 1024 * 1024  # Límite de 1MB
+    log_payload_max_chars: int = 1000
 
 
 @dataclass
-class ConfiguracionLog:
+class LogConfiguration:
     """Clase de datos para la configuración de logging."""
 
-    directorio: str = "C:/RPA/Logs/SAM"
-    nombre_archivo: str = "sam_callback_server.log"  # filename
-    nivel: str = "INFO"  # level
-    num_respaldos: int = 7  # backup_count
-    formato: str = "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s"  # format
-    formato_fecha: str = "%Y-%m-%d %H:%M:%S"  # date_format
+    directory: str = "C:/RPA/Logs/SAM"
+    filename: str = "sam_callback_server.log"
+    level: str = "INFO"
+    backup_count: int = 7
+    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s"
+    date_format: str = "%Y-%m-%d %H:%M:%S"
 
 
 # Imports que ahora funcionan gracias a ConfigLoader
@@ -63,7 +63,7 @@ from common.utils.logging_setup import RobustTimedRotatingFileHandler
 
 # --- Clases de Constantes para Respuestas ---
 @dataclass(frozen=True)
-class EstadosHTTP:
+class HTTPStatus:
     """Contiene constantes para los códigos de estado HTTP."""
 
     OK: str = "200 OK"
@@ -75,29 +75,29 @@ class EstadosHTTP:
 
 
 @dataclass(frozen=True)
-class CodigosRespuesta:
+class ResponseCodes:
     """Contiene constantes para los códigos de estado en el cuerpo JSON de la respuesta."""
 
     OK: str = "OK"
     ERROR: str = "ERROR"
-    ERROR_AUTORIZACION: str = "ERROR_AUTORIZACION"
-    ERROR_PROCESAMIENTO: str = "ERROR_PROCESAMIENTO"
-    ERROR_SERVIDOR: str = "ERROR_SERVIDOR"
+    AUTH_ERROR: str = "ERROR_AUTORIZACION"
+    PROCESSING_ERROR: str = "ERROR_PROCESAMIENTO"
+    SERVER_ERROR: str = "ERROR_SERVIDOR"
 
 
 # Instanciar las constantes para fácil acceso
-HTTP = EstadosHTTP()
-ESTADOS = CodigosRespuesta()
+HTTP = HTTPStatus()
+CODES = ResponseCodes()
 
 
 class RequestValidationError(Exception):
     """Excepción para encapsular errores de validación de la solicitud HTTP."""
 
-    def __init__(self, status: str, codigo_interno: str, mensaje: str):
+    def __init__(self, status: str, internal_code: str, message: str):
         self.status = status
-        self.codigo_interno = codigo_interno
-        self.mensaje = mensaje
-        super().__init__(f"{status} - {mensaje}")
+        self.internal_code = internal_code
+        self.message = message
+        super().__init__(f"{status} - {message}")
 
 
 class StopProcessingRequest(Exception):
@@ -107,71 +107,71 @@ class StopProcessingRequest(Exception):
 
 
 # --- Clase principal del servidor ---
-class ServidorCallback:  # CallbackServer
+class CallbackServer:
     """Clase principal del servidor de callbacks con gestión de recursos mejorada."""
 
     def __init__(self):
-        self.config = ConfiguracionServidorCallback()
-        self.config_log = ConfiguracionLog()
-        self.logger = self._configurar_logging()  # _setup_logging
-        self.conector_bd: Optional[DatabaseConnector] = None  # db_connector
-        self.instancia_servidor = None  # server_instance
-        self._evento_parada = threading.Event()  # _shutdown_event
-        self._estadisticas = {  # _stats
-            "solicitudes_recibidas": 0,
-            "solicitudes_procesadas": 0,
-            "solicitudes_fallidas": 0,
-            "tiempo_inicio": time.time(),
+        self.config = CallbackServerConfiguration()
+        self.log_config = LogConfiguration()
+        self.logger = self._setup_logging()
+        self.db_connector: Optional[DatabaseConnector] = None
+        self.server_instance = None
+        self._shutdown_event = threading.Event()
+        self._stats = {
+            "requests_received": 0,
+            "requests_processed": 0,
+            "requests_failed": 0,
+            "start_time": time.time(),
         }
-        self.token_autorizacion: Optional[str] = None
+        self.auth_token: Optional[str] = None
 
         # Cargar configuración
-        self._cargar_configuracion()  # _load_configuration
+        self._load_configuration()
         # Inicializar conexión a base de datos (no crítico para el inicio del servidor)
-        bd_inicializada = self._inicializar_objeto_conector_bd()
-        if not bd_inicializada:
+        db_initialized = self._initialize_db_connector_object()
+        if not db_initialized:
             self.logger.warning("Base de datos no inicializada al arrancar - se intentará conexión en la primera solicitud")
 
         # Configurar manejadores de señales
-        self._configurar_signal_handlers()  # _setup_signal_handlers
+        self._setup_signal_handlers()
 
-    def _configurar_logging(self) -> logging.Logger:  # _setup_logging
+    def _setup_logging(self) -> logging.Logger:
         """Configura un logging dedicado para el servidor de callbacks."""
-        nombre_logger = "SAMServidorCallback"  # logger_name
-        logger = logging.getLogger(nombre_logger)
+        logger_name = "SAMCallbackServer"
+        logger = logging.getLogger(logger_name)
 
         if logger.hasHandlers():  # Si ya tiene manejadores, no añadir más
             return logger
 
-        logger.setLevel(getattr(logging, self.config_log.nivel.upper(), logging.INFO))
+        logger.setLevel(getattr(logging, self.log_config.level.upper(), logging.INFO))
         logger.propagate = False  # No propagar al logger raíz
 
         # Crear directorio de log si no existe
-        log_dir = Path(self.config_log.directorio)  # log_dir
+        log_dir = Path(self.log_config.directory)
         try:
             log_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e_os:
             print(f"ERROR CRITICO: No se pudo crear el directorio de logs '{log_dir}': {e_os}", file=sys.stderr)
 
-        log_file_path: Path = log_dir / self.config_log.nombre_archivo  # log_file_path
+        log_file_path: Path = log_dir / self.log_config.filename
 
-        formateador = logging.Formatter(  # formatter
-            fmt=self.config_log.formato,
-            datefmt=self.config_log.formato_fecha,
+        formatter = logging.Formatter(
+            fmt=self.log_config.format,
+            datefmt=self.log_config.date_format,
         )
 
         try:
             # Manejador de archivo
-            file_handler = RobustTimedRotatingFileHandler(  # file_handler
+            file_handler = RobustTimedRotatingFileHandler(
                 str(log_file_path),
                 when="midnight",
                 interval=1,
-                backupCount=self.config_log.num_respaldos,
+                backupCount=self.log_config.backup_count,
                 encoding="utf-8",
                 max_retries=3,
                 retry_delay=0.5,
             )
-            file_handler.setFormatter(formateador)
+            file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
 
         except Exception as e:
@@ -179,39 +179,39 @@ class ServidorCallback:  # CallbackServer
             print(f"ERROR: No se pudo crear el manejador de archivo para '{log_file_path}': {e}", file=sys.stderr)
 
         # Manejador de consola (siempre añadir)
-        console_handler = logging.StreamHandler(sys.stdout)  # console_handler
-        console_handler.setFormatter(formateador)
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
         return logger
 
-    def _cargar_configuracion(self):  # _load_configuration
+    def _load_configuration(self):
         """Carga la configuración desde ConfigManager con valores por defecto."""
         try:
             # Cargar configuración del servidor de callbacks
-            cb_config = ConfigManager.get_callback_server_config()  # cb_config
+            cb_config = ConfigManager.get_callback_server_config()
             self.config.host = cb_config.get("host", self.config.host)
-            self.config.puerto = cb_config.get("port", self.config.puerto)
-            self.config.hilos = cb_config.get("threads", self.config.hilos)
+            self.config.port = cb_config.get("port", self.config.port)
+            self.config.threads = cb_config.get("threads", self.config.threads)
 
             # Cargar configuración de log (usando ConfigManager)
-            cfg_log_global = ConfigManager.get_log_config()  # log_config
-            self.config_log.directorio = cfg_log_global.get("directory", self.config_log.directorio)
-            self.config_log.nombre_archivo = cfg_log_global.get("callback_log_filename", self.config_log.nombre_archivo)
-            self.config_log.nivel = cfg_log_global.get("level_str", self.config_log.nivel)
-            self.config_log.formato = cfg_log_global.get("format", self.config_log.formato)
-            self.config_log.formato_fecha = cfg_log_global.get("datefmt", self.config_log.formato_fecha)
-            self.config_log.num_respaldos = cfg_log_global.get("backupCount", self.config_log.num_respaldos)
+            global_log_config = ConfigManager.get_log_config()
+            self.log_config.directory = global_log_config.get("directory", self.log_config.directory)
+            self.log_config.filename = global_log_config.get("callback_log_filename", self.log_config.filename)
+            self.log_config.level = global_log_config.get("level_str", self.log_config.level)
+            self.log_config.format = global_log_config.get("format", self.log_config.format)
+            self.log_config.date_format = global_log_config.get("datefmt", self.log_config.date_format)
+            self.log_config.backup_count = global_log_config.get("backupCount", self.log_config.backup_count)
 
-            # Re-configurar el logger si los valores de config_log cambiaron
-            self.logger = self._configurar_logging()
+            # Re-configurar el logger si los valores de log_config cambiaron
+            self.logger = self._setup_logging()
             # Cargar el token de autorización desde la configuración de AA
-            cfg_aa = ConfigManager.get_callback_server_config()
+            aa_config = ConfigManager.get_callback_server_config()
 
-            # # Cargar el token de autorización desde la configuración de AA
-            self.token_autorizacion = cfg_aa.get("callback_token")  # Asume que la clave en .env es CALLBACK_TOKEN
-            print(self.token_autorizacion)
-            if not self.token_autorizacion:
+            # Cargar el token de autorización desde la configuración de AA
+            self.auth_token = aa_config.get("callback_token")  # Asume que la clave en .env es CALLBACK_TOKEN
+            print(self.auth_token)
+            if not self.auth_token:
                 self.logger.warning(
                     "No se ha configurado un token de autorización (CALLBACK_TOKEN). El servidor aceptará solicitudes sin validar el token."
                 )
@@ -222,139 +222,143 @@ class ServidorCallback:  # CallbackServer
         except Exception as e:
             self.logger.error(f"Error cargando configuración, usando valores por defecto: {e}", exc_info=True)
 
-    def _inicializar_objeto_conector_bd_old(self) -> bool:  # Renombrado para claridad
+    def _initialize_db_connector_object_old(self) -> bool:  # Renombrado para claridad
         """
         Intenta crear o recrear la instancia de DatabaseConnector.
 
         Retorna True si el objeto fue creado, False si la creación del objeto falló.
         No garantiza que la conexión esté viva, solo que el objeto existe.
         """
-        max_reintentos = 2
-        retraso_reintento_seg = 2
+        max_retries = 2
+        retry_delay_seconds = 2
 
         # Si ya existe un conector, intentar cerrarlo antes de crear uno nuevo.
-        if self.conector_bd and hasattr(self.conector_bd, "cerrar_conexion_hilo_actual"):
+        if self.db_connector and hasattr(self.db_connector, "cerrar_conexion_hilo_actual"):
             try:
-                self.conector_bd.cerrar_conexion_hilo_actual()
+                self.db_connector.cerrar_conexion_hilo_actual()
             except Exception as e_close:
                 self.logger.debug(f"Error menor al cerrar conector BD previo: {e_close}")
-        self.conector_bd = None  # Asegurar que empezamos desde None para recrear
+        self.db_connector = None  # Asegurar que empezamos desde None para recrear
 
-        for intento in range(1, max_reintentos + 1):
+        for attempt in range(1, max_retries + 1):
             try:
-                cfg_sql = ConfigManager.get_sql_server_config("SQL_SAM")
-                nombre_bd_sam = cfg_sql.get("database")
+                sql_config = ConfigManager.get_sql_server_config("SQL_SAM")
+                sam_db_name = sql_config.get("database")
 
-                if not nombre_bd_sam:
+                if not sam_db_name:
                     self.logger.error("Config BD: 'database' (SQL_SAM_DB_NAME) no encontrada.")
                     return False  # No se puede crear sin nombre de BD
-                if not all(cfg_sql.get(k) for k in ["server", "uid", "pwd"]):
+                if not all(sql_config.get(k) for k in ["server", "uid", "pwd"]):
                     self.logger.error("Config BD incompleta (falta server, uid o pwd para SQL_SAM).")
                     return False
 
-                self.conector_bd = DatabaseConnector(  # Crea la nueva instancia
-                    servidor=cfg_sql["server"], base_datos=nombre_bd_sam, usuario=cfg_sql["uid"], contrasena=cfg_sql["pwd"]
+                self.db_connector = DatabaseConnector(  # Crea la nueva instancia
+                    servidor=sql_config["server"], base_datos=sam_db_name, usuario=sql_config["uid"], contrasena=sql_config["pwd"]
                 )
-                self.logger.info(f"Objeto DatabaseConnector (re)creado exitosamente (intento {intento}).")
+                self.logger.info(f"Objeto DatabaseConnector (re)creado exitosamente (intento {attempt}).")
                 return True  # Objeto creado
             except Exception as e_init_obj:
-                self.logger.warning(f"Intento {intento}/{max_reintentos} de creación de objeto DatabaseConnector fallido: {e_init_obj}")
-                if intento < max_reintentos:
-                    time.sleep(retraso_reintento_seg)
+                self.logger.warning(f"Intento {attempt}/{max_retries} de creación de objeto DatabaseConnector fallido: {e_init_obj}")
+                if attempt < max_retries:
+                    time.sleep(retry_delay_seconds)
                 else:
                     self.logger.error("Falló la creación del objeto DatabaseConnector después de todos los reintentos.")
-                    self.conector_bd = None
+                    self.db_connector = None
                     return False
         return False  # No debería llegar si el bucle se completa
 
     @contextmanager
-    def _obtener_conexion_bd_old(self):
+    def _get_db_connection_old(self):
         """
-        Gestor de contexto que asegura que self.conector_bd exista y tenga una conexión verificada.
+        Gestor de contexto que asegura que self.db_connector exista y tenga una conexión verificada.
 
         Lanza ConnectionError si no se puede establecer una conexión válida.
         """
-        # Paso 1: Asegurar que el objeto self.conector_bd exista.
-        if not self.conector_bd:
+        # Paso 1: Asegurar que el objeto self.db_connector exista.
+        if not self.db_connector:
             self.logger.info("Objeto conector BD es None. Intentando creación inicial del objeto.")
-            if not self._inicializar_objeto_conector_bd():
+            if not self._initialize_db_connector_object():
                 self.logger.error("Fallo crítico: No se pudo crear el objeto DatabaseConnector.")
                 raise ConnectionError("Fallo crítico al crear el objeto DatabaseConnector.")
 
         # Paso 2: Verificar la conexión del objeto existente. Reintentar si falla.
         # Permitimos un número limitado de reintentos de verificación/recreación aquí.
-        max_intentos_verificacion = 2
-        for intento_verif in range(1, max_intentos_verificacion + 1):
+        max_verification_attempts = 2
+        for verification_attempt in range(1, max_verification_attempts + 1):
             try:
-                if self.conector_bd and self.conector_bd.verificar_conexion():
-                    self.logger.debug("Conexión BD verificada exitosamente en _obtener_conexion_bd.")
-                    yield self.conector_bd  # Conexión buena, ceder el conector.
+                if self.db_connector and self.db_connector.verificar_conexion():
+                    self.logger.debug("Conexión BD verificada exitosamente en _get_db_connection.")
+                    yield self.db_connector  # Conexión buena, ceder el conector.
                     return  # Salir del generador y del bucle.
                 else:
-                    self.logger.warning(f"Verificación de conexión BD falló para el hilo actual (intento {intento_verif}). Intentando conectar...")
+                    self.logger.warning(
+                        f"Verificación de conexión BD falló para el hilo actual (intento {verification_attempt}). Intentando conectar..."
+                    )
                     try:
-                        self.conector_bd.conectar_base_datos()  # Conectar para el hilo actual usando el objeto existente
+                        self.db_connector.conectar_base_datos()  # Conectar para el hilo actual usando el objeto existente
                         # Si tiene éxito, el siguiente loop de verificación debería pasar.
                     except Exception as e_conn_thread:
                         self.logger.error(f"Error al intentar conectar para el hilo actual: {e_conn_thread}", exc_info=True)
                         # Si falla la conexión aquí, podría ser necesario recrear el objeto o fallar la solicitud.
-            except Exception as e_verif_reint:
-                self.logger.error(f"Excepción durante intento {intento_verif} de conexión/verificación BD: {e_verif_reint}", exc_info=True)
+            except Exception as e_verification_retry:
+                self.logger.error(
+                    f"Excepción durante intento {verification_attempt} de conexión/verificación BD: {e_verification_retry}", exc_info=True
+                )
                 # Si hay una excepción, también es una falla. Intentar recrear el objeto por si acaso.
-                if not self._inicializar_objeto_conector_bd():
-                    msg_error = "Fallo crítico al recrear objeto DB tras excepción en verificación."
-                    self.logger.error(msg_error)
-                    raise ConnectionError(msg_error) from e_verif_reint
+                if not self._initialize_db_connector_object():
+                    error_msg = "Fallo crítico al recrear objeto DB tras excepción en verificación."
+                    self.logger.error(error_msg)
+                    raise ConnectionError(error_msg) from e_verification_retry
 
-            if intento_verif < max_intentos_verificacion:
+            if verification_attempt < max_verification_attempts:
                 self.logger.info("Pausa antes del siguiente intento de verificación/recreación de conexión BD.")
-                time.sleep(1 + intento_verif)  # Pequeña pausa incremental
+                time.sleep(1 + verification_attempt)  # Pequeña pausa incremental
 
         # Si el bucle termina, todos los intentos de obtener una conexión verificada fallaron.
-        msg_final_fallo = "No se pudo obtener una conexión de BD válida después de múltiples intentos y recreaciones."
-        self.logger.error(msg_final_fallo)
-        raise ConnectionError(msg_final_fallo) from None
+        final_failure_msg = "No se pudo obtener una conexión de BD válida después de múltiples intentos y recreaciones."
+        self.logger.error(final_failure_msg)
+        raise ConnectionError(final_failure_msg) from None
 
     # === PASO 1: DIAGNÓSTICO DETALLADO ===
-    # 1.1 Añadir logging más específico en _inicializar_objeto_conector_bd
-    def _inicializar_objeto_conector_bd(self) -> bool:
+    # 1.1 Añadir logging más específico en _initialize_db_connector_object
+    def _initialize_db_connector_object(self) -> bool:
         """
         Intenta crear o recrear la instancia de DatabaseConnector.
 
         VERSIÓN CON DIAGNÓSTICO MEJORADO.
         """
-        max_reintentos = 2
-        retraso_reintento_seg = 2
+        max_retries = 2
+        retry_delay_seconds = 2
 
         # Si ya existe un conector, intentar cerrarlo antes de crear uno nuevo.
-        if self.conector_bd and hasattr(self.conector_bd, "cerrar_conexion_hilo_actual"):
+        if self.db_connector and hasattr(self.db_connector, "cerrar_conexion_hilo_actual"):
             try:
-                self.conector_bd.cerrar_conexion_hilo_actual()
+                self.db_connector.cerrar_conexion_hilo_actual()
             except Exception as e_close:
                 self.logger.debug(f"Error menor al cerrar conector BD previo: {e_close}")
-        self.conector_bd = None
+        self.db_connector = None
 
-        for intento in range(1, max_reintentos + 1):
+        for attempt in range(1, max_retries + 1):
             try:
-                cfg_sql = ConfigManager.get_sql_server_config("SQL_SAM")
-                nombre_bd_sam = cfg_sql.get("database")
+                sql_config = ConfigManager.get_sql_server_config("SQL_SAM")
+                sam_db_name = sql_config.get("database")
 
                 # DIAGNÓSTICO DETALLADO DE CONFIGURACIÓN
-                self.logger.debug(f"=== DIAGNÓSTICO BD (Intento {intento}) ===")
-                self.logger.debug(f"Server: {cfg_sql.get('server', 'NO_CONFIG')}")
-                self.logger.debug(f"Database: {nombre_bd_sam or 'NO_CONFIG'}")
-                self.logger.debug(f"User: {cfg_sql.get('uid', 'NO_CONFIG')}")
-                self.logger.debug(f"Password configured: {'YES' if cfg_sql.get('pwd') else 'NO'}")
+                self.logger.debug(f"=== DIAGNÓSTICO BD (Intento {attempt}) ===")
+                self.logger.debug(f"Server: {sql_config.get('server', 'NO_CONFIG')}")
+                self.logger.debug(f"Database: {sam_db_name or 'NO_CONFIG'}")
+                self.logger.debug(f"User: {sql_config.get('uid', 'NO_CONFIG')}")
+                self.logger.debug(f"Password configured: {'YES' if sql_config.get('pwd') else 'NO'}")
 
-                if not nombre_bd_sam:
+                if not sam_db_name:
                     self.logger.error("Config BD: 'database' (SQL_SAM_DB_NAME) no encontrada.")
                     return False
-                if not all(cfg_sql.get(k) for k in ["server", "uid", "pwd"]):
+                if not all(sql_config.get(k) for k in ["server", "uid", "pwd"]):
                     self.logger.error("Config BD incompleta (falta server, uid o pwd para SQL_SAM).")
                     return False
 
-                self.conector_bd = DatabaseConnector(
-                    servidor=cfg_sql["server"], base_datos=nombre_bd_sam, usuario=cfg_sql["uid"], contrasena=cfg_sql["pwd"]
+                self.db_connector = DatabaseConnector(
+                    servidor=sql_config["server"], base_datos=sam_db_name, usuario=sql_config["uid"], contrasena=sql_config["pwd"]
                 )
 
                 # VERIFICACIÓN INMEDIATA TRAS CREACIÓN
@@ -363,513 +367,543 @@ class ServidorCallback:  # CallbackServer
                     # Intentar establecer la conexión. conectar_base_datos()
                     # guardará la conexión en el hilo local y la devolverá,
                     # o levantará una excepción si falla.
-                    connection = self.conector_bd.conectar_base_datos()  # <--- AÑADIR ESTA LLAMADA
+                    connection = self.db_connector.conectar_base_datos()  # <--- AÑADIR ESTA LLAMADA
                     if connection:  # Si conectar_base_datos() es exitoso y devuelve la conexión
-                        self.logger.debug(f"Conexión BD establecida y verificada exitosamente tras creación (intento {intento})")
-                        # Opcionalmente, podrías incluso llamar a self.conector_bd.verificar_conexion() aquí si quieres la doble verificación,
+                        self.logger.debug(f"Conexión BD establecida y verificada exitosamente tras creación (intento {attempt})")
+                        # Opcionalmente, podrías incluso llamar a self.db_connector.verificar_conexion() aquí si quieres la doble verificación,
                         # pero el éxito de conectar_base_datos() ya es una buena señal.
                         return True
                     else:
                         # Este caso es menos probable si conectar_base_datos está bien implementado
                         # (debería levantar excepción en fallo, no devolver None silenciosamente)
-                        self.logger.warning(f"Conexión a BD no establecida tras creación (intento {intento}), conectar_base_datos devolvió None.")
+                        self.logger.warning(f"Conexión a BD no establecida tras creación (intento {attempt}), conectar_base_datos devolvió None.")
 
                 except pyodbc.Error as e_db_connect:  # type: ignore # Capturar específicamente errores de pyodbc  # noqa: F821
                     self.logger.error(f"Error de PyODBC al intentar conectar inmediatamente: {e_db_connect}", exc_info=True)
-                except Exception as e_connect_inmediata:  # Capturar otras excepciones
-                    self.logger.error(f"Excepción al intentar conectar inmediatamente: {e_connect_inmediata}", exc_info=True)
+                except Exception as e_immediate_connect:  # Capturar otras excepciones
+                    self.logger.error(f"Excepción al intentar conectar inmediatamente: {e_immediate_connect}", exc_info=True)
 
             except Exception as e_init_obj:
-                self.logger.warning(
-                    f"Intento {intento}/{max_reintentos} de creación de objeto DatabaseConnector fallido: {e_init_obj}", exc_info=True
-                )
+                self.logger.warning(f"Intento {attempt}/{max_retries} de creación de objeto DatabaseConnector fallido: {e_init_obj}", exc_info=True)
 
-            if intento < max_reintentos:
-                self.logger.info(f"Esperando {retraso_reintento_seg}s antes del siguiente intento...")
-                time.sleep(retraso_reintento_seg)
+            if attempt < max_retries:
+                self.logger.info(f"Esperando {retry_delay_seconds}s antes del siguiente intento...")
+                time.sleep(retry_delay_seconds)
             else:
                 self.logger.error("Falló la creación/verificación del objeto DatabaseConnector después de todos los reintentos.")
-                self.conector_bd = None
+                self.db_connector = None
                 return False
         return False
 
-    # === PASO 2: MEJORAR EL MÉTODO _obtener_conexion_bd ===
+    # === PASO 2: MEJORAR EL MÉTODO _get_db_connection ===
     @contextmanager
-    def _obtener_conexion_bd(self):
+    def _get_db_connection(self):
         """VERSIÓN MEJORADA con más diagnóstico y reintentos inteligentes."""
-        # Paso 1: Asegurar que el objeto self.conector_bd exista.
-        if not self.conector_bd:
-            self.logger.debug("bjeto conector BD es None. Intentando creación inicial del objeto.")
-            if not self._inicializar_objeto_conector_bd():
+        # Paso 1: Asegurar que el objeto self.db_connector exista.
+        if not self.db_connector:
+            self.logger.debug("Objeto conector BD es None. Intentando creación inicial del objeto.")
+            if not self._initialize_db_connector_object():
                 self.logger.error("CRÍTICO: No se pudo crear el objeto DatabaseConnector.")
                 raise ConnectionError("Fallo crítico al crear el objeto DatabaseConnector.")
 
         # Paso 2: Verificar la conexión con diagnóstico mejorado
-        max_intentos_verificacion = 3  # Aumentado de 2 a 3
-        for intento_verif in range(1, max_intentos_verificacion + 1):
+        max_verification_attempts = 3  # Aumentado de 2 a 3
+        for verification_attempt in range(1, max_verification_attempts + 1):
             try:
-                self.logger.debug(f"Verificando conexión BD (intento {intento_verif}/{max_intentos_verificacion})")
+                self.logger.debug(f"Verificando conexión BD (intento {verification_attempt}/{max_verification_attempts})")
 
                 # DIAGNÓSTICO: Verificar si el objeto existe y tiene los métodos esperados
-                if not self.conector_bd:
-                    self.logger.error("self.conector_bd es None durante verificación")
+                if not self.db_connector:
+                    self.logger.error("self.db_connector es None durante verificación")
                     raise ConnectionError("Conector BD es None")
 
-                if not hasattr(self.conector_bd, "verificar_conexion"):
-                    self.logger.error("El objeto conector_bd no tiene método 'verificar_conexion'")
+                if not hasattr(self.db_connector, "verificar_conexion"):
+                    self.logger.error("El objeto db_connector no tiene método 'verificar_conexion'")
                     raise ConnectionError("Objeto DatabaseConnector inválido")
 
                 # Intentar verificación con timeout si es posible
-                conexion_ok = self.conector_bd.verificar_conexion()
+                connection_ok = self.db_connector.verificar_conexion()
 
-                if conexion_ok:
-                    self.logger.debug(f"Conexión BD verificada exitosamente (intento {intento_verif})")
-                    yield self.conector_bd
+                if connection_ok:
+                    self.logger.debug(f"Conexión BD verificada exitosamente (intento {verification_attempt})")
+                    yield self.db_connector
                     return
                 else:
-                    self.logger.warning(f"Verificación de conexión BD falló (intento {intento_verif}/{max_intentos_verificacion})")
+                    self.logger.warning(f"Verificación de conexión BD falló (intento {verification_attempt}/{max_verification_attempts})")
 
                     # DIAGNÓSTICO ADICIONAL: Intentar obtener más información del error
                     try:
                         # Si tu DatabaseConnector tiene un método para obtener el último error
-                        if hasattr(self.conector_bd, "ultimo_error"):
-                            self.logger.error(f"Último error de BD: {self.conector_bd.ultimo_error}")
+                        if hasattr(self.db_connector, "ultimo_error"):
+                            self.logger.error(f"Último error de BD: {self.db_connector.ultimo_error}")
 
                         # Intentar una operación simple para diagnóstico
-                        if hasattr(self.conector_bd, "obtener_conexion"):
-                            conn = self.conector_bd.obtener_conexion()
+                        if hasattr(self.db_connector, "obtener_conexion"):
+                            conn = self.db_connector.obtener_conexion()
                             if conn:
                                 self.logger.debug("obtener_conexion() retornó un objeto de conexión")
                                 # Intentar un query simple
                                 cursor = conn.cursor()
                                 cursor.execute("SELECT 1")
-                                resultado = cursor.fetchone()
+                                result = cursor.fetchone()
                                 cursor.close()
-                                self.logger.debug(f"Query de prueba exitoso: {resultado}")
+                                self.logger.debug(f"Query de prueba exitoso: {result}")
                             else:
                                 self.logger.error("obtener_conexion() retornó None")
-                    except Exception as e_diag:
-                        self.logger.error(f"Error durante diagnóstico adicional: {e_diag}")
+                    except Exception as e_diagnostic:
+                        self.logger.error(f"Error durante diagnóstico adicional: {e_diagnostic}")
 
                     # Recrear el objeto si no es el último intento
-                    if intento_verif < max_intentos_verificacion:
+                    if verification_attempt < max_verification_attempts:
                         self.logger.info("Recreando objeto DatabaseConnector...")
-                        if not self._inicializar_objeto_conector_bd():
-                            msg_error = "Fallo crítico al recrear objeto DB tras falla de verificación."
-                            self.logger.error(msg_error)
-                            raise ConnectionError(msg_error) from None
+                        if not self._initialize_db_connector_object():
+                            error_msg = "Fallo crítico al recrear objeto DB tras falla de verificación."
+                            self.logger.error(error_msg)
+                            raise ConnectionError(error_msg) from None
 
-            except Exception as e_verif_reint:
-                self.logger.error(f"Excepción durante intento {intento_verif} de conexión/verificación BD: {e_verif_reint}", exc_info=True)
+            except Exception as e_verification_retry:
+                self.logger.error(
+                    f"Excepción durante intento {verification_attempt} de conexión/verificación BD: {e_verification_retry}", exc_info=True
+                )
 
                 # Solo recrear si no es el último intento
-                if intento_verif < max_intentos_verificacion:
+                if verification_attempt < max_verification_attempts:
                     self.logger.info("Recreando objeto tras excepción...")
-                    if not self._inicializar_objeto_conector_bd():
-                        msg_error = "Fallo crítico al recrear objeto DB tras excepción."
-                        self.logger.error(msg_error)
-                        raise ConnectionError(msg_error) from None
+                    if not self._initialize_db_connector_object():
+                        error_msg = "Fallo crítico al recrear objeto DB tras excepción."
+                        self.logger.error(error_msg)
+                        raise ConnectionError(error_msg) from None
 
             # Pausa incremental entre intentos
-            if intento_verif < max_intentos_verificacion:
-                pausa = 2 + intento_verif  # 3s, 4s, etc.
-                self.logger.info(f"Pausa de {pausa}s antes del siguiente intento...")
-                time.sleep(pausa)
+            if verification_attempt < max_verification_attempts:
+                pause = 2 + verification_attempt  # 3s, 4s, etc.
+                self.logger.info(f"Pausa de {pause}s antes del siguiente intento...")
+                time.sleep(pause)
 
         # Si llegamos aquí, todos los intentos fallaron
-        msg_final_fallo = "CRÍTICO: No se pudo obtener una conexión de BD válida después de múltiples intentos exhaustivos."
-        self.logger.error(msg_final_fallo)
-        raise ConnectionError(msg_final_fallo) from None
+        final_failure_msg = "CRÍTICO: No se pudo obtener una conexión de BD válida después de múltiples intentos exhaustivos."
+        self.logger.error(final_failure_msg)
+        raise ConnectionError(final_failure_msg) from None
 
     # === PASO 3: MÉTODO DE DIAGNÓSTICO INDEPENDIENTE ===
-    def diagnosticar_conexion_bd(self) -> Dict[str, Any]:
+    def diagnose_db_connection(self) -> Dict[str, Any]:
         """Método independiente para diagnosticar problemas de conexión a BD."""
-        diagnostico = {
-            "config_encontrada": False,
-            "config_completa": False,
-            "objeto_creado": False,
-            "conexion_verificada": False,
-            "errores": [],
+        diagnostic = {
+            "config_found": False,
+            "config_complete": False,
+            "object_created": False,
+            "connection_verified": False,
+            "errors": [],
             "config_details": {},
         }
 
         try:
             # 1. Verificar configuración
-            cfg_sql = ConfigManager.get_sql_server_config("SQL_SAM")
-            diagnostico["config_encontrada"] = True
-            diagnostico["config_details"] = {
-                "server": cfg_sql.get("server", "NO_CONFIG"),
-                "database": cfg_sql.get("database", "NO_CONFIG"),
-                "uid": cfg_sql.get("uid", "NO_CONFIG"),
-                "pwd_configured": bool(cfg_sql.get("pwd")),
+            sql_config = ConfigManager.get_sql_server_config("SQL_SAM")
+            diagnostic["config_found"] = True
+            diagnostic["config_details"] = {
+                "server": sql_config.get("server", "NO_CONFIG"),
+                "database": sql_config.get("database", "NO_CONFIG"),
+                "uid": sql_config.get("uid", "NO_CONFIG"),
+                "pwd_configured": bool(sql_config.get("pwd")),
             }
 
             # 2. Verificar completitud de config
-            if all(cfg_sql.get(k) for k in ["server", "database", "uid", "pwd"]):
-                diagnostico["config_completa"] = True
+            if all(sql_config.get(k) for k in ["server", "database", "uid", "pwd"]):
+                diagnostic["config_complete"] = True
             else:
-                diagnostico["errores"].append("Configuración BD incompleta")
+                diagnostic["errors"].append("Configuración BD incompleta")
 
             # 3. Intentar crear objeto
-            if diagnostico["config_completa"]:
+            if diagnostic["config_complete"]:
                 try:
-                    conector_test = DatabaseConnector(
-                        servidor=cfg_sql["server"],
-                        base_datos=cfg_sql["database"],
-                        usuario=cfg_sql["uid"],
-                        contrasena=cfg_sql["pwd"],
+                    test_connector = DatabaseConnector(
+                        servidor=sql_config["server"],
+                        base_datos=sql_config["database"],
+                        usuario=sql_config["uid"],
+                        contrasena=sql_config["pwd"],
                     )
-                    diagnostico["objeto_creado"] = True
+                    diagnostic["object_created"] = True
 
                     # 4. Intentar verificar conexión
-                    if conector_test.verificar_conexion():
-                        diagnostico["conexion_verificada"] = True
+                    if test_connector.verificar_conexion():
+                        diagnostic["connection_verified"] = True
                     else:
-                        diagnostico["errores"].append("Verificación de conexión falló")
+                        diagnostic["errors"].append("Verificación de conexión falló")
 
                 except Exception as e_obj:
-                    diagnostico["errores"].append(f"Error creando objeto: {e_obj}")
+                    diagnostic["errors"].append(f"Error creando objeto: {e_obj}")
 
         except Exception as e_config:
-            diagnostico["errores"].append(f"Error obteniendo config: {e_config}")
+            diagnostic["errors"].append(f"Error obteniendo config: {e_config}")
 
-        return diagnostico
+        return diagnostic
 
     # === PASO 4: IMPLEMENTAR UN HEALTH CHECK ===
-    def health_check_bd(self) -> bool:
+    def db_health_check(self) -> bool:
         """Health check simple para la base de datos."""
         try:
-            with self._obtener_conexion_bd() as bd:
+            with self._get_db_connection() as db:
                 # Intentar una query muy simple
-                if hasattr(bd, "ejecutar_query"):
-                    resultado = bd.ejecutar_query("SELECT 1 as test")
-                    return resultado is not None
+                if hasattr(db, "ejecutar_query"):
+                    result = db.ejecutar_query("SELECT 1 as test")
+                    return result is not None
                 else:
-                    return bd.verificar_conexion()
+                    return db.verificar_conexion()
         except Exception as e:
             self.logger.error(f"Health check BD falló: {e}")
             return False
 
     # === PASO 5: CONFIGURACIÓN DE RECONEXIÓN AUTOMÁTICA ===
-    def _configurar_reconexion_automatica(self):
+    def _setup_auto_reconnection(self):
         """Configura un hilo de reconexión automática en background."""
 
-        def tarea_reconexion():
-            while not self._evento_parada.is_set():
+        def reconnection_task():
+            while not self._shutdown_event.is_set():
                 try:
-                    if not self.health_check_bd():
+                    if not self.db_health_check():
                         self.logger.warning("Health check BD falló, intentando reconectar...")
-                        self._inicializar_objeto_conector_bd()
+                        self._initialize_db_connector_object()
 
                     # Esperar 30 segundos antes del siguiente check
-                    self._evento_parada.wait(30)
+                    self._shutdown_event.wait(30)
 
                 except Exception as e:
                     self.logger.error(f"Error en tarea de reconexión: {e}")
-                    self._evento_parada.wait(60)  # Esperar más tiempo si hay error
+                    self._shutdown_event.wait(60)  # Esperar más tiempo si hay error
 
-        hilo_reconexion = threading.Thread(target=tarea_reconexion, daemon=True)
-        hilo_reconexion.start()
+        reconnection_thread = threading.Thread(target=reconnection_task, daemon=True)
+        reconnection_thread.start()
         self.logger.info("Hilo de reconexión automática iniciado")
 
-    def _validar_payload_callback(self, datos: Dict[str, Any]) -> Tuple[bool, str, Optional[str], Optional[str]]:
-        """Valida el payload del callback y extrae los campos requeridos."""
+    def _validate_callback_payload(self, data: Dict[str, Any]) -> Tuple[bool, str, Optional[str], Optional[str]]:
+        """
+        Valida el payload del callback. `botOutput` es ahora opcional.
+        """
         try:
-            id_despliegue = datos.get("deploymentId")  # deployment_id
-            estado = datos.get("status")  # status
-            botOutput = datos.get("botOutput")
+            deployment_id = data.get("deploymentId")
+            status = data.get("status")
+            bot_output = data.get("botOutput")  # Se obtiene, pero su ausencia no es un error.
 
-            if id_despliegue is None:  # Chequear None explícitamente
+            # Campos obligatorios
+            if not deployment_id:
                 return False, "Campo requerido faltante o nulo: deploymentId", None, None
-
-            if estado is None:  # Chequear None explícitamente
+            if not status:
                 return False, "Campo requerido faltante o nulo: status", None, None
 
-            if botOutput is None:  # Chequear None explícitamente
+            # Validación de tipos para campos obligatorios
+            if not isinstance(deployment_id, str) or not deployment_id.strip():
+                return False, "deploymentId debe ser una cadena no vacía", None, None
+            if not isinstance(status, str) or not status.strip():
+                return False, "status debe ser una cadena no vacía", None, None
+
+            # Validación para el campo opcional botOutput
+            # Si existe, debe ser un diccionario. Si no existe (es None), se ignora.
+            if bot_output is not None and not isinstance(bot_output, dict):
+                return False, "Si se provee, botOutput debe ser un diccionario", None, None
+
+            return True, "Válido", deployment_id.strip(), status.strip()
+
+        except AttributeError:
+            return False, "Payload de callback inválido (no es un diccionario)", None, None
+        except Exception as e:
+            self.logger.error(f"Excepción inesperada durante _validate_callback_payload: {e}", exc_info=True)
+            return False, f"Error de validación interno: {str(e)}", None, None
+
+    def _validate_callback_payload_old(self, data: Dict[str, Any]) -> Tuple[bool, str, Optional[str], Optional[str]]:
+        """Valida el payload del callback y extrae los campos requeridos."""
+        try:
+            deployment_id = data.get("deploymentId")
+            status = data.get("status")
+            bot_output = data.get("botOutput")
+
+            if deployment_id is None:  # Chequear None explícitamente
+                return False, "Campo requerido faltante o nulo: deploymentId", None, None
+
+            if status is None:  # Chequear None explícitamente
+                return False, "Campo requerido faltante o nulo: status", None, None
+
+            if bot_output is None:  # Chequear None explícitamente
                 return False, "Campo requerido faltante o nulo: botOutput", None, None
 
             # Validación adicional
-            if not isinstance(id_despliegue, str) or len(id_despliegue.strip()) == 0:
+            if not isinstance(deployment_id, str) or len(deployment_id.strip()) == 0:
                 return False, "deploymentId debe ser una cadena no vacía", None, None
 
-            if not isinstance(estado, str) or len(estado.strip()) == 0:
+            if not isinstance(status, str) or len(status.strip()) == 0:
                 return False, "status debe ser una cadena no vacía", None, None
 
-            if not isinstance(botOutput, dict):
+            if not isinstance(bot_output, dict):
                 return False, "botOutput debe ser un diccionario", None, None
 
-            return True, "Válido", id_despliegue.strip(), estado.strip()
+            return True, "Válido", deployment_id.strip(), status.strip()
 
-        except AttributeError:  # Si 'datos' no es un diccionario (ej. None)
+        except AttributeError:  # Si 'data' no es un diccionario (ej. None)
             return False, "Payload de callback inválido (no es un diccionario)", None, None
         except Exception as e:  # Otros errores inesperados durante la validación
-            self.logger.error(f"Excepción inesperada durante _validar_payload_callback: {e}", exc_info=True)
+            self.logger.error(f"Excepción inesperada durante _validate_callback_payload: {e}", exc_info=True)
             return False, f"Error de validación interno: {str(e)}", None, None
 
-    def _procesar_callback(self, id_despliegue: str, estado: str, payload_crudo: str) -> Tuple[bool, str]:  # _process_callback, raw_payload
+    def _process_callback(self, deployment_id: str, status: str, raw_payload: str) -> Tuple[bool, str]:
         """Procesa el callback con actualización en la base de datos."""
         try:
-            with self._obtener_conexion_bd() as bd:  # db
-                # Asumimos que bd es un DatabaseConnector válido aquí
-                if bd is None:
-                    self._estadisticas["solicitudes_fallidas"] += 1
+            with self._get_db_connection() as db:
+                # Asumimos que db es un DatabaseConnector válido aquí
+                if db is None:
+                    self._stats["requests_failed"] += 1
                     self.logger.error("El conector de base de datos es None al intentar procesar el callback.")
                     return False, "Conector de base de datos no disponible."
-                exito = bd.actualizar_ejecucion_desde_callback(id_despliegue, estado, payload_crudo)  # success
-                if exito:
-                    self._estadisticas["solicitudes_procesadas"] += 1
+                success = db.actualizar_ejecucion_desde_callback(deployment_id, status, raw_payload)
+                if success:
+                    self._stats["requests_processed"] += 1
                     return True, "Callback procesado y BD actualizada exitosamente"
                 else:
-                    self._estadisticas["solicitudes_fallidas"] += 1
+                    self._stats["requests_failed"] += 1
                     # El logger dentro de actualizar_ejecucion_desde_callback ya debería haber logueado el fallo.
                     return False, "Falló la actualización en la base de datos (ver logs de BD para detalles)"
 
-        except ConnectionError as e_conn:  # Captura específica si _obtener_conexion_bd falla
-            self._estadisticas["solicitudes_fallidas"] += 1
+        except ConnectionError as e_conn:  # Captura específica si _get_db_connection falla
+            self._stats["requests_failed"] += 1
             self.logger.error(
-                f"Error de conexión a BD procesando callback para {id_despliegue}: {e_conn}", exc_info=False
+                f"Error de conexión a BD procesando callback para {deployment_id}: {e_conn}", exc_info=False
             )  # No incluir exc_info si ya se logueó antes
             return False, f"Error de conexión a BD: {str(e_conn)}"
         except Exception as e:  # Otros errores
-            self._estadisticas["solicitudes_fallidas"] += 1
-            self.logger.error(f"Error general procesando callback para {id_despliegue}: {e}", exc_info=True)
+            self._stats["requests_failed"] += 1
+            self.logger.error(f"Error general procesando callback para {deployment_id}: {e}", exc_info=True)
             return False, f"Error de procesamiento general: {str(e)}"
 
-    def _validar_solicitud_http(self, entorno: Dict[str, Any]):
+    def _validate_http_request(self, environ: Dict[str, Any]):
         """
         Valida las propiedades de la solicitud HTTP (autorización, método, tamaño).
         Lanza RequestValidationError si alguna validación falla.
         """
         # 1. Validación de Autorización
-        if self.token_autorizacion:
-            token_recibido_str = entorno.get("HTTP_X_AUTHORIZATION")
-            token_esperado_bytes = self.token_autorizacion.encode("utf-8")
-            token_recibido_bytes = token_recibido_str.encode("utf-8") if token_recibido_str else b""
+        if self.auth_token:
+            received_token_str = environ.get("HTTP_X_AUTHORIZATION")
+            expected_token_bytes = self.auth_token.encode("utf-8")
+            received_token_bytes = received_token_str.encode("utf-8") if received_token_str else b""
 
-            if not hmac.compare_digest(token_esperado_bytes, token_recibido_bytes):
+            if not hmac.compare_digest(expected_token_bytes, received_token_bytes):
                 raise RequestValidationError(
-                    status=HTTP.UNAUTHORIZED, codigo_interno=ESTADOS.ERROR_AUTORIZACION, mensaje="Credenciales de autorización no válidas o ausentes."
+                    status=HTTP.UNAUTHORIZED, internal_code=CODES.AUTH_ERROR, message="Credenciales de autorización no válidas o ausentes."
                 )
 
         # 2. Validación del Método
-        if entorno.get("REQUEST_METHOD", "GET") != "POST":
-            raise RequestValidationError(status=HTTP.METHOD_NOT_ALLOWED, codigo_interno=ESTADOS.ERROR, mensaje="Solo se permite el método POST.")
+        if environ.get("REQUEST_METHOD", "GET") != "POST":
+            raise RequestValidationError(status=HTTP.METHOD_NOT_ALLOWED, internal_code=CODES.ERROR, message="Solo se permite el método POST.")
 
         # 3. Validación del Tamaño del Contenido
         try:
-            longitud_contenido = int(entorno.get("CONTENT_LENGTH", 0))
+            content_length = int(environ.get("CONTENT_LENGTH", 0))
         except (ValueError, TypeError):
-            longitud_contenido = 0
+            content_length = 0
 
-        if longitud_contenido <= 0:
+        if content_length <= 0:
             raise RequestValidationError(
-                status=HTTP.BAD_REQUEST, codigo_interno=ESTADOS.ERROR, mensaje="Cuerpo de la solicitud vacío o Content-Length inválido/ausente."
+                status=HTTP.BAD_REQUEST, internal_code=CODES.ERROR, message="Cuerpo de la solicitud vacío o Content-Length inválido/ausente."
             )
 
-        if longitud_contenido > self.config.longitud_max_contenido:
+        if content_length > self.config.max_content_length:
             raise RequestValidationError(
                 status=HTTP.PAYLOAD_TOO_LARGE,
-                codigo_interno=ESTADOS.ERROR,
-                mensaje=f"Payload demasiado grande (máximo {self.config.longitud_max_contenido} bytes).",
+                internal_code=CODES.ERROR,
+                message=f"Payload demasiado grande (máximo {self.config.max_content_length} bytes).",
             )
 
-    def _leer_y_parsear_payload(self, entorno: Dict[str, Any]) -> Tuple[str, str, str]:
+    def _read_and_parse_payload(self, environ: Dict[str, Any]) -> Tuple[str, str, str]:
         """
         Lee, decodifica, parsea y valida el contenido del payload.
-        Devuelve (deployment_id, status, payload_compacto) si es exitoso.
+        Devuelve (deployment_id, status, compact_payload) si es exitoso.
         Lanza RequestValidationError si falla.
         """
-        longitud_contenido = int(entorno.get("CONTENT_LENGTH", 0))
-        bytes_cuerpo = entorno["wsgi.input"].read(longitud_contenido)
+        content_length = int(environ.get("CONTENT_LENGTH", 0))
+        body_bytes = environ["wsgi.input"].read(content_length)
 
         try:
-            body_str = bytes_cuerpo.decode("utf-8")
+            body_str = body_bytes.decode("utf-8")
         except UnicodeDecodeError:
-            raise RequestValidationError(HTTP.BAD_REQUEST, ESTADOS.ERROR, "Codificación UTF-8 inválida.")
+            raise RequestValidationError(HTTP.BAD_REQUEST, CODES.ERROR, "Codificación UTF-8 inválida.")
 
-        self._log_solicitud_completa(entorno, body_str)
+        self._log_complete_request(environ, body_str)
 
         try:
-            datos_payload = json.loads(body_str)
+            payload_data = json.loads(body_str)
         except json.JSONDecodeError:
-            raise RequestValidationError(HTTP.BAD_REQUEST, ESTADOS.ERROR, "Formato JSON inválido.")
+            raise RequestValidationError(HTTP.BAD_REQUEST, CODES.ERROR, "Formato JSON inválido.")
 
-        es_valido, msg, deployment_id, status = self._validar_payload_callback(datos_payload)
-        if not es_valido:
-            raise RequestValidationError(HTTP.BAD_REQUEST, ESTADOS.ERROR, msg)
+        is_valid, msg, deployment_id, status = self._validate_callback_payload(payload_data)
+        if not is_valid:
+            raise RequestValidationError(HTTP.BAD_REQUEST, CODES.ERROR, msg)
 
-        payload_compacto = json.dumps(datos_payload, separators=(",", ":"))
-        return deployment_id, status, payload_compacto
+        compact_payload = json.dumps(payload_data, separators=(",", ":"))
+        return deployment_id, status, compact_payload
 
-    def _generar_respuesta_json(self, status: str, codigo_interno: str, mensaje: str) -> Tuple[str, list, bytes]:
+    def _generate_json_response(self, status: str, internal_code: str, message: str) -> Tuple[str, list, bytes]:
         """Genera la tupla de respuesta WSGI final en formato JSON."""
-        response_data = {"estado": codigo_interno, "mensaje": mensaje}
-        cuerpo_respuesta_bytes = json.dumps(response_data, ensure_ascii=False).encode("utf-8")
-        cabeceras = [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(cuerpo_respuesta_bytes)))]
-        return status, cabeceras, cuerpo_respuesta_bytes
+        response_data = {"status": internal_code, "message": message}
+        response_body_bytes = json.dumps(response_data, ensure_ascii=False).encode("utf-8")
+        headers = [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(response_body_bytes)))]
+        return status, headers, response_body_bytes
 
-    # En main.py, reemplaza el método aplicacion_wsgi por completo.
-
-    def aplicacion_wsgi(self, entorno: Dict[str, Any], iniciar_respuesta):
+    def wsgi_application(self, environ: Dict[str, Any], start_response):
         """
         Punto de entrada WSGI. Orquesta la validación, procesamiento y respuesta.
         """
-        self._estadisticas["solicitudes_recibidas"] += 1
+        self._stats["requests_received"] += 1
 
         try:
             # 1. Validar la solicitud HTTP (auth, método, tamaño)
-            self._validar_solicitud_http(entorno)
+            self._validate_http_request(environ)
 
             # 2. Leer, parsear y validar el contenido del payload
-            deployment_id, status, payload_compacto = self._leer_y_parsear_payload(entorno)
+            deployment_id, status, compact_payload = self._read_and_parse_payload(environ)
 
             # 3. Procesar la lógica de negocio (actualizar BD)
-            exito_proceso, msg_proceso = self._procesar_callback(deployment_id, status, payload_compacto)
+            process_success, process_msg = self._process_callback(deployment_id, status, compact_payload)
 
-            if exito_proceso:
+            if process_success:
                 # 4a. Generar respuesta de éxito
-                status_final, cabeceras, cuerpo = self._generar_respuesta_json(
-                    status=HTTP.OK, codigo_interno=ESTADOS.OK, mensaje="Callback procesado y registrado exitosamente."
+                final_status, headers, body = self._generate_json_response(
+                    status=HTTP.OK, internal_code=CODES.OK, message="Callback procesado y registrado exitosamente."
                 )
             else:
                 # 4b. Generar respuesta de fallo de procesamiento
-                status_final, cabeceras, cuerpo = self._generar_respuesta_json(
-                    status=HTTP.INTERNAL_SERVER_ERROR, codigo_interno=ESTADOS.ERROR_PROCESAMIENTO, mensaje=msg_proceso
+                final_status, headers, body = self._generate_json_response(
+                    status=HTTP.INTERNAL_SERVER_ERROR, internal_code=CODES.PROCESSING_ERROR, message=process_msg
                 )
 
         except RequestValidationError as e:
             # Captura todos los errores de validación y genera la respuesta adecuada
-            self.logger.warning(f"Solicitud rechazada desde {entorno.get('REMOTE_ADDR', 'Desconocida')}: {e.mensaje}")
-            status_final, cabeceras, cuerpo = self._generar_respuesta_json(e.status, e.codigo_interno, e.mensaje)
+            self.logger.warning(f"Solicitud rechazada desde {environ.get('REMOTE_ADDR', 'Desconocida')}: {e.message}")
+            final_status, headers, body = self._generate_json_response(e.status, e.internal_code, e.message)
 
         except Exception as e_general:
             # Captura cualquier otro error inesperado
-            self.logger.critical(f"Excepción crítica no manejada en aplicacion_wsgi: {e_general}", exc_info=True)
-            status_final, cabeceras, cuerpo = self._generar_respuesta_json(
-                status=HTTP.INTERNAL_SERVER_ERROR, codigo_interno=ESTADOS.ERROR_SERVIDOR, mensaje="Ocurrió un error interno inesperado."
+            self.logger.critical(f"Excepción crítica no manejada en wsgi_application: {e_general}", exc_info=True)
+            final_status, headers, body = self._generate_json_response(
+                status=HTTP.INTERNAL_SERVER_ERROR, internal_code=CODES.SERVER_ERROR, message="Ocurrió un error interno inesperado."
             )
 
         # Enviar la respuesta final al servidor WSGI
-        iniciar_respuesta(status_final, cabeceras)
-        return [cuerpo]
+        start_response(final_status, headers)
+        return [body]
 
-    def _determinar_direccion_enlace(self) -> str:  # _determine_bind_address
+    def _determine_bind_address(self) -> str:
         """Determina la dirección de enlace efectiva con validación."""
-        host_cfg = self.config.host  # host_configurado
-        if host_cfg and host_cfg.strip() and host_cfg not in ["0.0.0.0", "*"]:
-            host_efectivo = host_cfg.strip()  # effective_host
-            self.logger.info(f"Usando host configurado para enlazar: '{host_efectivo}'")
+        configured_host = self.config.host
+        if configured_host and configured_host.strip() and configured_host not in ["0.0.0.0", "*"]:
+            effective_host = configured_host.strip()
+            self.logger.info(f"Usando host configurado para enlazar: '{effective_host}'")
 
             # Validar si el host es potencialmente resoluble (no garantiza que se pueda enlazar)
             try:
-                socket.getaddrinfo(host_efectivo, None)
+                socket.getaddrinfo(effective_host, None)
             except socket.gaierror as e:
-                self.logger.warning(f"El host configurado '{host_efectivo}' podría no ser resoluble o válido para enlazar: {e}")
+                self.logger.warning(f"El host configurado '{effective_host}' podría no ser resoluble o válido para enlazar: {e}")
 
-            return host_efectivo
+            return effective_host
         else:
             self.logger.info("Enlazando a '0.0.0.0' para escuchar en todas las interfaces de red disponibles.")
             return "0.0.0.0"
 
-    def _configurar_signal_handlers(self) -> None:  # _setup_signal_handlers
+    def _setup_signal_handlers(self) -> None:
         """Configura manejadores de señales para una parada elegante."""
 
-        def manejador_signal_interno(signum, frame):  # signal_handler_internal
+        def internal_signal_handler(signum, frame):
             try:
-                nombre_signal = signal.Signals(signum).name  # signal_name
+                signal_name = signal.Signals(signum).name
             except (AttributeError, ValueError):  # Para casos donde Signals(signum) no sea válido o .name no exista
-                nombre_signal = str(signum)
-            self.logger.warning(f"Recibida señal de parada '{nombre_signal}' (PID: {os.getpid()}). Iniciando parada del servidor...")
-            self._evento_parada.set()
+                signal_name = str(signum)
+            self.logger.warning(f"Recibida señal de parada '{signal_name}' (PID: {os.getpid()}). Iniciando parada del servidor...")
+            self._shutdown_event.set()
             # Si estamos usando wsgiref.simple_server con handle_request en un bucle,
             # necesitamos una forma de interrumpir ese bucle.
             # Para waitress, la propia librería maneja la señal y detiene el `serve()`.
-            if not WAITRESS_DISPONIBLE and self.instancia_servidor:
+            if not WAITRESS_AVAILABLE and self.server_instance:
                 # Esto es un intento, pero puede no ser suficiente para un shutdown inmediato de handle_request
-                # La mejor forma es que el bucle principal de handle_request chequee self._evento_parada.
+                # La mejor forma es que el bucle principal de handle_request chequee self._shutdown_event.
                 self.logger.info(
                     "Intentando cerrar instancia de servidor wsgiref (puede requerir una solicitud final para desbloquear handle_request)..."
                 )
-                # self.instancia_servidor.shutdown() # shutdown() no funciona bien si está en handle_request
+                # self.server_instance.shutdown() # shutdown() no funciona bien si está en handle_request
 
         # Intentar registrar señales comunes
         for sig in (signal.SIGTERM, signal.SIGINT):
             try:
-                signal.signal(sig, manejador_signal_interno)
+                signal.signal(sig, internal_signal_handler)
             except (OSError, ValueError, AttributeError) as e:  # Algunos sistemas/contextos no permiten todas las señales
                 self.logger.warning(f"No se pudo registrar el manejador para la señal {sig}: {e}")
 
         if hasattr(signal, "SIGBREAK"):  # SIGBREAK es específico de Windows
             try:
-                signal.signal(signal.SIGBREAK, manejador_signal_interno)
+                signal.signal(signal.SIGBREAK, internal_signal_handler)
             except (OSError, ValueError, AttributeError) as e:
                 self.logger.warning(f"No se pudo registrar el manejador para la señal SIGBREAK: {e}")
 
-    def _log_estadisticas_servidor(self) -> None:  # _log_server_stats
+    def _log_server_stats(self) -> None:
         """Loguea las estadísticas del servidor."""
-        tiempo_activo_total = time.time() - self._estadisticas["tiempo_inicio"]  # total_uptime
+        total_uptime = time.time() - self._stats["start_time"]
         self.logger.info("=" * 70)
         self.logger.info("Estadísticas Finales del Servidor de Callbacks:")
-        self.logger.info(f"  Tiempo activo total: {tiempo_activo_total:.2f} segundos")
-        self.logger.info(f"  Solicitudes totales recibidas: {self._estadisticas['solicitudes_recibidas']}")
-        self.logger.info(f"  Solicitudes procesadas exitosamente: {self._estadisticas['solicitudes_procesadas']}")
-        self.logger.info(f"  Solicitudes fallidas (procesamiento/BD): {self._estadisticas['solicitudes_fallidas']}")
-        if self._estadisticas["solicitudes_recibidas"] > 0:
-            tasa_exito_proc = (
-                self._estadisticas["solicitudes_procesadas"] / self._estadisticas["solicitudes_recibidas"]
-            ) * 100  # processing_success_rate
-            self.logger.info(f"  Tasa de éxito de procesamiento: {tasa_exito_proc:.2f}%")
+        self.logger.info(f"  Tiempo activo total: {total_uptime:.2f} segundos")
+        self.logger.info(f"  Solicitudes totales recibidas: {self._stats['requests_received']}")
+        self.logger.info(f"  Solicitudes procesadas exitosamente: {self._stats['requests_processed']}")
+        self.logger.info(f"  Solicitudes fallidas (procesamiento/BD): {self._stats['requests_failed']}")
+        if self._stats["requests_received"] > 0:
+            processing_success_rate = (self._stats["requests_processed"] / self._stats["requests_received"]) * 100
+            self.logger.info(f"  Tasa de éxito de procesamiento: {processing_success_rate:.2f}%")
         self.logger.info("=" * 70)
 
-    def iniciar(self) -> None:  # start
+    def start(self) -> None:
         """Inicia el servidor de callbacks."""
-        host_efectivo = self._determinar_direccion_enlace()  # effective_host
+        effective_host = self._determine_bind_address()
 
         # Loguear información de inicio
         self.logger.info("=" * 80)
         self.logger.info(f" Iniciando Servidor de Callbacks SAM (PID: {os.getpid()})")
-        self.logger.info(f" Escuchando en: http://{host_efectivo}:{self.config.puerto}")
+        self.logger.info(f" Escuchando en: http://{effective_host}:{self.config.port}")
         self.logger.info(
-            f" Usando servidor: {'Waitress (recomendado para producción)' if WAITRESS_DISPONIBLE else 'wsgiref.simple_server (solo para desarrollo)'}"
+            f" Usando servidor: {'Waitress (recomendado para producción)' if WAITRESS_AVAILABLE else 'wsgiref.simple_server (solo para desarrollo)'}"
         )
-        if WAITRESS_DISPONIBLE:
-            self.logger.info(f" Hilos configurados para Waitress: {self.config.hilos}")
+        if WAITRESS_AVAILABLE:
+            self.logger.info(f" Hilos configurados para Waitress: {self.config.threads}")
 
         # Obtener URL de callback de la configuración
         try:
-            cfg_aa = ConfigManager.get_aa_config()  # aa_config
-            url_callback_publica = cfg_aa.get("url_callback", "NO CONFIGURADA EN .ENV")  # public_callback_url
-            self.logger.info(f" URL pública esperada para callbacks de A360 (desde config): {url_callback_publica}")
-        except Exception as e_cfg_aa:
-            self.logger.warning(f"No se pudo obtener la URL de callback desde la configuración de AA: {e_cfg_aa}")
+            aa_config = ConfigManager.get_aa_config()
+            public_callback_url = aa_config.get("url_callback", "NO CONFIGURADA EN .ENV")
+            self.logger.info(f" URL pública esperada para callbacks de A360 (desde config): {public_callback_url}")
+        except Exception as e_aa_config:
+            self.logger.warning(f"No se pudo obtener la URL de callback desde la configuración de AA: {e_aa_config}")
 
         self.logger.info("=" * 80)
 
-        servidor_termino_correctamente = False  # server_terminated_correctly
+        server_terminated_correctly = False
 
         try:
-            if WAITRESS_DISPONIBLE:
+            if WAITRESS_AVAILABLE:
                 # Usar Waitress para producción
                 serve(
-                    self.aplicacion_wsgi,
-                    host=host_efectivo,
-                    port=self.config.puerto,
-                    threads=self.config.hilos,
-                    channel_timeout=self.config.tiempo_espera_canal,
-                    cleanup_interval=self.config.intervalo_limpieza_waitress,
+                    self.wsgi_application,
+                    host=effective_host,
+                    port=self.config.port,
+                    threads=self.config.threads,
+                    channel_timeout=self.config.channel_timeout,
+                    cleanup_interval=self.config.cleanup_interval,
                 )
                 # Si serve() retorna, es porque fue detenido (usualmente por una señal)
-                servidor_termino_correctamente = True
+                server_terminated_correctly = True
             else:
                 # Fallback a wsgiref para desarrollo
                 self.logger.warning("Waitress no está instalado. Usando wsgiref.simple_server (NO RECOMENDADO PARA PRODUCCIÓN).")
                 self.logger.warning("Para un entorno de producción, por favor instale Waitress: pip install waitress")
 
-                self.instancia_servidor = make_server(host_efectivo, self.config.puerto, self.aplicacion_wsgi)
-                self.logger.info(f"Servidor wsgiref (desarrollo) escuchando en http://{host_efectivo}:{self.config.puerto}")
+                self.server_instance = make_server(effective_host, self.config.port, self.wsgi_application)
+                self.logger.info(f"Servidor wsgiref (desarrollo) escuchando en http://{effective_host}:{self.config.port}")
 
                 # Bucle para manejar solicitudes y permitir parada elegante con wsgiref
-                while not self._evento_parada.is_set():
+                while not self._shutdown_event.is_set():
                     # handle_request() es bloqueante por una solicitud. Necesitamos un timeout
                     # o una forma de interrumpirlo. Una solución simple es un timeout corto.
                     # Sin embargo, handle_request no tiene un timeout directo.
@@ -877,62 +911,62 @@ class ServidorCallback:  # CallbackServer
                     # Para este ejemplo, si no usamos waitress, el cierre podría no ser tan elegante.
                     # Una forma más robusta con wsgiref sería usar server_forever en un hilo y llamar a shutdown desde otro.
                     # Aquí, hacemos un bucle que podría ser menos eficiente pero más simple de parar.
-                    self.instancia_servidor.timeout = 0.5  # Poner un timeout al socket del servidor
+                    self.server_instance.timeout = 0.5  # Poner un timeout al socket del servidor
                     try:
-                        self.instancia_servidor.handle_request()  # Manejar una solicitud
+                        self.server_instance.handle_request()  # Manejar una solicitud
                     except socket.timeout:
                         continue  # Continuar el bucle si es solo un timeout
                     except Exception as e_handle:
                         self.logger.error(f"Error en wsgiref handle_request: {e_handle}")
                         break  # Salir del bucle en otros errores
 
-                servidor_termino_correctamente = True  # Asumimos que si sale del bucle es por _evento_parada
+                server_terminated_correctly = True  # Asumimos que si sale del bucle es por _shutdown_event
 
         except OSError as e_os:  # ej. puerto en uso
             self.logger.critical(
-                f"Error de OSError al intentar iniciar el servidor (la dirección '{host_efectivo}:{self.config.puerto}' podría estar en uso): {e_os}",
+                f"Error de OSError al intentar iniciar el servidor (la dirección '{effective_host}:{self.config.port}' podría estar en uso): {e_os}",
                 exc_info=True,
             )
         except KeyboardInterrupt:  # Capturar Ctrl+C
             self.logger.info("KeyboardInterrupt (Ctrl+C) recibido. Parando el servidor de Callbacks...")
-            self._evento_parada.set()  # Asegurar que el evento de parada esté activo
-            servidor_termino_correctamente = True
+            self._shutdown_event.set()  # Asegurar que el evento de parada esté activo
+            server_terminated_correctly = True
         except SystemExit:  # Capturar SystemExit si el manejador de señales lo llama
             self.logger.info("SystemExit capturado, el servidor de callbacks está finalizando.")
-            servidor_termino_correctamente = True
-        except Exception as e_general_servidor:  # Cualquier otra excepción al iniciar/correr el servidor
-            self.logger.critical(f"Error fatal durante la ejecución del servidor de Callbacks: {e_general_servidor}", exc_info=True)
+            server_terminated_correctly = True
+        except Exception as e_general_server:  # Cualquier otra excepción al iniciar/correr el servidor
+            self.logger.critical(f"Error fatal durante la ejecución del servidor de Callbacks: {e_general_server}", exc_info=True)
         finally:
-            self._limpiar_recursos_final(servidor_termino_correctamente)  # _cleanup_final
+            self._cleanup_final(server_terminated_correctly)
 
-    def _limpiar_recursos_final(self, termino_limpiamente: bool = True) -> None:  # _cleanup_final, clean_shutdown
+    def _cleanup_final(self, clean_shutdown: bool = True) -> None:
         """Limpia recursos al finalizar el servidor."""
-        if termino_limpiamente:
+        if clean_shutdown:
             self.logger.info("Servidor de Callbacks SAM finalizando operaciones limpiamente.")
         else:
             self.logger.warning("Servidor de Callbacks SAM finalizando de forma inesperada o no pudo iniciarse.")
 
         # Loguear estadísticas finales
-        self._log_estadisticas_servidor()
+        self._log_server_stats()
 
         # Parar la instancia del servidor wsgiref si existe y está activa
-        if self.instancia_servidor:
+        if self.server_instance:
             self.logger.info("Intentando cerrar la instancia del servidor wsgiref...")
             try:
                 # Para wsgiref, cerrar el socket es una forma de intentar detenerlo si está en un bucle.
-                if hasattr(self.instancia_servidor, "socket") and self.instancia_servidor.socket:
-                    self.instancia_servidor.socket.close()
-                if hasattr(self.instancia_servidor, "server_close"):
-                    self.instancia_servidor.server_close()
+                if hasattr(self.server_instance, "socket") and self.server_instance.socket:
+                    self.server_instance.socket.close()
+                if hasattr(self.server_instance, "server_close"):
+                    self.server_instance.server_close()
                 self.logger.info("Instancia del servidor wsgiref cerrada (o intento realizado).")
             except Exception as e_shutdown_wsgiref:
                 self.logger.error(f"Error durante el cierre del servidor wsgiref: {e_shutdown_wsgiref}", exc_info=True)
 
         # Cerrar conexión a base de datos
-        if self.conector_bd:
+        if self.db_connector:
             self.logger.info("Cerrando conexión a la base de datos del servidor de Callbacks...")
             try:
-                self.conector_bd.cerrar_conexion_hilo_actual()  # Cierra la del hilo principal
+                self.db_connector.cerrar_conexion_hilo_actual()  # Cierra la del hilo principal
                 self.logger.info("Conexión a BD cerrada.")
             except Exception as e_db_close:
                 self.logger.error(f"Error al cerrar la conexión a la base de datos: {e_db_close}", exc_info=True)
@@ -951,59 +985,59 @@ class ServidorCallback:  # CallbackServer
 
         print("Servidor de Callbacks SAM: Proceso de limpieza final completado.", file=sys.stderr)
 
-    def _log_solicitud_completa(self, entorno: Dict[str, Any], cuerpo_str: str):
+    def _log_complete_request(self, environ: Dict[str, Any], body_str: str):
         """
         Registra en el log (a nivel DEBUG) los encabezados y el cuerpo de una solicitud.
         Los encabezados sensibles como la autorización son ofuscados.
         """
         try:
             # Extraer y formatear encabezados, ofuscando el de autorización
-            encabezados_formateados = ""
-            for clave, valor in entorno.items():
-                if clave.startswith("HTTP_"):
-                    nombre_header = clave[5:].replace("_", "-").title()
-                    if nombre_header.lower() == "x-authorization":
-                        valor_ofuscado = f"'{valor[:4]}...{valor[-4:]}'" if valor and len(valor) > 8 else "'***'"
-                        encabezados_formateados += f"  {nombre_header}: {valor_ofuscado}\n"
+            formatted_headers = ""
+            for key, value in environ.items():
+                if key.startswith("HTTP_"):
+                    header_name = key[5:].replace("_", "-").title()
+                    if header_name.lower() == "x-authorization":
+                        obfuscated_value = f"'{value[:4]}...{value[-4:]}'" if value and len(value) > 8 else "'***'"
+                        formatted_headers += f"  {header_name}: {obfuscated_value}\n"
                     else:
-                        encabezados_formateados += f"  {clave[5:].replace('_', '-').title()}: {valor}\n"
+                        formatted_headers += f"  {key[5:].replace('_', '-').title()}: {value}\n"
 
             # Truncar el cuerpo del log si es demasiado largo
-            vista_previa_payload = cuerpo_str[: self.config.log_payload_max_caracteres]
-            if len(cuerpo_str) > self.config.log_payload_max_caracteres:
-                vista_previa_payload += "..."
+            payload_preview = body_str[: self.config.log_payload_max_chars]
+            if len(body_str) > self.config.log_payload_max_chars:
+                payload_preview += "..."
 
             # Construir el mensaje de log final
-            log_completo = (
+            complete_log = (
                 f"--- Inicio de Detalles de la Solicitud ---\n"
-                f"Desde: {entorno.get('REMOTE_ADDR', 'Desconocida')}\n"
-                f"Encabezados:\n{encabezados_formateados.strip()}\n"
-                f"Cuerpo:\n  {vista_previa_payload}\n"
+                f"Desde: {environ.get('REMOTE_ADDR', 'Desconocida')}\n"
+                f"Encabezados:\n{formatted_headers.strip()}\n"
+                f"Cuerpo:\n  {payload_preview}\n"
                 f"--- Fin de Detalles de la Solicitud ---"
             )
 
-            self.logger.debug(log_completo)
+            self.logger.debug(complete_log)
 
         except Exception as e:
             self.logger.error(f"Error al intentar registrar los detalles de la solicitud: {e}", exc_info=False)
 
 
-def start_callback_server_main():  # main_entry_point
+def start_callback_server_main():
     """Punto de entrada principal para iniciar el servidor."""
-    servidor_app = None
+    server_app = None
     try:
-        servidor_app = ServidorCallback()
-        servidor_app.iniciar()
-    except Exception as e_inicio_fatal:
+        server_app = CallbackServer()
+        server_app.start()
+    except Exception as e_fatal_start:
         # Este log podría no funcionar si el logger falló en inicializarse.
         # Usar print para asegurar visibilidad del error crítico.
-        mensaje_error = f"CRITICO: Falló el inicio del servidor de callbacks de forma fatal: {e_inicio_fatal}"
-        print(mensaje_error, file=sys.stderr)
+        error_message = f"CRITICO: Falló el inicio del servidor de callbacks de forma fatal: {e_fatal_start}"
+        print(error_message, file=sys.stderr)
         # Intentar loguear también, por si acaso
-        if servidor_app and servidor_app.logger:
-            servidor_app.logger.critical(mensaje_error, exc_info=True)
+        if server_app and server_app.logger:
+            server_app.logger.critical(error_message, exc_info=True)
         else:  # Logger no disponible, usar logging básico si es posible
-            logging.critical(mensaje_error, exc_info=True)
+            logging.critical(error_message, exc_info=True)
         sys.exit(1)  # Salir con código de error
 
 
