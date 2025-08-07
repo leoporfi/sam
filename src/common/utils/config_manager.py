@@ -55,12 +55,10 @@ class ConfigManager:
         """
         config = {
             "driver": os.getenv(f"{db_prefix}_DRIVER", "{SQL Server}"),
-            "server": ConfigManager._get_env_with_warning(f"{db_prefix}_HOST", warning_msg=f"Servidor SQL no configurado para {db_prefix}_HOST"),
-            "database": ConfigManager._get_env_with_warning(
-                f"{db_prefix}_DB_NAME", warning_msg=f"Base de datos no configurada para {db_prefix}_DB_NAME"
-            ),
-            "uid": ConfigManager._get_env_with_warning(f"{db_prefix}_UID", warning_msg=f"Usuario SQL no configurado para {db_prefix}_UID"),
-            "pwd": ConfigManager._get_env_with_warning(f"{db_prefix}_PWD", warning_msg=f"Contraseña SQL no configurada para {db_prefix}_PWD"),
+            "server": os.getenv(f"{db_prefix}_HOST") or os.getenv(f"{db_prefix}_SERVER"),
+            "database": os.getenv(f"{db_prefix}_DB_NAME"),
+            "uid": os.getenv(f"{db_prefix}_UID") or os.getenv(f"{db_prefix}_USER"),
+            "pwd": os.getenv(f"{db_prefix}_PWD") or os.getenv(f"{db_prefix}_PASSWORD"),
             "timeout_conexion_inicial": int(os.getenv(f"{db_prefix}_TIMEOUT_CONEXION_INICIAL", 30)),
             "max_reintentos_query": int(os.getenv(f"{db_prefix}_MAX_REINTENTOS_QUERY", 3)),
             "delay_reintento_query_base_seg": int(os.getenv(f"{db_prefix}_DELAY_REINTENTO_QUERY_BASE_SEG", 2)),
