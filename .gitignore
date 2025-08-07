@@ -28,3 +28,5 @@ src/service_templates.py
 *.zip
 *.pdf
 *.html
+uv.lock
+.env.bak
