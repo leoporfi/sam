@@ -475,17 +475,17 @@ class DatabaseConnector:
 
             if rowcount is not None and rowcount > 0:
                 logger.info(
-                    f"Callback recibido y procesado para DeploymentId: {deployment_id}. Nuevo Estado: {estado_callback}. Filas afectadas: {rowcount}"
+                    f"ÉXITO: Callback para DeploymentId: {deployment_id} actualizado a estado '{estado_callback}'. Filas afectadas: {rowcount}"
                 )
                 return True
             elif rowcount == 0:
                 logger.warning(
-                    f"Callback recibido para DeploymentId: {deployment_id} (Estado: {estado_callback}), pero no se encontró o actualizó ningún registro. ¿Ya estaba en estado terminal o el ID es incorrecto?"
+                    f"AVISO: Callback para DeploymentId: {deployment_id} (Estado: {estado_callback}) no actualizó registros. El ID podría ser incorrecto o ya estaba en estado terminal."
                 )
-                return False
-            else:  # rowcount es None o -1 (éxito pero sin conteo claro)
+                return False  # Técnicamente no es un fallo del sistema, pero la operación no tuvo efecto.
+            else:
                 logger.info(
-                    f"Callback recibido y procesado para DeploymentId: {deployment_id}. Nuevo Estado: {estado_callback}. (Rowcount no definitivo)"
+                    f"ÉXITO: Callback para DeploymentId: {deployment_id} procesado (estado: {estado_callback}). Driver no reportó conteo de filas."
                 )
                 return True
 
@@ -508,15 +508,12 @@ class DatabaseConnector:
 
             # 2. Asignar nuevos equipos
             if ids_para_asignar:
-                # --- INICIO DE LA CORRECCIÓN ---
-                # Las asignaciones manuales siempre son 'Reservado = 1'
                 query_insert = """
                     INSERT INTO dbo.Asignaciones (RobotId, EquipoId, EsProgramado, Reservado, AsignadoPor)
                     VALUES (?, ?, 0, 1, 'WebApp')
                 """
                 # El tercer valor del tuple (es_reservado) ya no es necesario
                 params_insert = [(robot_id, equipo_id) for equipo_id in ids_para_asignar]
-                # --- FIN DE LA CORRECCIÓN ---
                 cursor.executemany(query_insert, params_insert)
 
             return {"message": "Asignaciones actualizadas correctamente"}
