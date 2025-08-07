@@ -1,4 +1,4 @@
-#src/ service/conciliador.py
+# src/ service/conciliador.py
 import logging
 import sys
 import time
@@ -18,7 +18,7 @@ if str(SAM_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(SAM_PROJECT_ROOT))
 
 # --- CAMBIAR ESTA LÍNEA ---
-# from lanzador.database.sql_client import DatabaseConnector # <-- LÍNEA ANTIGUA
+from common.clients.aa_client import AutomationAnywhereClient
 from common.database.sql_client import DatabaseConnector  # <-- LÍNEA NUEVA Y CORRECTA
 from common.utils.config_manager import ConfigManager
 
@@ -28,7 +28,6 @@ from common.utils.config_manager import ConfigManager
 # logger = get_lanzador_logger(__name__) # O un nombre específico como "SAMLanzador.Conciliador"
 # O si quieres usar el setup_logging común directamente (necesitarías ConfigManager común):
 from common.utils.logging_setup import setup_logging
-from lanzador.clients.aa_client import AutomationAnywhereClient
 
 log_cfg = ConfigManager.get_log_config()
 logger_name = "lanzador.service.conciliador"  # Nombre del logger para este módulo
@@ -88,7 +87,7 @@ class ConciliadorImplementaciones:
             logger.error(f"Error al convertir fecha UTC a local SAM para '{fecha_utc_str}': {ex}", exc_info=True)
             return None
 
-    def conciliar_implementaciones(self):
+    async def conciliar_implementaciones(self):
         """Actualiza estados de ejecuciones con la información obtenida desde AA."""
         try:
             ejecuciones_en_curso = self.db_connector.obtener_ejecuciones_en_curso()
@@ -115,7 +114,7 @@ class ConciliadorImplementaciones:
 
             start_time = time.time()
             # El método en aa_client ya se llama obtener_detalles_por_deployment_ids
-            detalles_api = self.aa_client.obtener_detalles_por_deployment_ids(deployment_ids)
+            detalles_api = await self.aa_client.obtener_detalles_por_deployment_ids(deployment_ids)
             end_time = time.time()
             logger.info(
                 f"Conciliador: Consulta a API AA para {len(deployment_ids)} IDs tomó {end_time - start_time:.2f}s. Obtenidos {len(detalles_api)} detalles."
