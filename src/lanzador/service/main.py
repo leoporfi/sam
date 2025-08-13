@@ -2,12 +2,17 @@
 import asyncio
 import logging
 
+from common.utils.config_manager import ConfigManager
+from common.utils.logging_setup import setup_logging
+
+# Configuración del logger
+log_cfg = ConfigManager.get_log_config()
+logger_name = "lanzador.service.main"
+logger = setup_logging(log_config=log_cfg, logger_name=logger_name, log_file_name_override=log_cfg.get("app_log_filename_lanzador"))
+
 from common.clients.aa_client import AutomationAnywhereClient
 from common.database.sql_client import DatabaseConnector
-from common.utils.config_manager import ConfigManager
 from lanzador.service.conciliador import ConciliadorImplementaciones
-
-logger = logging.getLogger(__name__)
 
 # Evento para manejar el cierre limpio del servicio
 shutdown_event = asyncio.Event()
@@ -30,10 +35,22 @@ async def run_sync_cycle(aa_client: AutomationAnywhereClient, db: DatabaseConnec
             users_task = aa_client.obtener_usuarios_detallados()
             robots, devices, users = await asyncio.gather(robots_task, devices_task, users_task)
 
-            # Lógica de procesamiento y merge (aquí puedes añadir el cruce de licencias)
+            # Procesamiento de datos antes del merge
+            users_by_id = {user["UserId"]: user for user in users if isinstance(user, dict) and user.get("UserId")}
+
+            # Procesar devices con la información de usuarios
+            devices_procesados = []
+            for device in devices:
+                if isinstance(device, dict):
+                    user_id = device.get("UserId")
+                    if user_id in users_by_id:
+                        device["Licencia"] = users_by_id[user_id].get("Licencia")
+                    devices_procesados.append(device)
+
+            # Lógica de procesamiento y merge
             db.merge_robots(robots)
-            db.merge_equipos(devices)
-            logger.info(f"SYNC: Ciclo completado. {len(robots)} robots y {len(devices)} equipos sincronizados.")
+            db.merge_equipos(devices_procesados)
+            logger.info(f"SYNC: Ciclo completado. {len(robots)} robots y {len(devices_procesados)} equipos sincronizados.")
         except Exception as e:
             logger.error(f"SYNC: Error en el ciclo: {e}", exc_info=True)
 
@@ -52,11 +69,33 @@ async def run_launcher_cycle(aa_client: AutomationAnywhereClient, db: DatabaseCo
             robots_a_ejecutar = db.obtener_robots_ejecutables()
             if robots_a_ejecutar:
                 logger.info(f"LAUNCHER: {len(robots_a_ejecutar)} robots encontrados. Desplegando...")
-                # Creamos una tarea de despliegue para cada robot para lanzarlos en paralelo
-                tasks = [aa_client.desplegar_bot(r["RobotId"], [r["UserId"]]) for r in robots_a_ejecutar]
-                await asyncio.gather(*tasks, return_exceptions=True)  # return_exceptions evita que una falla detenga las demás
+
+                # Para cada robot, lanzamos y guardamos su ejecución
+                for robot in robots_a_ejecutar:
+                    try:
+                        # Desplegamos el robot
+                        deployment_result = await aa_client.desplegar_bot(robot["RobotId"], [robot["UserId"]])
+
+                        # Verificamos si el despliegue fue exitoso
+                        if deployment_result and "deploymentId" in deployment_result:
+                            # Guardamos el registro de ejecución
+                            db.insertar_registro_ejecucion(
+                                id_despliegue=deployment_result["deploymentId"],
+                                db_robot_id=robot["RobotId"],
+                                db_equipo_id=robot.get("EquipoId"),
+                                a360_user_id=robot["UserId"],
+                                marca_tiempo_programada=robot.get("MarcaTiempoProgramada"),
+                                estado="DEPLOYED",
+                            )
+                            logger.info(f"LAUNCHER: Robot {robot['RobotId']} desplegado con deploymentId: {deployment_result['deploymentId']}")
+                        else:
+                            logger.error(f"LAUNCHER: Fallo al obtener deploymentId para robot {robot['RobotId']}")
+
+                    except Exception as robot_error:
+                        logger.error(f"LAUNCHER: Error al desplegar robot {robot['RobotId']}: {robot_error}", exc_info=True)
             else:
                 logger.info("LAUNCHER: No hay robots para ejecutar en este ciclo.")
+
         except Exception as e:
             logger.error(f"LAUNCHER: Error en el ciclo: {e}", exc_info=True)
 
@@ -96,12 +135,24 @@ async def start_lanzador():
     logger.info("Servicio Lanzador Asíncrono iniciado. Creando tareas de ciclo...")
 
     # --- Creación y Ejecución de Tareas Concurrentes ---
-    sync_task = asyncio.create_task(run_sync_cycle(aa_client, db_connector, lanzador_cfg["intervalo_sync_tablas_seg"]))
+    tasks = []
+
+    # El sync_task es opcional basado en la configuración
+    if lanzador_cfg.get("habilitar_sync", True):  # True por defecto para mantener compatibilidad
+        sync_task = asyncio.create_task(run_sync_cycle(aa_client, db_connector, lanzador_cfg["intervalo_sync_tablas_seg"]))
+        tasks.append(sync_task)
+        logger.info("Tarea de sincronización habilitada")
+    else:
+        logger.info("Tarea de sincronización deshabilitada por configuración")
+
+    # Estas tareas siempre se crean
     launcher_task = asyncio.create_task(run_launcher_cycle(aa_client, db_connector, lanzador_cfg["intervalo_lanzador_seg"]))
     conciliador_task = asyncio.create_task(run_conciliador_cycle(conciliador, lanzador_cfg["intervalo_conciliador_seg"]))
 
-    # Esperamos a que todas las tareas finalicen (lo cual solo ocurrirá si se llama a shutdown_event.set())
-    await asyncio.gather(sync_task, launcher_task, conciliador_task)
+    tasks.extend([launcher_task, conciliador_task])
+
+    # Esperamos a que todas las tareas habilitadas finalicen
+    await asyncio.gather(*tasks)
 
     # --- Cierre Limpio de Recursos ---
     await aa_client.close()

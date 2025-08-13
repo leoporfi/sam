@@ -126,7 +126,7 @@ class DatabaseConnector:
         """Ensure we have a valid connection, reconnecting if necessary."""
         conn = self._get_current_thread_connection()
         if conn is None or not self.verificar_conexion():
-            logger.warning(f"Hilo {threading.get_ident()}: Conexión no activa/existente en obtener_cursor. Intentando (re)conectar...")
+            # logger.warning(f"Hilo {threading.get_ident()}: Conexión no activa/existente en obtener_cursor. Intentando (re)conectar...")
             try:
                 conn = self.conectar_base_datos()
             except Exception as e_reconnect:
