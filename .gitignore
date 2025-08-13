@@ -31,3 +31,4 @@ test_*
 *.html
 uv.lock
 .env.bak
+*.csv
