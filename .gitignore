@@ -24,7 +24,8 @@ node_modules/
 tests/*
 test_*
 *_old
-src/service_templates.py
+# Archivos temporales
+*.tmp
 *.zip
 *.pdf
 *.html
