@@ -21,7 +21,7 @@ build/
 .DS_Store
 *copy*
 node_modules/
-test/
+tests/*
 test_*
 *_old
 src/service_templates.py
