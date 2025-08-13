@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 class Balanceo:
     def __init__(self, balanceador_instance):
         self.balanceador = balanceador_instance
-        for attr_name in ["db_sam", "db_rpa360", "mysql_clouders", "cfg_balanceador_specifics", "notificador"]:
+        # Modificar la lista de atributos requeridos, reemplazando mysql_clouders por clouders_client
+        for attr_name in ["db_sam", "db_rpa360", "clouders_client", "cfg_balanceador_specifics", "notificador"]:
             if hasattr(balanceador_instance, attr_name):
                 setattr(self, attr_name, getattr(balanceador_instance, attr_name))
             else:

@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 import schedule
 
 # --- Importaciones de Módulos Comunes y Específicos ---
-from balanceador.clients.mysql_client import MySQLSSHClient
+from balanceador.clients.clouders_client import CloudersClient  # Nueva importación
 from balanceador.database.historico_client import HistoricoBalanceoClient
 from balanceador.service.balanceo import Balanceo
 from common.database.sql_client import DatabaseConnector
@@ -76,9 +76,13 @@ class Balanceador:
             db_config_prefix="SQL_RPA360",
         )
 
-        # Cliente MySQL para "clouders"
-        self.cfg_mysql_clouders = ConfigManager.get_ssh_mysql_clouders_config()
-        self.mysql_clouders = MySQLSSHClient(config_ssh_mysql=self.cfg_mysql_clouders, mapa_robots=self.mapa_robots, logger_instance=logger)
+        # Reemplazar la inicialización del cliente MySQL por el nuevo CloudersClient
+        self.cfg_clouders = ConfigManager.get_clouders_api_config()  # Nuevo método necesario
+        self.clouders_client = CloudersClient(
+            config=self.cfg_clouders,
+            mapa_robots=self.mapa_robots,
+            logger_instance=logger
+        )
 
         # Cliente para notificaciones
         self.notificador = EmailAlertClient()
@@ -145,21 +149,12 @@ class Balanceador:
     def _obtener_carga_clouders(self) -> List[Dict[str, Any]]:
         """Obtiene la carga de trabajo desde clouders."""
         try:
-            db_name_clouders = self.cfg_mysql_clouders.get("database_mysql")
-            query_clouders = """
-                SELECT 
-                    tr.name AS robot_name, 
-                    COUNT(tt.id) AS CantidadTickets 
-                FROM task_task tt
-                INNER JOIN task_robot tr ON tt.robot_id = tr.id
-                WHERE tt.state = 'PENDING'
-                GROUP BY tr.name;
-            """  # noqa: W291
-            tickets_clouders_raw = self.mysql_clouders.ejecutar_consulta_mysql(db_name_clouders, query_clouders)
-            logger.info(f"Carga obtenida de clouders: {len(tickets_clouders_raw or [])} registros procesados.")
-            return tickets_clouders_raw or []
+            # Usar el nuevo cliente
+            tickets_clouders = self.clouders_client.obtener_tickets_pendientes()
+            logger.info(f"Carga obtenida de clouders: {len(tickets_clouders or [])} registros procesados.")
+            return tickets_clouders or []
         except Exception as e:
-            logger.error(f"Error obteniendo carga de trabajo de clouders (MySQL): {e}", exc_info=True)
+            logger.error(f"Error obteniendo carga de trabajo de clouders (API): {e}", exc_info=True)
             return []
 
     def _procesar_carga_rpa360(self, tickets_rpa360: List[Dict[str, Any]], carga_por_nombre: Dict[str, int], mapa_nombres_a_ids: Dict[str, int]):
@@ -343,8 +338,7 @@ class Balanceador:
             self.db_sam.cerrar_conexion_hilo_actual()
         if hasattr(self, "db_rpa360") and self.db_rpa360:
             self.db_rpa360.cerrar_conexion_hilo_actual()
-        if hasattr(self, "mysql_clouders") and self.mysql_clouders:
-            self.mysql_clouders.cerrar_conexion()
+        # Eliminar la línea de cierre del mysql_clouders ya que no lo usaremos más
 
         logger.info("SAM Balanceador: Finalización de servicio completada.")
 

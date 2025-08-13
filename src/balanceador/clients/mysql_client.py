@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+import warnings
 
 import paramiko
 
@@ -124,7 +125,9 @@ def reintentar_si_falla(max_retries: int = 3, delay: float = 1.0, backoff_multip
 
 
 class MySQLSSHClient:
-    """Cliente SSH optimizado para consultas MySQL remotas."""
+    """
+    @deprecated: Esta clase será reemplazada por CloudersClient
+    """
 
     # Pool compartido entre instancias
     _connection_pool = ConnectionPool()
