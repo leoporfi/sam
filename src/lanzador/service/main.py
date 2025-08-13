@@ -61,8 +61,9 @@ async def run_sync_cycle(aa_client: AutomationAnywhereClient, db: DatabaseConnec
             pass  # Es el comportamiento esperado, simplemente continuamos el bucle
 
 
-async def run_launcher_cycle(aa_client: AutomationAnywhereClient, db: DatabaseConnector, interval: int):
+async def run_launcher_cycle(aa_client: AutomationAnywhereClient, db: DatabaseConnector, interval: int, **kwargs):
     """Ciclo asíncrono para el lanzamiento de robots."""
+    bot_input = {"in_NumRepeticion": {"type": "NUMBER", "number": kwargs.get("repeticiones", 1)}}
     while not shutdown_event.is_set():
         try:
             logger.info("LAUNCHER: Buscando robots para ejecutar...")
@@ -74,7 +75,7 @@ async def run_launcher_cycle(aa_client: AutomationAnywhereClient, db: DatabaseCo
                 for robot in robots_a_ejecutar:
                     try:
                         # Desplegamos el robot
-                        deployment_result = await aa_client.desplegar_bot(robot["RobotId"], [robot["UserId"]])
+                        deployment_result = await aa_client.desplegar_bot(robot["RobotId"], [robot["UserId"]], bot_input)
 
                         # Verificamos si el despliegue fue exitoso
                         if deployment_result and "deploymentId" in deployment_result:
@@ -129,7 +130,7 @@ async def start_lanzador():
     aa_cfg = ConfigManager.get_aa_config()
 
     db_connector = DatabaseConnector(servidor=db_cfg["server"], base_datos=db_cfg["database"], usuario=db_cfg["uid"], contrasena=db_cfg["pwd"])
-    aa_client = AutomationAnywhereClient(control_room_url=aa_cfg["url"], username=aa_cfg["user"], password=aa_cfg["pwd"])
+    aa_client = AutomationAnywhereClient(control_room_url=aa_cfg["url"], username=aa_cfg["user"], password=aa_cfg["pwd"], callback_url_deploy=aa_cfg.get("url_callback", None)) 
     conciliador = ConciliadorImplementaciones(db_connector, aa_client)
 
     logger.info("Servicio Lanzador Asíncrono iniciado. Creando tareas de ciclo...")
@@ -146,7 +147,7 @@ async def start_lanzador():
         logger.info("Tarea de sincronización deshabilitada por configuración")
 
     # Estas tareas siempre se crean
-    launcher_task = asyncio.create_task(run_launcher_cycle(aa_client, db_connector, lanzador_cfg["intervalo_lanzador_seg"]))
+    launcher_task = asyncio.create_task(run_launcher_cycle(aa_client, db_connector, lanzador_cfg["intervalo_lanzador_seg"], repeticiones=lanzador_cfg.get("repeticiones")))
     conciliador_task = asyncio.create_task(run_conciliador_cycle(conciliador, lanzador_cfg["intervalo_conciliador_seg"]))
 
     tasks.extend([launcher_task, conciliador_task])

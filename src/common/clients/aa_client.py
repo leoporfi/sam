@@ -200,6 +200,8 @@ class AutomationAnywhereClient:
             payload["callbackInfo"] = {"url": self.callback_url_for_deploy}
 
         try:
+            logger.debug(f"Payload de despliegue: {payload}")
+            # Realizamos la petición POST al endpoint de despliegue
             response = await self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V3, json=payload)
             logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
             return response
