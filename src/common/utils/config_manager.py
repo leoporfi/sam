@@ -124,7 +124,6 @@ class ConfigManager:
         return config
 
     # --- CONFIGURACIONES ESPECÍFICAS DE SERVICIOS ---
-
     @staticmethod
     def get_lanzador_config() -> Dict[str, Any]:
         """Obtiene la configuración específica del Lanzador."""
@@ -137,6 +136,7 @@ class ConfigManager:
             "reintento_lanzamiento_delay_seg": int(os.getenv("LANZADOR_REINTENTO_LANZAMIENTO_DELAY_SEG", 10)),
             "pausa_lanzamiento_inicio_hhmm": os.getenv("LANZADOR_PAUSA_INICIO_HHMM", "23:00"),
             "pausa_lanzamiento_fin_hhmm": os.getenv("LANZADOR_PAUSA_FIN_HHMM", "05:00"),
+            "habilitar_sync": os.getenv("LANZADOR_HABILITAR_SYNC", "True").lower() == "true",
         }
 
     @staticmethod
@@ -151,13 +151,14 @@ class ConfigManager:
             "endpoint_path": os.getenv("CALLBACK_ENDPOINT_PATH", "/sam_callback"),
         }
 
-    @staticmethod
-    def get_balanceador_config() -> Dict[str, Any]:
-        """Obtiene la configuración específica del Balanceador."""
+    @classmethod
+    def get_balanceador_config(cls) -> Dict[str, Any]:
+        """Obtiene la configuración específica del balanceador."""
         return {
-            "intervalo_ciclo_balanceo_seg": int(os.getenv("BALANCEADOR_INTERVALO_CICLO_SEG", 120)),
-            "default_tickets_por_equipo": int(os.getenv("BALANCEADOR_DEFAULT_TICKETS_POR_EQUIPO", 10)),
-            "mapa_robots": ConfigManager.get_mapa_robots(),
+            "intervalo_ciclo_balanceo_seg": int(os.getenv("BALANCEADOR_INTERVALO_CICLO_SEG", "120")),
+            "default_tickets_por_equipo": int(os.getenv("BALANCEADOR_DEFAULT_TICKETS_POR_EQUIPO", "10")),
+            "cooling_period_seg": int(os.getenv("BALANCEADOR_COOLING_PERIOD_SEG", "300")),  # Nuevo parámetro
+            "mapa_robots": json.loads(os.getenv("MAPA_ROBOTS", "{}")),
         }
 
     @staticmethod
@@ -211,6 +212,16 @@ class ConfigManager:
 
         return config
 
+    @classmethod
+    def get_clouders_api_config(cls) -> Dict[str, Any]:
+        """Obtiene la configuración de la API de Clouders."""
+        return {
+            "clouders_api_url": os.getenv("CLOUDERS_API_URL"),
+            "clouders_auth": os.getenv("CLOUDERS_AUTH"),
+            "api_timeout": int(os.getenv("API_TIMEOUT", "30")),
+            "verify_ssl": os.getenv("CLOUDERS_VERIFY_SSL", "false").lower() == "true"
+        }
+
     @staticmethod
     def get_interfaz_web_config() -> Dict[str, Any]:
         """Obtiene la configuración específica de la Interfaz Web."""
@@ -224,7 +235,6 @@ class ConfigManager:
         }
 
     # --- MÉTODOS DE UTILIDAD ---
-
     @staticmethod
     def get_environment_info() -> Dict[str, Any]:
         """Obtiene información del entorno actual."""
