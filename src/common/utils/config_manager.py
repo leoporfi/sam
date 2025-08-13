@@ -128,7 +128,7 @@ class ConfigManager:
     def get_lanzador_config() -> Dict[str, Any]:
         """Obtiene la configuración específica del Lanzador."""
         return {
-            "bot_input_vueltas": int(os.getenv("LANZADOR_BOT_INPUT_VUELTAS", 5)),
+            "repeticiones": int(os.getenv("LANZADOR_BOT_INPUT_VUELTAS", 5)),
             "intervalo_lanzador_seg": int(os.getenv("LANZADOR_INTERVALO_LANZADOR_SEG", 30)),
             "intervalo_conciliador_seg": int(os.getenv("LANZADOR_INTERVALO_CONCILIADOR_SEG", 180)),
             "intervalo_sync_tablas_seg": int(os.getenv("LANZADOR_INTERVALO_SYNC_TABLAS_SEG", 3600)),
