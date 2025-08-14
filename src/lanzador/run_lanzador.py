@@ -1,52 +1,73 @@
-# SAM/src/Lanzador/run_lanzador.py
-"""
-Script principal para ejecutar el servicio Lanzador.
-
-Este script configura el entorno de Python para permitir importaciones relativas
-y lanza el servicio Lanzador. El Lanzador es responsable de procesar los mensajes
-asignados por el Balanceador y ejecutar las acciones necesarias.
-
-Autor: Equipo SAM
-Fecha: 2024
-"""
-
-import asyncio
+import logging
+import os
 import signal
 import sys
-from pathlib import Path
+from typing import Optional
 
-# === INICIALIZACIÓN DE CONFIGURACIÓN (DEBE SER LO PRIMERO) ===
-SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SRC_ROOT = SAM_PROJECT_ROOT / "src"
-if str(SRC_ROOT) not in sys.path:
-    sys.path.insert(0, str(SRC_ROOT))
+# --- Configuración del Path ---)
+try:
+    # Agrega el directorio raíz del proyecto a sys.path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
 
-# Ahora podemos importar y usar ConfigLoader de forma segura
-from common.utils.config_loader import ConfigLoader
-from lanzador.service.main import handle_shutdown_signal, start_lanzador
+    # Importar y usar ConfigLoader para cargar las variables de .env
+    from src.common.utils.config_loader import ConfigLoader
 
-# Inicializa el servicio. ConfigLoader se encarga de:
-# 1. Determinar las rutas del proyecto.
-# 2. Modificar sys.path permanentemente para esta ejecución.
-# 3. Cargar los archivos .env en el orden correcto de precedencia.
-ConfigLoader.initialize_service("lanzador", __file__)
+    ConfigLoader.initialize_service("lanzador", __file__)
+
+except Exception as e:
+    print(f"Error crítico durante la inicialización de la configuración: {e}")
+    sys.exit(1)
+
+# --- Importaciones del Proyecto ---
+from src.common.utils.logging_setup import setup_logging
+from src.lanzador.service.main import LanzadorService
+
+# --- Constantes y Globales ---
+SERVICE_NAME = "lanzador"
+service_instance: Optional[LanzadorService] = None
 
 
-# === IMPORTS DE MÓDULOS (DESPUÉS DE LA CONFIGURACIÓN) ===
-from common.utils.config_manager import ConfigManager  # Opcional, para debug
-from lanzador.service.main import start_lanzador
+def graceful_shutdown(signum, frame):
+    """Manejador de señales para un cierre ordenado."""
+    logging.info(f"Señal de parada recibida (Señal: {signum}). Iniciando cierre ordenado...")
+    if service_instance:
+        service_instance.stop()
+    logging.info("El servicio ha finalizado correctamente.")
+    sys.exit(0)
 
-# === EJECUCIÓN DEL SERVICIO ===
-if __name__ == "__main__":
-    # Configurar manejo de señales para un cierre limpio
-    signal.signal(signal.SIGINT, lambda s, f: handle_shutdown_signal())
-    signal.signal(signal.SIGTERM, lambda s, f: handle_shutdown_signal())
 
-    print("Iniciando Servicio Lanzador Asíncrono...")
+def main():
+    """Función principal que inicializa y ejecuta el servicio."""
+    global service_instance
 
-    # --- CAMBIO PRINCIPAL AQUÍ ---
-    # Usamos asyncio.run() para iniciar la función asíncrona principal
+    # 1. Configurar el logging para este servicio.
+    # Esta llamada ahora funciona porque ConfigLoader ya cargó las variables.
+    setup_logging(service_name=SERVICE_NAME)
+    logging.info(f"Iniciando el servicio: {SERVICE_NAME.capitalize()}")
+
     try:
-        asyncio.run(start_lanzador())
-    except KeyboardInterrupt:
-        print("Apagado forzado por el usuario.")
+        # 2. Registrar los manejadores de señales.
+        signal.signal(signal.SIGINT, graceful_shutdown)
+        signal.signal(signal.SIGTERM, graceful_shutdown)
+
+        # 3. Crear e iniciar la instancia del servicio.
+        # Ya no pasamos un objeto 'config', la clase usará el ConfigManager estático.
+        logging.info("Creando instancia del servicio Lanzador...")
+        service_instance = LanzadorService()
+
+        logging.info("Iniciando el ciclo principal del servicio Lanzador...")
+        service_instance.run()
+
+    except Exception as e:
+        logging.critical(f"Error crítico no controlado en el servicio {SERVICE_NAME}: {e}", exc_info=True)
+        sys.exit(1)
+
+    finally:
+        logging.info(f"El servicio {SERVICE_NAME} ha concluido su ejecución.")
+
+
+if __name__ == "__main__":
+    main()

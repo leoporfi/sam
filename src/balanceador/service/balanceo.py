@@ -115,7 +115,7 @@ class Balanceo:
         mapa_config_robots: Dict[int, Dict[str, Any]],
         robot_state: Dict[str, Any],  # contiene carga_trabajo_por_robot y equipos_en_uso_por_robot
     ):
-        logger.info("Balanceo - Pre-Fase: Validando Asignaciones Dinámicas Existentes por Validez de Máquina...")
+        logger.info("Pre-Fase: Validando Asignaciones Dinámicas Existentes por Validez de Máquina...")
         robots_con_asignaciones_a_validar = list(mapa_equipos_asignados_dinamicamente.keys())
         carga_trabajo_por_robot = robot_state["carga_trabajo_por_robot"]
 
@@ -164,7 +164,7 @@ class Balanceo:
                     f"Liberados {maquinas_invalidas_desasignadas_count} por no cumplir criterios de pool.",
                 )
 
-        logger.info("Balanceo - Pre-Fase: Validación de Asignaciones Existentes por Validez de Máquina completada.")
+        logger.info("Pre-Fase: Validación de Asignaciones Existentes por Validez de Máquina completada.")
 
     def _obtener_estado_robots(self, robot_ids: List[int]) -> Dict[int, Dict[str, Any]]:
         """Obtiene el estado actual de los robots desde la base de datos."""
@@ -228,7 +228,7 @@ class Balanceo:
         carga_trabajo_por_robot: Dict[int, int],
         equipos_en_uso_por_robot: Dict[int, Set[int]],
     ):
-        logger.info("Balanceo - Fase 0: Limpieza de Asignaciones a Robots Inactivos/Offline...")
+        logger.info("Fase 0: Limpieza de Asignaciones a Robots Inactivos/Offline...")
 
         robot_ids_con_asignaciones_dinamicas = list(mapa_equipos_asignados_dinamicamente.keys())
         if not robot_ids_con_asignaciones_dinamicas:
@@ -278,7 +278,7 @@ class Balanceo:
 
         for robot_id_remove in ids_a_remover_del_mapa_principal:
             del mapa_equipos_asignados_dinamicamente[robot_id_remove]
-        logger.info("Balanceo - Fase 0: Limpieza de Asignaciones por Robot Inactivo/Offline completada.")
+        logger.info("Fase 0: Limpieza de Asignaciones por Robot Inactivo/Offline completada.")
 
     def _obtener_estado_inicial(self) -> Tuple[Set[int], Dict[int, int], List[Dict[str, Any]], Dict[int, List[int]], Set[int], Dict[int, Set[int]]]:
         """Obtiene el estado inicial necesario para el balanceo."""
@@ -342,7 +342,7 @@ class Balanceo:
         mapa_equipos_asignados_dinamicamente: Dict[int, List[int]],
     ) -> List[Tuple[int, int, int, Dict[str, Any], int, int]]:
         """Procesa la fase de satisfacción de mínimos y retorna la lista de necesidades."""
-        logger.info("Balanceo - Fase 1: Satisfacción de Mínimos con Reasignación...")
+        logger.info("Fase 1: Satisfacción de Mínimos con Reasignación...")
         min_needs_list: List[Tuple[int, int, int, int, Dict[str, Any], int, int]] = []
 
         for r_id, r_cfg in mapa_config_robots.items():
@@ -380,7 +380,7 @@ class Balanceo:
         equipos_en_uso_por_robot: Dict[int, Set[int]],
     ):
         """Procesa la fase de desasignación de excedentes."""
-        logger.info("Balanceo - Fase 2: Desasignación de Excedentes Reales...")
+        logger.info("Fase 2: Desasignación de Excedentes Reales...")
         for r_id, r_cfg in mapa_config_robots.items():
             if self.balanceador._is_shutting_down:
                 break
@@ -506,7 +506,7 @@ class Balanceo:
         all_fixed_assigned_equipo_ids: Set[int],
     ):
         """Procesa la fase de asignación de demanda adicional."""
-        logger.info("Balanceo - Fase 3: Asignación de Demanda Adicional...")
+        logger.info("Fase 3: Asignación de Demanda Adicional...")
         current_all_assigned_dyn_ids = set(eq_id for subl in mapa_equipos_asignados_dinamicamente.values() for eq_id in subl)  # noqa: C401
         equipos_libres_final_pool = [
             eq_id for eq_id in pool_dinamico_completo_ids if eq_id not in current_all_assigned_dyn_ids and eq_id not in all_fixed_assigned_equipo_ids
@@ -708,7 +708,7 @@ class Balanceo:
         Ejecuta las fases de limpieza (Pre-Fase y Fase 0) sobre todos los recursos.
         Devuelve el estado limpio para las fases siguientes.
         """
-        logger.info("Balanceo - Iniciando ETAPA DE LIMPIEZA GLOBAL...")
+        logger.info("Iniciando ETAPA DE LIMPIEZA GLOBAL...")
         (
             pool_dinamico_completo_ids,
             carga_trabajo_por_robot,
@@ -735,7 +735,7 @@ class Balanceo:
             equipos_en_uso_por_robot,
         )
 
-        logger.info("Balanceo - ETAPA DE LIMPIEZA GLOBAL completada.")
+        logger.info("ETAPA DE LIMPIEZA GLOBAL completada.")
         return {
             "mapa_equipos_asignados_dinamicamente": mapa_equipos_asignados_dinamicamente,
             "pool_dinamico_completo_ids": pool_dinamico_completo_ids,
@@ -751,7 +751,7 @@ class Balanceo:
         para un pool específico, usando solo sus propios recursos.
         """
         pool_nombre = f"PoolId {pool_id}" if pool_id is not None else "Pool General"
-        logger.info(f"Balanceo - Iniciando ETAPA DE BALANCEO INTERNO para {pool_nombre}...")
+        logger.info(f"Iniciando ETAPA DE BALANCEO INTERNO para {pool_nombre}...")
 
         # Extraer estado del diccionario global
         mapa_equipos_asignados_dinamicamente = estado_global["mapa_equipos_asignados_dinamicamente"]
@@ -788,14 +788,14 @@ class Balanceo:
         self._procesar_fase_desasignacion_excedentes(
             mapa_config_robots_pool, carga_trabajo_por_robot, mapa_equipos_asignados_dinamicamente, equipos_en_uso_por_robot
         )
-        logger.info(f"Balanceo - ETAPA DE BALANCEO INTERNO para {pool_nombre} completada.")
+        logger.info(f"ETAPA DE BALANCEO INTERNO para {pool_nombre} completada.")
 
     def ejecutar_fase_de_desborde_global(self, estado_global: Dict[str, Any]):
         """
         Ejecuta la Fase 3, donde la demanda no cubierta de todos los pools
         compite por los recursos sobrantes del Pool General.
         """
-        logger.info("Balanceo - Iniciando ETAPA DE DESBORDE Y DEMANDA ADICIONAL GLOBAL...")
+        logger.info("Iniciando ETAPA DE DESBORDE Y DEMANDA ADICIONAL GLOBAL...")
 
         # Extraer estado
         mapa_equipos_asignados_dinamicamente = estado_global["mapa_equipos_asignados_dinamicamente"]
@@ -826,4 +826,4 @@ class Balanceo:
         self._asignar_equipos_adicionales(
             necesidades_adicionales_globales, equipos_libres_final_pool_general, mapa_equipos_asignados_dinamicamente, "ASIGNAR_DESBORDE_O_ADICIONAL"
         )
-        logger.info("Balanceo - ETAPA DE DESBORDE Y DEMANDA ADICIONAL GLOBAL completada.")
+        logger.info("ETAPA DE DESBORDE Y DEMANDA ADICIONAL GLOBAL completada.")
