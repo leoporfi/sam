@@ -1,8 +1,7 @@
-# common/clients/aa_client.py (Versión Completa y Asíncrona)
+# common/clients/aa_client.py (Con Refresco de Token)
 import asyncio
 import logging
 import re
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -26,7 +25,7 @@ class AutomationAnywhereClient:
         self.password = password
         self.api_key = kwargs.get("api_key")
         self.api_timeout = kwargs.get("api_timeout_seconds", 60)
-        self.callback_url_for_deploy = kwargs.get("callback_url_for_deploy")
+        self.callback_url_deploy = kwargs.get("callback_url_deploy")
 
         self._token: Optional[str] = None
         self._token_lock = asyncio.Lock()
@@ -36,7 +35,14 @@ class AutomationAnywhereClient:
 
     # --- Métodos Internos: Gestión de Token y Peticiones ---
 
-    async def _obtener_token(self):
+    async def _obtener_token(self, is_retry: bool = False):
+        """Obtiene un nuevo token de autenticación."""
+        # Este método se ejecuta dentro de un lock, por lo que es seguro.
+        if is_retry:
+            logger.warning("Intentando obtener un nuevo token de A360...")
+        else:
+            logger.info("Obteniendo token de A360...")
+
         payload = {"username": self.username, "password": self.password}
         if self.api_key:
             payload["apiKey"] = self.api_key
@@ -48,64 +54,82 @@ class AutomationAnywhereClient:
         if self._token:
             self._client.headers["X-Authorization"] = self._token
             logger.info("Token de A360 obtenido/refrescado exitosamente.")
+        else:
+            logger.error("La autenticación fue exitosa pero no se recibió un token.")
+            raise ValueError("No se recibió un token de la API de A360.")
 
-    async def _asegurar_validez_del_token(self):
-        # En una app real, se debería verificar el tiempo de expiración del token.
-        # Por simplicidad, lo obtenemos solo si no existe.
+    async def _asegurar_validez_del_token(self, is_retry: bool = False):
+        """Asegura que tenemos un token. Se llama solo si no hay token o si ha expirado."""
         async with self._token_lock:
-            if not self._token:
-                await self._obtener_token()
+            # Doble chequeo para evitar que múltiples corutinas pidan token a la vez
+            if not self._token or is_retry:
+                await self._obtener_token(is_retry=is_retry)
 
     async def _realizar_peticion_api(self, method: str, endpoint: str, **kwargs) -> Dict:
-        await self._asegurar_validez_del_token()
-        response = await self._client.request(method, endpoint, **kwargs)
-        response.raise_for_status()
-        # Devuelve un diccionario vacío si no hay contenido, para evitar errores
-        return response.json() if response.content else {}
+        """
+        Realiza una petición a la API, manejando la obtención y refresco del token.
+        """
+        # Asegurarse de tener un token inicial si es la primera vez
+        if not self._token:
+            await self._asegurar_validez_del_token()
+
+        try:
+            # Primer intento de la petición
+            response = await self._client.request(method, endpoint, **kwargs)
+            response.raise_for_status()
+            return response.json() if response.content else {}
+
+        except httpx.HTTPStatusError as e:
+            # --- LÓGICA DE REFRESCO DE TOKEN ---
+            # Si el error es 401 (No Autorizado), el token probablemente expiró.
+            if e.response.status_code == 401:
+                logger.warning("Recibido error 401 (No Autorizado). El token puede haber expirado. Intentando reautenticar...")
+
+                # Forzar la obtención de un nuevo token
+                await self._asegurar_validez_del_token(is_retry=True)
+
+                # Reintentar la petición original UNA VEZ MÁS con el nuevo token
+                logger.info(f"Reintentando la petición a {endpoint} con el nuevo token...")
+                response_retry = await self._client.request(method, endpoint, **kwargs)
+                response_retry.raise_for_status()
+                return response_retry.json() if response_retry.content else {}
+            else:
+                # Si es otro error HTTP, simplemente lo relanzamos
+                raise
 
     async def _obtener_lista_paginada_entidades(self, endpoint: str, payload: Dict) -> List[Dict]:
         """
-        Obtiene todas las entidades de un endpoint que soporta paginación,
-        iterando a través de todas las páginas de resultados.
+        Obtiene todas las entidades de un endpoint que soporta paginación.
         """
         lista_completa = []
         offset = 0
-        page_size = 100  # Un tamaño de página razonable, la API puede tener su propio máximo
+        page_size = 100
 
-        # Aseguramos que el payload tenga la estructura de paginación
         if "page" not in payload:
             payload["page"] = {}
 
         while True:
-            # Actualizamos el offset para cada nueva página
             payload["page"]["offset"] = offset
             payload["page"]["length"] = page_size
 
-            logger.info(f"Paginación: Solicitando entidades desde offset {offset}...")
             response_json = await self._realizar_peticion_api("POST", endpoint, json=payload)
-
             entidades_pagina = response_json.get("list", [])
+
             if not entidades_pagina:
-                # Si no hay más entidades, hemos terminado.
-                logger.info("Paginación: No se encontraron más entidades. Finalizando.")
                 break
 
             lista_completa.extend(entidades_pagina)
 
-            # Si la cantidad de resultados obtenidos es menor que el tamaño de la página,
-            # significa que hemos llegado a la última página.
             if len(entidades_pagina) < page_size:
-                logger.info("Paginación: Se ha alcanzado la última página de resultados.")
                 break
 
-            # Preparamos la siguiente iteración
             offset += page_size
 
-        logger.info(f"Paginación: Se obtuvieron un total de {len(lista_completa)} entidades.")
+        logger.info(f"Paginación: Se obtuvieron un total de {len(lista_completa)} entidades de {endpoint}.")
         return lista_completa
 
     def _crear_filtro_deployment_ids(self, deployment_ids: List[str]) -> Dict:
-        """Crea el payload de filtro para buscar por deployment IDs. Es una función síncrona."""
+        """Crea el payload de filtro para buscar por deployment IDs."""
         return {
             "sort": [{"field": "startDateTime", "direction": "desc"}],
             "filter": {
@@ -123,12 +147,7 @@ class AutomationAnywhereClient:
 
         devices_mapeados = []
         for device in devices_api:
-            # Obtenemos la lista de usuarios, con [] como valor por defecto seguro.
-            default_users_list = device.get("defaultUsers", [])
-
-            # Obtenemos el primer usuario SOLO SI la lista no está vacía.
-            # Si está vacía, user_info será un diccionario vacío.
-            user_info = default_users_list[0] if default_users_list else {}
+            user_info = device.get("defaultUsers", [{}])[0]
             devices_mapeados.append(
                 {
                     "EquipoId": device.get("id"),
@@ -142,7 +161,6 @@ class AutomationAnywhereClient:
 
     async def obtener_usuarios_detallados(self) -> List[Dict]:
         logger.info("Obteniendo usuarios detallados de A360...")
-        # Un payload vacío obtiene todos los usuarios
         usuarios_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_USERS_LIST_V2, {})
 
         usuarios_mapeados = []
@@ -196,12 +214,11 @@ class AutomationAnywhereClient:
         payload = {"fileId": file_id, "runAsUserIds": user_ids}
         if bot_input:
             payload["botInput"] = bot_input
-        if self.callback_url_for_deploy:
-            payload["callbackInfo"] = {"url": self.callback_url_for_deploy}
+        if self.callback_url_deploy:
+            payload["callbackInfo"] = {"url": self.callback_url_deploy}
 
         try:
             logger.debug(f"Payload de despliegue: {payload}")
-            # Realizamos la petición POST al endpoint de despliegue
             response = await self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V3, json=payload)
             logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
             return response
