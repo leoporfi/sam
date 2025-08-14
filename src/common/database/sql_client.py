@@ -1,41 +1,27 @@
-# SAM/src/common/database/sql_client.py
+# SAM/src/common/database/sql_client.py (Normalizado)
 
 import logging
-import sys
 import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime, time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import pyodbc
 
-# --- Configuración de Path ---
-COMMON_UTILS_ROOT = Path(__file__).resolve().parent.parent / "utils"
-SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(COMMON_UTILS_ROOT.parent) not in sys.path:
-    sys.path.insert(0, str(COMMON_UTILS_ROOT.parent))
-if str(SAM_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(SAM_PROJECT_ROOT))
+from src.common.utils.config_manager import ConfigManager
 
-try:
-    from common.utils.config_manager import ConfigManager
+# La configuración de sys.path ya no es necesaria aquí.
+# El script de arranque (run_*.py) se encarga de ello.
 
-    # from common.utils.logging_setup import setup_logging
-    # Asumiendo que AutomationAnywhereClient está en lanzador.clients y lo necesitas para type hints
-    if TYPE_CHECKING:  # Para evitar dependencia circular, solo para type hints
-        from lanzador.clients.aa_client import AutomationAnywhereClient
-except ImportError as e:
-    print(f"CRITICAL ERROR en SAM/common/database/sql_client.py: No se pudieron importar módulos: {e}", file=sys.stderr)
-    print(f"sys.path actual: {sys.path}", file=sys.stderr)
-    sys.exit(1)
 
-# Obtener un logger para este módulo. NO se configuran handlers aquí.
-# La configuración (handlers, level) será determinada por la aplicación principal
-# que utilice este módulo (Lanzador o Balanceador).
-logger = logging.getLogger(f"SAM.{Path(__file__).parent.name}.{Path(__file__).stem}")
-# Esto resultará en un logger llamado "SAM.database.sql_client" o similar si __file__.parent.name es "database"
+if TYPE_CHECKING:
+    from src.common.clients.aa_client import AutomationAnywhereClient
+
+# --- OBTENER EL LOGGER (Forma Estandarizada) ---
+# Simplemente obtenemos el logger para este módulo. La configuración
+# (handlers, level, etc.) ya fue establecida por el script de arranque.
+logger = logging.getLogger(__name__)
 
 
 class DatabaseConnector:
@@ -84,10 +70,10 @@ class DatabaseConnector:
         try:
             conn = pyodbc.connect(connection_string, autocommit=False)
             self._set_current_thread_connection(conn)
-            logger.info(f"Hilo {threading.get_ident()}: Nueva conexión a BD SAM ({self.base_datos}) establecida.")
+            logger.info(f"Hilo {threading.get_ident()}: Nueva conexión a BD ({self.base_datos}) establecida.")
             return conn
         except pyodbc.Error as e:
-            logger.error(f"Hilo {threading.get_ident()}: Error al conectar a BD SAM ({self.base_datos}): {e}", exc_info=True)
+            logger.error(f"Hilo {threading.get_ident()}: Error al conectar a BD ({self.base_datos}): {e}", exc_info=True)
             self._set_current_thread_connection(None)
             raise
 
@@ -551,9 +537,9 @@ class DatabaseConnector:
         if conn:
             try:
                 conn.close()
-                logger.info(f"Hilo {threading.get_ident()}: Conexión a BD SAM ({self.base_datos}) cerrada.")
+                logger.info(f"Hilo {threading.get_ident()}: Conexión a BD ({self.base_datos}) cerrada.")
             except pyodbc.Error as e:
-                logger.error(f"Hilo {threading.get_ident()}: Error al cerrar conexión a BD SAM ({self.base_datos}): {e}", exc_info=True)
+                logger.error(f"Hilo {threading.get_ident()}: Error al cerrar conexión a BD ({self.base_datos}): {e}", exc_info=True)
             finally:
                 self._set_current_thread_connection(None)
 
