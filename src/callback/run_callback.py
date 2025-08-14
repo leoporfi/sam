@@ -1,42 +1,56 @@
-# SAM/src/callback/run_callback.py
-"""
-Script principal para ejecutar el servicio Callback.
-
-Este script configura el entorno de Python para permitir importaciones relativas
-y lanza el servidor de Callbacks, que escucha las notificaciones de A360.
-"""
-
+import logging
+import os
 import sys
-from pathlib import Path
 
-# === INICIALIZACIÓN DE CONFIGURACIÓN (DEBE SER LO PRIMERO) ===
-# Añadimos 'src' al path temporalmente para poder importar 'common.utils.config_loader'.
-SAM_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SRC_ROOT = SAM_PROJECT_ROOT / "src"
-if str(SRC_ROOT) not in sys.path:
-    sys.path.insert(0, str(SRC_ROOT))
+# --- Configuración del Path y Carga de Configuración (DEBE SER LO PRIMERO) ---
+try:
+    # Agrega el directorio raíz del proyecto a sys.path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
 
-# Ahora importamos y usamos ConfigLoader.
-from common.utils.config_loader import ConfigLoader
+    # Importar y usar ConfigLoader para cargar las variables de .env
+    from src.common.utils.config_loader import ConfigLoader
 
-# Inicializa el servicio 'callback'. ConfigLoader se encarga de:
-# 1. Determinar las rutas del proyecto.
-# 2. Modificar sys.path para la ejecución actual.
-# 3. Cargar los archivos .env en el orden correcto de precedencia.
-ConfigLoader.initialize_service("callback", __file__)
+    ConfigLoader.initialize_service("callback", __file__)
+
+except Exception as e:
+    print(f"Error crítico durante la inicialización de la configuración: {e}")
+    sys.exit(1)
+
+from src.callback.service.main import CallbackService
+from src.common.utils.config_manager import ConfigManager
+
+# --- Importaciones del Proyecto (Después de la configuración) ---
+from src.common.utils.logging_setup import setup_logging
+
+# --- Constantes ---
+SERVICE_NAME = "callback"
 
 
-# === IMPORTS DE MÓDULOS (DESPUÉS DE LA CONFIGURACIÓN) ===
-# Con sys.path ya configurado, podemos importar el punto de entrada del servicio.
-from callback.service.main import start_callback_server_main
-from common.utils.config_manager import ConfigManager  # Opcional, para depuración
+def main():
+    """Función principal que inicializa y ejecuta el servidor de Callbacks."""
 
-# === EJECUCIÓN DEL SERVICIO ===
+    # 1. Configurar el logging para este servicio.
+    setup_logging(service_name=SERVICE_NAME)
+    logging.info(f"Iniciando el servicio: {SERVICE_NAME.capitalize()}")
+
+    try:
+        # 2. Crear una instancia del servicio.
+        # La clase CallbackService ahora maneja su propia configuración y ciclo de vida.
+        server = CallbackService()
+
+        # 3. Iniciar el servidor.
+        server.start()
+
+    except Exception as e:
+        logging.critical(f"Error crítico no controlado al iniciar el servicio {SERVICE_NAME}: {e}", exc_info=True)
+        sys.exit(1)
+
+    finally:
+        logging.info(f"El servicio {SERVICE_NAME} ha concluido.")
+
+
 if __name__ == "__main__":
-    # Opcional: Imprime un resumen de la configuración para verificar los valores.
-    print("--- Resumen de Configuración para 'Callback' ---")
-    ConfigManager.print_config_summary("callback")
-    print("-------------------------------------------------")
-
-    # Llama a la función que inicia el servidor de callbacks.
-    start_callback_server_main()
+    main()
