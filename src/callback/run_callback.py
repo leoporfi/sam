@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 
-# --- Configuración del Path y Carga de Configuración (DEBE SER LO PRIMERO) ---
+# --- Configuración del Path y Carga de Configuración ---
 try:
     # Agrega el directorio raíz del proyecto a sys.path
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +22,7 @@ except Exception as e:
 from src.callback.service.main import CallbackService
 from src.common.utils.config_manager import ConfigManager
 
-# --- Importaciones del Proyecto (Después de la configuración) ---
+# --- Importaciones del Proyecto ---
 from src.common.utils.logging_setup import setup_logging
 
 # --- Constantes ---

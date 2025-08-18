@@ -4,7 +4,7 @@ import signal
 import sys
 from typing import Optional
 
-# --- Configuración del Path ---)
+# --- Configuración del Path ---
 try:
     # Agrega el directorio raíz del proyecto a sys.path
     current_dir = os.path.dirname(os.path.abspath(__file__))
