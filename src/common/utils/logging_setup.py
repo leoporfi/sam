@@ -50,7 +50,7 @@ def setup_logging(service_name: str):
         "lanzador": "app_log_filename_lanzador",
         "balanceador": "app_log_filename_balanceador",
         "callback": "callback_log_filename",
-        "web_interface": "interfaz_web_log_filename",
+        "interfaz_web": "interfaz_web_log_filename",
     }
 
     log_filename = log_config.get(filename_key_map.get(service_name, f"sam_{service_name}_app.log"))
