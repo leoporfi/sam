@@ -29,7 +29,6 @@ class BalanceadorService:
 
         # --- Carga de Configuración ---
         self.cfg_balanceador_specifics = ConfigManager.get_balanceador_config()
-        self.mapa_robots = ConfigManager.get_mapa_robots()
 
         # --- Configuración de Clientes y Conectores ---
         cfg_sql_sam = ConfigManager.get_sql_server_config("SQL_SAM")
@@ -50,8 +49,7 @@ class BalanceadorService:
             db_config_prefix="SQL_RPA360",
         )
 
-        cfg_clouders_api = ConfigManager.get_clouders_api_config()
-        self.clouders_client = CloudersClient(config=cfg_clouders_api, mapa_robots=self.mapa_robots)
+        self.clouders_client = CloudersClient()
 
         self.notificador = EmailAlertClient(service_name="Balanceador")
 
@@ -61,7 +59,7 @@ class BalanceadorService:
 
         # --- Control de Estado ---
         self._shutdown_event = threading.Event()
-        self._is_shutting_down = False  # <-- ATRIBUTO AÑADIDO PARA CORREGIR EL ERROR
+        self._is_shutting_down = False
         logger.info("BalanceadorService inicializado correctamente.")
 
     def run(self):
@@ -83,7 +81,7 @@ class BalanceadorService:
     def stop(self):
         """Detiene el servicio de forma ordenada."""
         logger.info("Recibida solicitud de parada para BalanceadorService.")
-        self._is_shutting_down = True  # <-- LÍNEA AÑADIDA PARA ACTUALIZAR EL ESTADO
+        self._is_shutting_down = True
         self._shutdown_event.set()
 
     def _execute_cycle(self):
@@ -140,7 +138,6 @@ class BalanceadorService:
 
         logger.info("Limpieza de recursos completada.")
 
-    # --- Métodos de Lógica de Negocio (Movidos desde la clase anterior) ---
 
     def _obtener_carga_de_trabajo_consolidada(self) -> Dict[int, int]:
         """Obtiene la carga de trabajo de todas las fuentes de forma concurrente."""
