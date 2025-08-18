@@ -1,9 +1,13 @@
-# src/sam_dashboard/frontend/features/modals/pool_modal_components.py
-
+# ---------------------------------------------------------------------------
+# ARCHIVO: src/interfaz_web/features/pools/modals.py
+# ---------------------------------------------------------------------------
+# NOTA: Renombré `pool_modal_components.py` a `modals.py` para que la
+# estructura sea `features/pools/modals.py`, que es más limpia.
+# ---------------------------------------------------------------------------
 import asyncio
-from typing import Any, Callable, Dict, List, Set
+from typing import Callable, Dict, List, Set
 
-from reactpy import component, event, html, use_callback, use_context, use_effect, use_memo, use_state
+from reactpy import component, event, html, use_context, use_effect, use_state
 
 from ...api_client import get_api_client
 from ...shared.notifications import NotificationContext
@@ -49,7 +53,7 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
                 html.h2("Editar Pool" if is_edit_mode else "Crear Nuevo Pool"),
             ),
             html.form(
-                {"onSubmit": event(handle_submit, prevent_default=True)},
+                {"id": "pool-form", "onSubmit": event(handle_submit, prevent_default=True)},
                 html.label(
                     "Nombre del Pool",
                     html.input(
@@ -70,14 +74,15 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
                         }
                     ),
                 ),
-                html.footer(
-                    html.div(
-                        {"className": "grid"},
-                        html.button(
-                            {"type": "button", "className": "secondary", "onClick": lambda e: on_close(), "disabled": is_loading}, "Cancelar"
-                        ),
-                        html.button({"type": "submit", "aria-busy": is_loading}, "Guardar"),
+            ),
+            html.footer(
+                html.div(
+                    {"className": "grid"},
+                    html.button(
+                        {"type": "button", "className": "secondary", "onClick": lambda e: on_close(), "disabled": is_loading},
+                        "Cancelar",
                     ),
+                    html.button({"type": "submit", "form": "pool-form", "aria-busy": is_loading}, "Guardar"),
                 ),
             ),
         ),
@@ -86,16 +91,18 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
 
 @component
 def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callable):
-    """Modal rediseñado para asignar recursos a un pool en cajas separadas."""
+    """Modal para asignar recursos (Robots y Equipos) a un pool."""
     api_client = get_api_client()
     notification_ctx = use_context(NotificationContext)
     is_loading, set_is_loading = use_state(True)
 
+    # Estados para cada tipo de recurso
     available_robots, set_available_robots = use_state([])
     assigned_robots, set_assigned_robots = use_state([])
     available_equipos, set_available_equipos = use_state([])
     assigned_equipos, set_assigned_equipos = use_state([])
 
+    # Estados para la selección en las listas
     selected_avail_robots, set_selected_avail_robots = use_state(set())
     selected_asgn_robots, set_selected_asgn_robots = use_state(set())
     selected_avail_equipos, set_selected_avail_equipos = use_state(set())
@@ -115,7 +122,7 @@ def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callab
                 set_available_equipos([e for e in data.get("available", []) if e["Tipo"] == "Equipo"])
                 set_assigned_equipos([e for e in data.get("assigned", []) if e["Tipo"] == "Equipo"])
             except Exception as e:
-                notification_ctx["show_notification"](f"Error al cargar: {e}", "error")
+                notification_ctx["show_notification"](f"Error al cargar asignaciones: {e}", "error")
             finally:
                 set_is_loading(False)
 
@@ -131,17 +138,17 @@ def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callab
             team_ids = [eq["ID"] for eq in assigned_equipos]
             await api_client.update_pool_assignments(pool["PoolId"], robot_ids, team_ids)
             await on_save_success()
-            notification_ctx["show_notification"]("Asignaciones guardadas.", "success")
+            notification_ctx["show_notification"]("Asignaciones guardadas con éxito.", "success")
             on_close()
         except Exception as e:
-            notification_ctx["show_notification"](f"Error al guardar: {e}", "error")
+            notification_ctx["show_notification"](f"Error al guardar asignaciones: {e}", "error")
         finally:
             set_is_loading(False)
 
     return html.dialog(
         {"open": True, "style": {"maxWidth": "90vw", "width": "1200px"}},
         html.article(
-            {"aria-busy": is_loading},
+            {"aria-busy": str(is_loading).lower()},
             html.header(
                 html.button({"aria-label": "Close", "rel": "prev", "onClick": lambda e: on_close()}),
                 html.h3(f"Asignar Recursos a: {pool.get('Nombre')}"),
@@ -191,35 +198,45 @@ def AssignmentBox(
     selected_assigned_ids,
     set_selected_assigned_ids,
 ):
-    """Componente genérico para una fila de asignación (disponibles -> flechas -> asignados)."""
+    """Componente reutilizable para la UI de asignación (disponibles <-> asignados)."""
 
-    def move_to_assigned(e):
-        to_move = {item["ID"] for item in available_items if item["ID"] in selected_available_ids}
-        set_assigned_items(assigned_items + [item for item in available_items if item["ID"] in to_move])
-        set_available_items([item for item in available_items if item["ID"] not in to_move])
-        set_selected_available_ids(set())
-
-    def move_to_available(e):
-        to_move = {item["ID"] for item in assigned_items if item["ID"] in selected_assigned_ids}
-        set_available_items(available_items + [item for item in assigned_items if item["ID"] in to_move])
-        set_assigned_items([item for item in assigned_items if item["ID"] not in to_move])
-        set_selected_assigned_ids(set())
+    def move_items(source, set_source, dest, set_dest, selected_ids, set_selected_ids):
+        items_to_move_ids = {item["ID"] for item in source if item["ID"] in selected_ids}
+        set_dest(dest + [item for item in source if item["ID"] in items_to_move_ids])
+        set_source([item for item in source if item["ID"] not in items_to_move_ids])
+        set_selected_ids(set())
 
     return html.div(
         {"className": "grid", "style": {"gridTemplateColumns": "5fr 1fr 5fr", "alignItems": "center", "gap": "1rem"}},
         ResourceListBox("Disponibles", available_items, selected_available_ids, set_selected_available_ids),
         html.div(
             {"style": {"display": "flex", "flexDirection": "column", "gap": "1rem"}},
-            html.button({"onClick": move_to_assigned, "disabled": not selected_available_ids}, "➡️"),
-            html.button({"onClick": move_to_available, "disabled": not selected_assigned_ids}, "⬅️"),
+            html.button(
+                {
+                    "onClick": lambda e: move_items(
+                        available_items, set_available_items, assigned_items, set_assigned_items, selected_available_ids, set_selected_available_ids
+                    ),
+                    "disabled": not selected_available_ids,
+                },
+                "➡️",
+            ),
+            html.button(
+                {
+                    "onClick": lambda e: move_items(
+                        assigned_items, set_assigned_items, available_items, set_available_items, selected_assigned_ids, set_selected_assigned_ids
+                    ),
+                    "disabled": not selected_assigned_ids,
+                },
+                "⬅️",
+            ),
         ),
         ResourceListBox("Asignados", assigned_items, selected_assigned_ids, set_selected_assigned_ids),
     )
 
 
 @component
-def ResourceListBox(title, items, selected_ids, set_selected_ids):
-    """Componente que renderiza una caja con una lista de recursos seleccionables."""
+def ResourceListBox(title: str, items: List[Dict], selected_ids: Set[int], set_selected_ids: Callable):
+    """Renderiza una lista de recursos seleccionables."""
 
     def handle_selection(item_id):
         new_selection = selected_ids.copy()
@@ -232,7 +249,15 @@ def ResourceListBox(title, items, selected_ids, set_selected_ids):
     return html.div(
         html.p(html.strong(title)),
         html.div(
-            {"style": {"height": "20vh", "overflowY": "auto", "border": "1px solid var(--contrast-border)", "padding": "0.5rem"}},
+            {
+                "style": {
+                    "height": "20vh",
+                    "overflowY": "auto",
+                    "border": "1px solid var(--pico-color-primary-300)",
+                    "padding": "0.5rem",
+                    "borderRadius": "var(--pico-border-radius)",
+                }
+            },
             *[
                 html.label(
                     {"key": item["ID"]},
