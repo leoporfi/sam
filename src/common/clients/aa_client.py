@@ -147,7 +147,7 @@ class AutomationAnywhereClient:
 
         devices_mapeados = []
         for device in devices_api:
-            user_info = device.get("defaultUsers", [{}])[0]
+            user_info = (device.get("defaultUsers") or [{}])[0]
             devices_mapeados.append(
                 {
                     "EquipoId": device.get("id"),
