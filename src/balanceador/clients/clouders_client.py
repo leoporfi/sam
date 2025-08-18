@@ -65,7 +65,7 @@ class CloudersClient:
                     robot_sam = self.mapa_robots.get(robot_name)
                     if robot_sam:
                         resultado["robot_name_sam"] = robot_sam
-                        self.logger.debug(f"Robot mapeado: {robot_name} → {robot_sam}")
+                        logger.debug(f"Robot mapeado: {robot_name} → {robot_sam}")
                     resultados.append(resultado)
 
             logger.info(f"Obtenidos {len(resultados)} robots con tickets pendientes desde Clouders.")
