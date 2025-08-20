@@ -179,5 +179,5 @@ Para un entorno de producción, se recomienda ejecutar los **cuatro servicios** 
 * **Lanzador no inicia robots**:  
   * Verifica que no te encuentres dentro de la ventana de Pausa de Lanzamiento configurada en el .env (`LANZADOR_PAUSA_INICIO_HHMM` y L`ANZADOR_PAUSA_FIN_HHMM`).  
   * Asegúrate de que la sincronización de tablas esté funcionando y que los robots y equipos tengan el estado Activo correcto en sus respectivas tablas.  
-* **Balanceador no asigna/desasigna VMs**: Revisa los logs del Balanceador para entender las decisiones del algoritmo y el CoolingManager. Verifica la carga de trabajo detectada y la configuración de MinEquipos/MaxEquipos/PrioridadBalanceo para los robots. Asegúrate que los robots candidatos para balanceo sean Activo \= 1 y EsOnline \= 1 en dbo.Robots.  
+* **Balanceador no asigna/desasigna VMs**: Revisa los logs del Balanceador para entender las decisiones del algoritmo y el CoolingManager. Verifica la carga de trabajo detectada y la configuración de MinEquipos/MaxEquipos/PrioridadBalanceo para los robots. Asegúrate que los robots candidatos para balanceo sean Activo = 1 y EsOnline = 1 en dbo.Robots.  
 * **Interfaz Web no carga o no responde**: Asegúrate de que el servicio SAM-InterfazWeb esté corriendo. Verifica en los logs si el servidor Uvicorn se inició correctamente y si hay errores de conexión a la base de datos.
