@@ -262,11 +262,7 @@ class DatabaseConnector:
             else:
                 logger.warning(f"Tipo de marca_tiempo_programada '{type(marca_tiempo_programada)}' no esperado. Se guardará Hora como NULL.")
         try:
-            query = """
-                INSERT INTO dbo.Ejecuciones 
-                (DeploymentId, RobotId, EquipoId, UserId, Hora, Estado, FechaInicio) 
-                VALUES (?, ?, ?, ?, ?, ?, GETDATE())
-            """  # noqa: W291
+            query = """INSERT INTO dbo.Ejecuciones (DeploymentId, RobotId, EquipoId, UserId, Hora, Estado, FechaInicio) VALUES (?, ?, ?, ?, ?, ?, GETDATE())"""  # noqa: W291
             # UserId en tu tabla Ejecuciones es nchar(10) NULL, pero a360_user_id es int.
             # Convertir a string para la inserción si la columna es nchar.
             # Viendo SAM.sql, Ejecuciones.UserId es nchar(10), así que castear.
@@ -444,14 +440,9 @@ class DatabaseConnector:
 
         try:
             # Tu tabla Ejecuciones tiene: DeploymentId, Estado, FechaFin, CallbackInfo
-            # FechaInicio ya debería estar.
-            query = """
-            UPDATE dbo.Ejecuciones
-            SET 
-                Estado = ?,
-                FechaFin = CASE WHEN ? IS NOT NULL THEN ? ELSE FechaFin END, -- Solo actualiza FechaFin si se provee
-                CallbackInfo = ?,
-                FechaActualizacion = GETDATE() -- Nueva columna recomendada para tracking
+            # FechaInicio ya debería estar. # Solo actualiza FechaFin si se provee
+            query = """UPDATE dbo.Ejecuciones SET  Estado = ?, 
+            FechaFin = CASE WHEN ? IS NOT NULL THEN ? ELSE FechaFin END, CallbackInfo = ?, FechaActualizacion = GETDATE()
             WHERE DeploymentId = ?;
             """  # noqa: W291
 
