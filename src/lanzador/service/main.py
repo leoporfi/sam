@@ -1,7 +1,7 @@
 # src/lanzador/service/main.py (Corregido)
 import asyncio
 import logging
-from typing import List
+from typing import Dict, List, Tuple
 
 from src.common.clients.aa_client import AutomationAnywhereClient
 from src.common.clients.api_gateway_client import ApiGatewayClient
@@ -85,32 +85,53 @@ class LanzadorService:
             self.db_connector.cerrar_conexion()
         logger.info("Recursos liberados. El servicio ha finalizado limpiamente.")
 
-    # --- Lógica de los Ciclos (sin cambios) ---
+    async def _run_launcher_cycle(self, interval: int):
+        """Ciclo asíncrono para el lanzamiento de robots de forma concurrente."""
+        lanzador_cfg = ConfigManager.get_lanzador_config()
+        bot_input = {"in_NumRepeticion": {"type": "NUMBER", "number": lanzador_cfg.get("repeticiones", 1)}}
+        concurrency_limit = lanzador_cfg.get("max_lanzamientos_concurrentes", 10)
 
-    async def _run_sync_cycle(self, interval: int):
-        """Ciclo asíncrono para la sincronización de tablas maestras."""
         while not self._shutdown_event.is_set():
             try:
-                logger.info("SYNC: Iniciando ciclo de sincronización...")
-                robots_task = self.aa_client.obtener_robots()
-                devices_task = self.aa_client.obtener_devices()
-                users_task = self.aa_client.obtener_usuarios_detallados()
-                robots, devices, users = await asyncio.gather(robots_task, devices_task, users_task)
+                logger.info("LAUNCHER: Buscando robots para ejecutar...")
+                robots_a_ejecutar = self.db_connector.obtener_robots_ejecutables()
 
-                users_by_id = {user["UserId"]: user for user in users if isinstance(user, dict) and user.get("UserId")}
-                devices_procesados = []
-                for device in devices:
-                    if isinstance(device, dict):
-                        user_id = device.get("UserId")
-                        if user_id in users_by_id:
-                            device["Licencia"] = users_by_id[user_id].get("Licencia")
-                        devices_procesados.append(device)
+                if robots_a_ejecutar:
+                    auth_headers = {}
+                    try:
+                        logger.info("LAUNCHER: Obteniendo token de autorización para callbacks...")
+                        auth_headers = await self.api_gateway_client.get_auth_header()
+                        if not auth_headers:
+                            logger.warning("LAUNCHER: No se pudo obtener token. Callbacks podrían no funcionar.")
+                    except Exception as token_error:
+                        logger.error(f"LAUNCHER: Excepción al obtener token: {token_error}. Se continuará sin cabecera.", exc_info=True)
 
-                self.db_connector.merge_robots(robots)
-                self.db_connector.merge_equipos(devices_procesados)
-                logger.info(f"SYNC: Ciclo completado. {len(robots)} robots y {len(devices_procesados)} equipos sincronizados.")
+                    logger.info(f"LAUNCHER: {len(robots_a_ejecutar)} robots encontrados. Desplegando en paralelo (límite: {concurrency_limit})...")
+
+                    # Crear una lista de tareas de despliegue
+                    tasks = []
+                    for robot_info in robots_a_ejecutar:
+                        task = asyncio.create_task(self._deploy_and_register_robot(robot_info, bot_input, auth_headers))
+                        tasks.append(task)
+
+                    # Ejecutar tareas en lotes para respetar el límite de concurrencia
+                    successful_deploys = 0
+                    failed_deploys = 0
+                    for i in range(0, len(tasks), concurrency_limit):
+                        batch = tasks[i : i + concurrency_limit]
+                        results = await asyncio.gather(*batch)
+
+                        successful_deploys += sum(1 for _, success in results if success)
+                        failed_deploys += sum(1 for _, success in results if not success)
+
+                    logger.info(f"LAUNCHER: Ciclo de despliegue completado. Exitosos: {successful_deploys}, Fallidos: {failed_deploys}.")
+
+                else:
+                    logger.info("LAUNCHER: No hay robots para ejecutar en este ciclo.")
+
             except Exception as e:
-                logger.error(f"SYNC: Error en el ciclo: {e}", exc_info=True)
+                logger.error(f"LAUNCHER: Error fatal en el ciclo de lanzamiento: {e}", exc_info=True)
+
             try:
                 await asyncio.wait_for(self._shutdown_event.wait(), timeout=interval)
             except asyncio.TimeoutError:
@@ -144,7 +165,10 @@ class LanzadorService:
                         try:
                             # 2. Pasar las cabeceras al método de despliegue.
                             deployment_result = await self.aa_client.desplegar_bot(
-                                robot["RobotId"], [robot["UserId"]], bot_input=bot_input, callback_auth_headers=auth_headers # <-- Pasamos el token (o un dict vacío si falló)
+                                robot["RobotId"],
+                                [robot["UserId"]],
+                                bot_input=bot_input,
+                                callback_auth_headers=auth_headers,  # <-- Pasamos el token (o un dict vacío si falló)
                             )
                             if deployment_result and "deploymentId" in deployment_result:
                                 self.db_connector.insertar_registro_ejecucion(
@@ -182,3 +206,33 @@ class LanzadorService:
                 await asyncio.wait_for(self._shutdown_event.wait(), timeout=interval)
             except asyncio.TimeoutError:
                 pass
+
+    async def _deploy_and_register_robot(self, robot_info: Dict, bot_input: Dict, auth_headers: Dict) -> Tuple[int, bool]:
+        """
+        Encapsula la lógica para desplegar un robot y registrar su ejecución.
+        Devuelve el ID del robot y un booleano indicando el éxito.
+        """
+        robot_id = robot_info["RobotId"]
+        try:
+            deployment_result = await self.aa_client.desplegar_bot(
+                file_id=robot_id, user_ids=[robot_info["UserId"]], bot_input=bot_input, callback_auth_headers=auth_headers
+            )
+
+            if deployment_result and "deploymentId" in deployment_result:
+                self.db_connector.insertar_registro_ejecucion(
+                    id_despliegue=deployment_result["deploymentId"],
+                    db_robot_id=robot_id,
+                    db_equipo_id=robot_info.get("EquipoId"),
+                    a360_user_id=robot_info["UserId"],
+                    marca_tiempo_programada=robot_info.get("Hora"),
+                    estado="DEPLOYED",
+                )
+                logger.info(f"LAUNCHER: Robot {robot_id} desplegado con ID: {deployment_result['deploymentId']}")
+                return robot_id, True
+            else:
+                error_msg = deployment_result.get("error", "Fallo al obtener deploymentId")
+                logger.error(f"LAUNCHER: Error de API al desplegar robot {robot_id}: {error_msg}")
+                return robot_id, False
+        except Exception as e:
+            logger.error(f"LAUNCHER: Excepción al desplegar robot {robot_id}: {e}", exc_info=True)
+            return robot_id, False

@@ -148,7 +148,7 @@ class ConfigManager:
             "intervalo_lanzador_seg": int(os.getenv("LANZADOR_INTERVALO_LANZADOR_SEG", 30)),
             "intervalo_conciliador_seg": int(os.getenv("LANZADOR_INTERVALO_CONCILIADOR_SEG", 180)),
             "intervalo_sync_tablas_seg": int(os.getenv("LANZADOR_INTERVALO_SYNC_TABLAS_SEG", 3600)),
-            "max_lanzamientos_concurrentes": int(os.getenv("LANZADOR_MAX_LANZAMIENTOS_CONCURRENTES", 5)),
+            "max_lanzamientos_concurrentes": int(os.getenv("LANZADOR_MAX_LANZAMIENTOS_CONCURRENTES", 10)),
             "reintento_lanzamiento_delay_seg": int(os.getenv("LANZADOR_REINTENTO_LANZAMIENTO_DELAY_SEG", 10)),
             "pausa_lanzamiento_inicio_hhmm": os.getenv("LANZADOR_PAUSA_INICIO_HHMM", "23:00"),
             "pausa_lanzamiento_fin_hhmm": os.getenv("LANZADOR_PAUSA_FIN_HHMM", "05:00"),
