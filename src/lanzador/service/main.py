@@ -4,6 +4,7 @@ import logging
 from typing import List
 
 from src.common.clients.aa_client import AutomationAnywhereClient
+from src.common.clients.api_gateway_client import ApiGatewayClient
 from src.common.database.sql_client import DatabaseConnector
 from src.common.utils.config_manager import ConfigManager
 from src.lanzador.service.conciliador import ConciliadorImplementaciones
@@ -29,6 +30,8 @@ class LanzadorService:
         lanzador_cfg = ConfigManager.get_lanzador_config()
         db_cfg = ConfigManager.get_sql_server_config("SQL_SAM")
         aa_cfg = ConfigManager.get_aa_config()
+        # Obtener la nueva configuración del API Gateway
+        gateway_cfg = ConfigManager.get_api_gateway_config()
 
         self.db_connector = DatabaseConnector(
             servidor=db_cfg["server"], base_datos=db_cfg["database"], usuario=db_cfg["uid"], contrasena=db_cfg["pwd"]
@@ -36,6 +39,7 @@ class LanzadorService:
         self.aa_client = AutomationAnywhereClient(
             control_room_url=aa_cfg["url"], username=aa_cfg["user"], password=aa_cfg["pwd"], callback_url_deploy=aa_cfg.get("url_callback")
         )
+        self.api_gateway_client = ApiGatewayClient(gateway_cfg)
         self.conciliador = ConciliadorImplementaciones(self.db_connector, self.aa_client)
         logger.info("Componentes del servicio inicializados correctamente.")
 
@@ -75,6 +79,8 @@ class LanzadorService:
         logger.info("Realizando limpieza de recursos...")
         if self.aa_client:
             await self.aa_client.close()
+        if self.api_gateway_client:
+            await self.api_gateway_client.close()
         if self.db_connector:
             self.db_connector.cerrar_conexion()
         logger.info("Recursos liberados. El servicio ha finalizado limpiamente.")
@@ -114,15 +120,32 @@ class LanzadorService:
         """Ciclo asíncrono para el lanzamiento de robots."""
         lanzador_cfg = ConfigManager.get_lanzador_config()
         bot_input = {"in_NumRepeticion": {"type": "NUMBER", "number": lanzador_cfg.get("repeticiones", 1)}}
+
         while not self._shutdown_event.is_set():
             try:
                 logger.info("LAUNCHER: Buscando robots para ejecutar...")
                 robots_a_ejecutar = self.db_connector.obtener_robots_ejecutables()
                 if robots_a_ejecutar:
+                    auth_headers = {}  # Inicializar como diccionario vacío por defecto
+                    try:
+                        logger.info("LAUNCHER: Obteniendo token de autorización para callbacks...")
+                        auth_headers = await self.api_gateway_client.get_auth_header()
+                        if not auth_headers:
+                            # Si get_auth_header devuelve un diccionario vacío, significa que falló la obtención
+                            logger.warning("LAUNCHER: No se pudo obtener el token del API Gateway. Los robots se lanzarán sin cabecera de callback.")
+                    except Exception as token_error:
+                        logger.error(
+                            f"LAUNCHER: Excepción al obtener token del API Gateway: {token_error}. Se continuará sin cabecera de callback.",
+                            exc_info=True,
+                        )
+
                     logger.info(f"LAUNCHER: {len(robots_a_ejecutar)} robots encontrados. Desplegando...")
                     for robot in robots_a_ejecutar:
                         try:
-                            deployment_result = await self.aa_client.desplegar_bot(robot["RobotId"], [robot["UserId"]], bot_input)
+                            # 2. Pasar las cabeceras al método de despliegue.
+                            deployment_result = await self.aa_client.desplegar_bot(
+                                robot["RobotId"], [robot["UserId"]], bot_input=bot_input, callback_auth_headers=auth_headers # <-- Pasamos el token (o un dict vacío si falló)
+                            )
                             if deployment_result and "deploymentId" in deployment_result:
                                 self.db_connector.insertar_registro_ejecucion(
                                     id_despliegue=deployment_result["deploymentId"],
