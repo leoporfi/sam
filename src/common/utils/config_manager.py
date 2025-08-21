@@ -149,8 +149,8 @@ class ConfigManager:
             "intervalo_conciliador_seg": int(os.getenv("LANZADOR_INTERVALO_CONCILIADOR_SEG", 180)),
             "intervalo_sync_tablas_seg": int(os.getenv("LANZADOR_INTERVALO_SYNC_TABLAS_SEG", 3600)),
             "max_lanzamientos_concurrentes": int(os.getenv("LANZADOR_MAX_LANZAMIENTOS_CONCURRENTES", 10)),
-            "max_reintentos_deploy": int(os.getenv("LANZADOR_MAX_REINTENTOS_DEPLOY", 1)), # 1 reintento = 2 intentos en total
-            "delay_reintento_deploy_seg": int(os.getenv("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 15)), # Espera entre reintentos
+            "max_reintentos_deploy": int(os.getenv("LANZADOR_MAX_REINTENTOS_DEPLOY", 1)),  # 1 reintento = 2 intentos en total
+            "delay_reintento_deploy_seg": int(os.getenv("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 15)),  # Espera entre reintentos
             "pausa_lanzamiento_inicio_hhmm": os.getenv("LANZADOR_PAUSA_INICIO_HHMM", "23:00"),
             "pausa_lanzamiento_fin_hhmm": os.getenv("LANZADOR_PAUSA_FIN_HHMM", "05:00"),
             "habilitar_sync": os.getenv("LANZADOR_HABILITAR_SYNC", "True").lower() == "true",
@@ -165,7 +165,7 @@ class ConfigManager:
             "threads": int(os.getenv("CALLBACK_SERVER_THREADS", 8)),
             "callback_token": os.getenv("CALLBACK_TOKEN", ""),
             "public_host": os.getenv("CALLBACK_SERVER_PUBLIC_HOST", os.getenv("CALLBACK_SERVER_HOST", "localhost")),
-            "endpoint_path": os.getenv("CALLBACK_ENDPOINT_PATH", "/sam_callback"),
+            "endpoint_path": os.getenv("CALLBACK_ENDPOINT_PATH", "/api/callback").strip("/"),
         }
 
     @classmethod
