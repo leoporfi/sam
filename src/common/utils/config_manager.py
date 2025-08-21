@@ -98,6 +98,22 @@ class ConfigManager:
 
         return config
 
+    # --- API GATEWAY ---
+    @staticmethod
+    def get_api_gateway_config() -> Dict[str, Any]:
+        """Obtiene la configuración para el API Gateway de callbacks."""
+        return {
+            "url": os.getenv("API_GATEWAY_URL", "https://apiinternos.movistar.com.ar/telefonica/api/v1/oauth2/token"),
+            "client_id": ConfigManager._get_env_with_warning("API_GATEWAY_CLIENT_ID", warning_msg="Client ID del API Gateway no configurado."),
+            "client_secret": ConfigManager._get_env_with_warning(
+                "API_GATEWAY_CLIENT_SECRET", warning_msg="Client Secret del API Gateway no configurado."
+            ),
+            "grant_type": os.getenv("API_GATEWAY_GRANT_TYPE", "client_credentials"),
+            "scope": os.getenv("API_GATEWAY_SCOPE", "scope1"),
+            "timeout_seconds": int(os.getenv("API_GATEWAY_TIMEOUT_SECONDS", 30)),
+            "token_expiration_buffer_sec": int(os.getenv("API_GATEWAY_TOKEN_EXPIRATION_BUFFER_SEC", 300)),  # 5 minutos de margen
+        }
+
     # --- EMAIL ---
     @staticmethod
     def get_email_config(email_prefix: str = "EMAIL") -> Dict[str, Any]:
@@ -219,7 +235,7 @@ class ConfigManager:
             "clouders_api_url": os.getenv("CLOUDERS_API_URL"),
             "clouders_auth": os.getenv("CLOUDERS_AUTH"),
             "api_timeout": int(os.getenv("API_TIMEOUT", "30")),
-            "verify_ssl": os.getenv("CLOUDERS_VERIFY_SSL", "false").lower() == "true"
+            "verify_ssl": os.getenv("CLOUDERS_VERIFY_SSL", "false").lower() == "true",
         }
 
     @staticmethod

@@ -209,13 +209,20 @@ class AutomationAnywhereClient:
         response_json = await self._realizar_peticion_api("POST", self._ENDPOINT_ACTIVITY_LIST_V3, json=payload)
         return response_json.get("list", [])
 
-    async def desplegar_bot(self, file_id: int, user_ids: List[int], bot_input: Optional[Dict] = None) -> Dict:
+    async def desplegar_bot(
+        self, file_id: int, user_ids: List[int], bot_input: Optional[Dict] = None, callback_auth_headers: Optional[Dict[str, str]] = None
+    ) -> Dict:
         logger.info(f"Desplegando bot con FileID: {file_id} en UserIDs: {user_ids}")
         payload = {"fileId": file_id, "runAsUserIds": user_ids}
         if bot_input:
             payload["botInput"] = bot_input
         if self.callback_url_deploy:
             payload["callbackInfo"] = {"url": self.callback_url_deploy}
+            logger.debug(f"Callback URL de despliegue configurada: {self.callback_url_deploy}")
+        # Si se proporcionan cabeceras de autorización, las añadimos
+        if callback_auth_headers:
+            payload["callbackInfo"]["headers"] = callback_auth_headers
+            logger.debug("Cabeceras de autorización añadidas al callback.")
 
         try:
             logger.debug(f"Payload de despliegue: {payload}")
