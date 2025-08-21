@@ -1,4 +1,4 @@
-# SAM/src/callback/service/main.py (Refactorizado)
+# SAM/src/callback/service/main.py
 import hmac
 import json
 import logging
@@ -37,10 +37,19 @@ class CallbackService:
         self.threads = cb_config.get("threads", 8)
         self.auth_token = cb_config.get("callback_token")
 
-        if not self.auth_token:
-            logger.warning("No se ha configurado un CALLBACK_TOKEN. El servidor no validará las peticiones.")
+        # Nueva configuración para el modo de autenticación
+        # 'strict' para producción (requiere token), 'optional' para desarrollo.
+        self.auth_mode = cb_config.get("auth_mode", "optional").lower()
+
+        if self.auth_mode == "strict":
+            if not self.auth_token:
+                logger.critical("Error de configuración: El modo de autenticación es 'strict' pero no se ha definido un CALLBACK_TOKEN.")
+                # En un caso real, podría ser buena idea salir del programa si la configuración es inconsistente.
+                # sys.exit(1)
+            else:
+                logger.info("Servidor en modo de autenticación ESTRICTO. Todas las peticiones requieren un token válido.")
         else:
-            logger.info("CALLBACK_TOKEN cargado. El servidor validará el encabezado 'X-Authorization'.")
+            logger.info("Servidor en modo de autenticación OPCIONAL. Ideal para desarrollo.")
 
     def _initialize_db_connector(self):
         """Inicializa el conector a la base de datos."""
@@ -56,17 +65,29 @@ class CallbackService:
 
     def _validate_request(self, environ: Dict[str, Any]) -> Tuple[bool, str, str]:
         """Valida el método, token y cuerpo de la petición."""
-        # Validar método
+        # 1. Validar método
         if environ.get("REQUEST_METHOD", "GET") != "POST":
             return False, "405 Method Not Allowed", "Método no permitido. Solo se acepta POST."
 
-        # Validar token
-        if self.auth_token:
+        # 2. Validar token según el modo
+        if self.auth_mode == "strict":
+            # En modo estricto, el token debe estar configurado y la petición debe tenerlo.
+            if not self.auth_token:
+                # Esto indica una mala configuración del servidor.
+                return False, "500 Internal Server Error", "Servidor no configurado para validar tokens."
+
             received_token = environ.get("HTTP_X_AUTHORIZATION", "")
             if not hmac.compare_digest(self.auth_token, received_token):
+                logger.warning(f"Intento de acceso no autorizado. Token recibido: '{received_token[:10]}...'")
+                return False, "401 Unauthorized", "Token de autorización inválido o ausente."
+        elif self.auth_token:
+            # En modo opcional, si el token está configurado, se valida si se recibe.
+            # Si no se recibe el header, se permite el paso.
+            received_token = environ.get("HTTP_X_AUTHORIZATION")
+            if received_token is not None and not hmac.compare_digest(self.auth_token, received_token):
                 return False, "401 Unauthorized", "Token de autorización inválido."
 
-        # Validar Content-Length
+        # 3. Validar Content-Length
         try:
             content_length = int(environ.get("CONTENT_LENGTH", 0))
             if content_length <= 0:
@@ -92,7 +113,8 @@ class CallbackService:
                 logger.error("No se puede procesar el callback porque el conector de BD no está disponible.")
                 return False, "Error interno del servidor: Conexión a BD no disponible."
 
-            # El campo botOutput es opcional, por lo que no se valida su presencia.
+            # El método actualizar_ejecucion_desde_callback ya almacena el payload completo (payload_str)
+            # por lo que los campos opcionales como deviceId, userId y botOutput quedan registrados.
             success = self.db_connector.actualizar_ejecucion_desde_callback(deployment_id, status, payload_str)
             return success, "Callback procesado." if success else "Error al actualizar la base de datos."
 
@@ -141,4 +163,6 @@ class CallbackService:
             logger.warning("Waitress no encontrado. Usando wsgiref.simple_server (solo para desarrollo).")
             httpd = make_server(self.host, self.port, self.wsgi_app)
             httpd.serve_forever()
+
+
 #
