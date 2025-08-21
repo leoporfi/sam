@@ -41,6 +41,13 @@ class CallbackService:
         # 'strict' para producción (requiere token), 'optional' para desarrollo.
         self.auth_mode = cb_config.get("auth_mode", "optional").lower()
 
+        # Asegurarse de que la ruta siempre empiece con una barra '/'.
+        path_from_config = cb_config.get("endpoint_path", "/").strip()
+        if not path_from_config.startswith("/"):
+            path_from_config = "/" + path_from_config
+        self.endpoint_path = path_from_config
+        logger.info(f"Endpoint configurado en la ruta: {self.endpoint_path}")
+
         if self.auth_mode == "strict":
             if not self.auth_token:
                 logger.critical("Error de configuración: El modo de autenticación es 'strict' pero no se ha definido un CALLBACK_TOKEN.")
@@ -65,6 +72,12 @@ class CallbackService:
 
     def _validate_request(self, environ: Dict[str, Any]) -> Tuple[bool, str, str]:
         """Valida el método, token y cuerpo de la petición."""
+        # 0. Validar ruta del endpoint
+        path = environ.get("PATH_INFO", "")
+        if path != self.endpoint_path:
+            logger.warning(f"Petición rechazada a ruta no válida: {path}. Ruta esperada: {self.endpoint_path}")
+            return False, "404 Not Found", f"La ruta '{path}' no existe. El endpoint correcto es '{self.endpoint_path}'."
+
         # 1. Validar método
         if environ.get("REQUEST_METHOD", "GET") != "POST":
             return False, "405 Method Not Allowed", "Método no permitido. Solo se acepta POST."
