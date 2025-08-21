@@ -1,147 +1,117 @@
-openapi: 3.0.1
+openapi: 3.0.0
 info:
-  title: "SAM Callback Service API"
-  description: |
-    API para recibir y procesar notificaciones de callback desde Automation Anywhere A360.
-  version: "2.2.0"
+  title: SAM Callback Service API
+  version: 2.3.0
+  description: >
+    API para recibir callbacks desde Control Room mediante el apigw. 
+    Requiere token de autorización enviado en el header **X-Authorization**.
 servers:
-  - url: http://localhost:8008
-    description: Servidor de desarrollo local.
-
+  - url: http://10.167.181.41:8008
+    description: Servidor de Producción
+  - url: http://10.167.181.42:8008
+    description: Servidor de Desarrollo
 paths:
-  /:
+  /api/callback:
     post:
       summary: "Recibir notificación de callback de A360"
-      description: |
-        Endpoint único que recibe una solicitud POST con un cuerpo JSON que contiene el estado final de una ejecución de bot (despliegue) en A360.
-        La solicitud debe incluir un encabezado 'X-Authorization' para la autenticación.
-      tags:
-        - "Callback"
-      security:
-        - ApiKeyAuth: []
+      description: >
+        Endpoint único que recibe una solicitud POST con un cuerpo JSON que contiene el estado de una ejecución de bot en A360.
+        **La solicitud debe incluir un encabezado 'X-Authorization' válido para la autenticación.**.
+      parameters:
+        - in: header
+          name: X-Authorization
+          required: true
+          description: Token de autorización para validar la petición.
+          schema:
+            type: string
       requestBody:
-        description: "Payload JSON enviado por A360 al finalizar una ejecución."
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CallbackPayload'
-            examples:
-              exito_con_output:
-                summary: "Ejemplo de ejecución exitosa con output"
-                value:
-                  deploymentId: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
-                  status: "COMPLETED"
-                  botOutput: {"clave": "valor"}
-              exito_sin_output:
-                summary: "Ejemplo de ejecución exitosa sin output"
-                value:
-                  deploymentId: "b2c3d4e5-f6a7-8901-2345-67890abcdef1"
-                  status: "COMPLETED"
+              type: object
+              required:
+                - deploymentId
+                - status
+              properties:
+                deploymentId:
+                  type: string
+                  description: Identificador único del deployment.
+                status:
+                  type: string
+                  description: Estado de la ejecución (ej. FINISHED, ERROR).
+                deviceId:
+                  type: string
+                  description: Identificador del dispositivo que ejecutó el bot.
+                userId:
+                  type: string
+                  description: Identificador del usuario asociado a la ejecución.
+                botOutput:
+                  type: object
+                  description: Salida generada por el bot.
       responses:
         '200':
-          description: "Éxito. El callback fue recibido y procesado correctamente."
+          description: Callback procesado correctamente.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  message:
+                    type: string
+                    example: Callback procesado.
         '400':
-          description: "Solicitud Incorrecta. El servidor no puede procesar la solicitud debido a un error del cliente (p. ej., JSON malformado, campos inválidos o faltantes)."
+          description: Petición inválida (JSON malformado o faltan campos requeridos).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-                example:
-                  status: "SOLICITUD_INVALIDA"
-                  message: "El campo 'deploymentId' es requerido y no puede estar vacío."
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ERROR
+                  message:
+                    type: string
+                    example: Cuerpo de la petición vacío o inválido.
         '401':
-          description: "Autenticación Fallida. La solicitud carece de credenciales de autenticación válidas. Se requiere un token válido en el encabezado 'X-Authorization'."
+          description: Token de autorización inválido o ausente.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-                example:
-                  status: "AUTENTICACION_FALLIDA"
-                  message: "El token proporcionado en 'X-Authorization' es inválido o ha expirado."
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ERROR
+                  message:
+                    type: string
+                    example: Token de autorización inválido.
         '405':
-          description: "Método No Permitido. El método de solicitud (p. ej., GET, PUT) no está soportado para este endpoint."
+          description: Método no permitido (solo se acepta POST).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-                example:
-                  status: "METODO_NO_PERMITIDO"
-                  message: "El método de solicitud 'GET' no está soportado. Utilice 'POST'."
-        '413':
-          description: "Carga Útil Demasiado Grande. El tamaño de la solicitud excede el límite permitido por el servidor."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-                example:
-                  status: "PAYLOAD_MUY_GRANDE"
-                  message: "El cuerpo de la solicitud excede el límite de tamaño máximo de 1MB."
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ERROR
+                  message:
+                    type: string
+                    example: Método no permitido. Solo se acepta POST.
         '500':
-          description: "Error Interno del Servidor. El servidor encontró una condición inesperada que le impidió completar la solicitud. Contacte al administrador del sistema."
+          description: Error interno del servidor (por ejemplo, conexión a la BD no disponible).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-                example:
-                  status: "ERROR_INTERNO"
-                  message: "Ocurrió un error inesperado en el servidor al procesar la solicitud."
-
-components:
-  schemas:
-    CallbackPayload:
-      title: "Payload del Callback"
-      type: object
-      required:
-        - deploymentId
-        - status
-      properties:
-        deploymentId:
-          type: string
-          description: "ID único del despliegue (ejecución del bot) en A360. Cadena no vacía."
-          example: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
-        status:
-          type: string
-          description: "Estado final de la ejecución del bot. Cadena no vacía."
-          example: "COMPLETED"
-        botOutput:
-          type: object
-          description: "(Opcional) Diccionario que contiene las variables de salida del bot. Si no se provee, se asume un objeto vacío."
-          example: {"status": "OK", "download_path": "/share/file.xlsx"}
-    
-    SuccessResponse:
-      title: "Respuesta Exitosa"
-      type: object
-      properties:
-        status:
-          type: string
-          description: "Indica que la operación fue exitosa."
-          example: "OK"
-        message:
-          type: string
-          description: "Mensaje de confirmación."
-          example: "Callback procesado y registrado exitosamente."
-
-    ErrorResponse:
-      title: "Respuesta de Error"
-      type: object
-      properties:
-        status:
-          type: string
-          description: "Código interno legible que representa el tipo de error."
-          example: "AUTENTICACION_FALLIDA"
-        message:
-          type: string
-          description: "Mensaje legible por humanos que describe el error en detalle."
-          example: "Credenciales de autorización no válidas o ausentes."
-
-  securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-Authorization
-      description: "Token de seguridad para validar la autenticidad de la llamada desde A360."
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ERROR
+                  message:
+                    type: string
+                    example: Error interno del servidor durante el procesamiento.
