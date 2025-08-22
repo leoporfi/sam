@@ -32,3 +32,5 @@ test_*
 uv.lock
 .env.bak
 *.csv
+*.png
+*.svg
