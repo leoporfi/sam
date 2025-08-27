@@ -34,3 +34,5 @@ uv.lock
 *.csv
 *.png
 *.svg
+generate_keys.py
+migra.md

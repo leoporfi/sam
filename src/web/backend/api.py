@@ -1,4 +1,4 @@
-# src/sam_dashboard/api.py
+# src/web/api.py
 
 import logging
 from typing import Dict, Optional
@@ -12,7 +12,7 @@ from . import database as db_service
 from .dependencies import get_db_connector
 
 # Importa los schemas desde el archivo local de schemas
-# Agrega estas importaciones al inicio de sam_dashboard/backend/api.py
+# Agrega estas importaciones al inicio de web/backend/api.py
 from .schemas import AssignmentUpdateRequest, PoolAssignmentsRequest, PoolCreate, PoolUpdate, RobotCreateRequest, RobotUpdateRequest, ScheduleData
 
 logger = logging.getLogger(__name__)
@@ -200,7 +200,7 @@ def create_new_pool(pool_data: PoolCreate, db: DatabaseConnector = Depends(get_d
         raise HTTPException(status_code=409, detail=str(e))
 
 
-# En src/sam_dashboard/api.py
+# En src/web/api.py
 
 
 @router.put("/api/pools/{pool_id}", tags=["Pools"])
