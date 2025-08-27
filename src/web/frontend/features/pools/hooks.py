@@ -1,4 +1,4 @@
-# src/sam_dashboard/features/pools/hooks.py
+# src/web/features/pools/hooks.py
 from reactpy import use_callback, use_effect, use_state
 
 from ...api_client import get_api_client
