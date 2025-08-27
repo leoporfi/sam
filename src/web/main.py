@@ -1,4 +1,4 @@
-# src/sam_dashboard/main.py
+# src/web/main.py
 
 from pathlib import Path
 

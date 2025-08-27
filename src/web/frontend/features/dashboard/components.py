@@ -1,4 +1,4 @@
-# /src/sam_dashboard/frontend/features/dashboard/components.py
+# /src/web/frontend/features/dashboard/components.py
 
 from typing import Callable, Dict, List
 
@@ -13,7 +13,7 @@ from ...hooks.use_robots_hook import use_robots
 from ...shared.common_components import LoadingSpinner, Pagination
 from ...shared.notifications import NotificationContext
 
-# Sube 2 niveles (de dashboard -> features -> sam_dashboard) para encontrar 'hooks' y 'shared'
+# Sube 2 niveles (de dashboard -> features -> web) para encontrar 'hooks' y 'shared'
 from ..modals.dashboard_modal_components import AssignmentsModal, RobotEditModal, SchedulesModal
 
 

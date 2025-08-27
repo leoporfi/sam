@@ -1,4 +1,4 @@
-# SAM/src/sam_dashboard/run_dashboard.py (Estandarizado)
+# SAM/src/web/run_dashboard.py
 import logging
 import os
 import sys
@@ -51,8 +51,8 @@ def main():
 
         # 3. Ejecutar el servidor Uvicorn.
         # Uvicorn maneja su propio ciclo de vida y cierre controlado.
-        # Apunta a la instancia 'app' dentro de 'src.sam_dashboard.main'.
-        uvicorn.run("src.sam_dashboard.main:app", host=host, port=port, reload=reload, log_level=log_level)
+        # Apunta a la instancia 'app' dentro de 'src.web.main'.
+        uvicorn.run("src.web.main:app", host=host, port=port, reload=reload, log_level=log_level)
 
     except Exception as e:
         logging.critical(f"Error crítico no controlado al iniciar el servicio {SERVICE_NAME}: {e}", exc_info=True)
