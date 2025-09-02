@@ -1,181 +1,186 @@
 # SAM/src/callback/service/main.py
 import hmac
-import json
 import logging
-from typing import Any, Dict, Optional, Tuple
-from wsgiref.simple_server import make_server
+from typing import Any, Dict, Optional
 
-try:
-    from waitress import serve
-
-    WAITRESS_AVAILABLE = True
-except ImportError:
-    WAITRESS_AVAILABLE = False
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from src.common.database.sql_client import DatabaseConnector
 from src.common.utils.config_manager import ConfigManager
 
+# --- Configuración Inicial ---
 logger = logging.getLogger(__name__)
 
+# Cargar configuración del servicio de callback
+cb_config = ConfigManager.get_callback_server_config()
+sql_config = ConfigManager.get_sql_server_config("SQL_SAM")
 
-class CallbackService:
+
+# --- Modelos de Datos (Pydantic) ---
+class CallbackPayload(BaseModel):
     """
-    Encapsula toda la lógica del servidor de Callbacks.
+    Define la estructura y valida el cuerpo de la petición de callback.
     """
 
-    def __init__(self):
-        """Inicializa el servidor de Callbacks."""
-        logger.info("Inicializando CallbackService...")
-        self._load_configuration()
-        self._initialize_db_connector()
+    deployment_id: str = Field(..., alias="deploymentId", description="ID único del despliegue en A360.")
+    status: str = Field(..., description="Estado final de la ejecución del bot.")
+    device_id: Optional[str] = Field(None, alias="deviceId")
+    user_id: Optional[int] = Field(None, alias="userId")
+    bot_output: Optional[Dict[str, Any]] = Field(None, alias="botOutput")
 
-    def _load_configuration(self):
-        """Carga la configuración desde el ConfigManager."""
-        cb_config = ConfigManager.get_callback_server_config()
-        self.host = cb_config.get("host", "0.0.0.0")
-        self.port = cb_config.get("port", 8008)
-        self.threads = cb_config.get("threads", 8)
-        self.auth_token = cb_config.get("callback_token")
 
-        # Nueva configuración para el modo de autenticación
-        # 'strict' para producción (requiere token), 'optional' para desarrollo.
-        self.auth_mode = cb_config.get("auth_mode", "optional").lower()
+class StandardResponse(BaseModel):
+    """
+    Define el formato de respuesta JSON estándar para toda la API.
+    """
 
-        # Asegurarse de que la ruta siempre empiece con una barra '/'.
-        path_from_config = cb_config.get("endpoint_path", "/").strip()
-        if not path_from_config.startswith("/"):
-            path_from_config = "/" + path_from_config
-        self.endpoint_path = path_from_config
-        logger.info(f"Endpoint configurado en la ruta: {self.endpoint_path}")
+    status: str
+    message: str
 
-        if self.auth_mode == "strict":
-            if not self.auth_token:
-                logger.critical("Error de configuración: El modo de autenticación es 'strict' pero no se ha definido un CALLBACK_TOKEN.")
-                # En un caso real, podría ser buena idea salir del programa si la configuración es inconsistente.
-                # sys.exit(1)
-            else:
-                logger.info("Servidor en modo de autenticación ESTRICTO. Todas las peticiones requieren un token válido.")
-        else:
-            logger.info("Servidor en modo de autenticación OPCIONAL. Ideal para desarrollo.")
 
-    def _initialize_db_connector(self):
-        """Inicializa el conector a la base de datos."""
-        try:
-            sql_config = ConfigManager.get_sql_server_config("SQL_SAM")
-            self.db_connector = DatabaseConnector(
-                servidor=sql_config["server"], base_datos=sql_config["database"], usuario=sql_config["uid"], contrasena=sql_config["pwd"]
-            )
-            logger.info("Conector de base de datos inicializado.")
-        except Exception as e:
-            logger.critical(f"No se pudo inicializar el conector de la base de datos: {e}", exc_info=True)
-            self.db_connector = None
+# --- Inicialización de la Aplicación y Recursos ---
+app = FastAPI(
+    title="SAM Callback Service",
+    description="Servicio para recibir y procesar notificaciones de Automation Anywhere A360.",
+    version="2.0.0",
+)
 
-    def _validate_request(self, environ: Dict[str, Any]) -> Tuple[bool, str, str]:
-        """Valida el método, token y cuerpo de la petición."""
-        # 0. Validar ruta del endpoint
-        path = environ.get("PATH_INFO", "")
-        if path != self.endpoint_path:
-            logger.warning(f"Petición rechazada a ruta no válida: {path}. Ruta esperada: {self.endpoint_path}")
-            return False, "404 Not Found", f"La ruta '{path}' no existe. El endpoint correcto es '{self.endpoint_path}'."
+db_connector: Optional[DatabaseConnector] = None
 
-        # 1. Validar método
-        if environ.get("REQUEST_METHOD", "GET") != "POST":
-            return False, "405 Method Not Allowed", "Método no permitido. Solo se acepta POST."
 
-        # 2. Validar token según el modo
-        if self.auth_mode == "strict":
-            # En modo estricto, el token debe estar configurado y la petición debe tenerlo.
-            if not self.auth_token:
-                # Esto indica una mala configuración del servidor.
-                return False, "500 Internal Server Error", "Servidor no configurado para validar tokens."
+@app.on_event("startup")
+def startup_event():
+    """
+    Evento de inicio: Inicializa el conector de la base de datos.
+    """
+    global db_connector
+    logger.info("Inicializando el conector de la base de datos para FastAPI...")
+    try:
+        db_connector = DatabaseConnector(
+            servidor=sql_config["server"], base_datos=sql_config["database"], usuario=sql_config["uid"], contrasena=sql_config["pwd"]
+        )
+        logger.info("Conector de base de datos inicializado exitosamente.")
+    except Exception as e:
+        logger.critical(f"No se pudo inicializar el conector de la base de datos: {e}", exc_info=True)
+        db_connector = None
 
-            received_token = environ.get("HTTP_X_AUTHORIZATION", "")
-            if not hmac.compare_digest(self.auth_token, received_token):
-                logger.warning(f"Intento de acceso no autorizado. Token recibido: '{received_token[:10]}...'")
-                return False, "401 Unauthorized", "Token de autorización inválido o ausente."
-        elif self.auth_token:
-            # En modo opcional, si el token está configurado, se valida si se recibe.
-            # Si no se recibe el header, se permite el paso.
-            received_token = environ.get("HTTP_X_AUTHORIZATION")
-            if received_token is not None and not hmac.compare_digest(self.auth_token, received_token):
-                return False, "401 Unauthorized", "Token de autorización inválido."
 
-        # 3. Validar Content-Length
-        try:
-            content_length = int(environ.get("CONTENT_LENGTH", 0))
-            if content_length <= 0:
-                return False, "400 Bad Request", "Cuerpo de la petición vacío o Content-Length ausente."
-        except (ValueError, TypeError):
-            return False, "400 Bad Request", "Content-Length inválido."
+@app.on_event("shutdown")
+def shutdown_event():
+    """
+    Evento de cierre: Cierra la conexión a la base de datos de forma segura.
+    """
+    if db_connector:
+        logger.info("Cerrando la conexión de la base de datos.")
+        db_connector.cerrar_conexion()
 
-        return True, "", ""
 
-    def _process_payload(self, body: bytes) -> Tuple[bool, str]:
-        """Parsea el payload y lo procesa en la base de datos."""
-        try:
-            payload_str = body.decode("utf-8")
-            data = json.loads(payload_str)
+# --- Manejadores de Excepciones Personalizados ---
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Captura las excepciones HTTP y formatea la respuesta para que coincida con el formato estándar.
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status": "ERROR", "message": exc.detail},
+    )
 
-            deployment_id = data.get("deploymentId")
-            status = data.get("status")
 
-            if not deployment_id or not status:
-                return False, "Faltan 'deploymentId' o 'status' en el payload."
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Captura los errores de validación de Pydantic y los formatea.
+    """
+    # Se puede personalizar para ser más detallado si es necesario
+    error_message = exc.errors()[0]["msg"] if exc.errors() else "Error de validación"
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"status": "ERROR", "message": error_message},
+    )
 
-            if not self.db_connector:
-                logger.error("No se puede procesar el callback porque el conector de BD no está disponible.")
-                return False, "Error interno del servidor: Conexión a BD no disponible."
 
-            # El método actualizar_ejecucion_desde_callback ya almacena el payload completo (payload_str)
-            # por lo que los campos opcionales como deviceId, userId y botOutput quedan registrados.
-            success = self.db_connector.actualizar_ejecucion_desde_callback(deployment_id, status, payload_str)
-            return success, "Callback procesado." if success else "Error al actualizar la base de datos."
+# --- Dependencias de FastAPI ---
+def get_db() -> DatabaseConnector:
+    """
+    Dependencia de FastAPI para obtener el conector de base de datos.
+    """
+    if not db_connector:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="La conexión con la base de datos no está disponible.")
+    return db_connector
 
-        except json.JSONDecodeError:
-            return False, "Payload no es un JSON válido."
-        except UnicodeDecodeError:
-            return False, "Payload no está en formato UTF-8 válido."
-        except Exception as e:
-            logger.error(f"Error inesperado procesando el payload: {e}", exc_info=True)
-            return False, "Error interno del servidor durante el procesamiento."
 
-    def wsgi_app(self, environ: Dict[str, Any], start_response):
-        """Aplicación WSGI que maneja las peticiones entrantes."""
-        is_valid, status, message = self._validate_request(environ)
-        if not is_valid:
-            response_body = json.dumps({"status": "ERROR", "message": message}).encode("utf-8")
-            headers = [("Content-Type", "application/json"), ("Content-Length", str(len(response_body)))]
-            start_response(status, headers)
-            return [response_body]
+async def verify_token(x_authorization: Optional[str] = Header(None, alias="X-Authorization")):
+    """
+    Dependencia de seguridad para validar el token de autorización.
+    """
+    auth_token = cb_config.get("callback_token")
+    auth_mode = cb_config.get("auth_mode", "strict").lower()
 
-        content_length = int(environ.get("CONTENT_LENGTH", 0))
-        request_body = environ["wsgi.input"].read(content_length)
+    if auth_mode == "strict":
+        if not auth_token:
+            logger.error("Error de configuración del servidor: auth_mode es 'strict' pero no hay CALLBACK_TOKEN.")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Servidor no configurado para validar tokens.")
 
-        success, message = self._process_payload(request_body)
+        if not x_authorization or not hmac.compare_digest(auth_token, x_authorization):
+            logger.warning(f"Intento de acceso no autorizado. Token recibido: '{str(x_authorization)[:10]}...'")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de autorización inválido o ausente.")
+
+    elif auth_token and x_authorization:
+        if not hmac.compare_digest(auth_token, x_authorization):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de autorización inválido.")
+
+
+# --- Endpoints de la API ---
+endpoint_path = cb_config.get("endpoint_path", "/api/callback").strip()
+if not endpoint_path.startswith("/"):
+    endpoint_path = "/" + endpoint_path
+
+
+@app.post(
+    endpoint_path,
+    tags=["Callbacks"],
+    summary="Recibe notificaciones de A360",
+    response_model=StandardResponse,  # Define el modelo de respuesta para la documentación
+    dependencies=[Depends(verify_token)],
+)
+async def handle_callback(payload: CallbackPayload, request: Request, db: DatabaseConnector = Depends(get_db)):
+    """
+    Procesa el callback de A360, actualizando el estado en la base de datos.
+    """
+    try:
+        raw_payload = await request.body()
+        payload_str = raw_payload.decode("utf-8")
+
+        logger.info(f"Procesando callback para DeploymentId: {payload.deployment_id} con estado: {payload.status}")
+
+        success = db.actualizar_ejecucion_desde_callback(
+            deployment_id=payload.deployment_id, estado_callback=payload.status, callback_payload_str=payload_str
+        )
 
         if success:
-            response_status = "200 OK"
-            response_json = {"status": "OK", "message": message}
+            return StandardResponse(status="OK", message="Callback procesado exitosamente.")
         else:
-            response_status = "500 Internal Server Error"
-            response_json = {"status": "ERROR", "message": message}
+            logger.error(f"Error funcional al actualizar la BD para DeploymentId: {payload.deployment_id}")
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"status": "ERROR", "message": "Error al actualizar el estado en la base de datos."},
+            )
 
-        response_body = json.dumps(response_json).encode("utf-8")
-        headers = [("Content-Type", "application/json"), ("Content-Length", str(len(response_body)))]
-        start_response(response_status, headers)
-        return [response_body]
-
-    def start(self):
-        """Inicia el servidor WSGI."""
-        logger.info(f"Servidor de Callbacks iniciando en http://{self.host}:{self.port}")
-
-        if WAITRESS_AVAILABLE:
-            logger.info(f"Usando servidor Waitress con {self.threads} hilos (recomendado para producción).")
-            serve(self.wsgi_app, host=self.host, port=self.port, threads=self.threads)
-        else:
-            logger.warning("Waitress no encontrado. Usando wsgiref.simple_server (solo para desarrollo).")
-            httpd = make_server(self.host, self.port, self.wsgi_app)
-            httpd.serve_forever()
+    except Exception as e:
+        logger.error(f"Error inesperado procesando el payload: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"status": "ERROR", "message": "Error interno del servidor durante el procesamiento del callback."},
+        )
 
 
-#
+@app.get("/health", tags=["Monitoring"], summary="Verifica el estado del servicio", response_model=StandardResponse)
+async def health_check():
+    """
+    Endpoint simple para verificar que el servicio está en línea.
+    """
+    return StandardResponse(status="OK", message="Servicio de Callback activo.")
