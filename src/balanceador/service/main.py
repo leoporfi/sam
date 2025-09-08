@@ -1,4 +1,4 @@
-# SAM/src/balanceador/service/main.py (Refactorizado)
+# SAM/src/balanceador/service/main.py ()
 import logging
 import math
 import threading
@@ -84,6 +84,19 @@ class BalanceadorService:
         self._is_shutting_down = True
         self._shutdown_event.set()
 
+    # --- MÉTODO AÑADIDO ---
+    def obtener_pools_activos(self) -> List[Dict[str, Any]]:
+        """Obtiene todos los pools activos de la base de datos."""
+        try:
+            logger.info("Obteniendo la lista de pools de balanceo activos...")
+            query = "SELECT PoolId, Nombre FROM dbo.Pools WHERE Activo = 1 ORDER BY Nombre;"
+            pools = self.db_sam.ejecutar_consulta(query, es_select=True)
+            logger.info(f"Se encontraron {len(pools or [])} pools activos.")
+            return pools or []
+        except Exception as e:
+            logger.error(f"Error crítico al obtener pools activos: {e}", exc_info=True)
+            return []
+
     def _execute_cycle(self):
         """Ejecuta un único ciclo de la lógica de balanceo."""
         if self._shutdown_event.is_set():
@@ -91,27 +104,32 @@ class BalanceadorService:
 
         logger.info("=" * 20 + " INICIANDO CICLO DE BALANCEO " + "=" * 20)
         try:
-            # Etapa 1: Limpieza Global
-            estado_limpio = self.balanceo.ejecutar_limpieza_global()
+            # Etapa 0: Obtener la fotografía completa del estado del sistema UNA SOLA VEZ
+            estado_global = self.balanceo._obtener_estado_inicial_global()
+            if self._shutdown_event.is_set():
+                return
+
+            # Etapa 1: Limpieza Global (ahora pasamos el estado)
+            mapa_config_robots = self.balanceo.ejecutar_limpieza_global(estado_global)
             if self._shutdown_event.is_set():
                 return
 
             # Etapa 2: Balanceo Interno de cada Pool
-            pools_activos = self.balanceo.obtener_pools_activos()
+            pools_activos = self.obtener_pools_activos()
 
             # Procesar cada pool específico
             for pool in pools_activos:
-                self.balanceo.ejecutar_balanceo_interno_de_pool(pool["PoolId"], estado_limpio)
+                self.balanceo.ejecutar_balanceo_interno_de_pool(pool["PoolId"], estado_global)
                 if self._shutdown_event.is_set():
                     return
 
             # Procesar el Pool General (PoolId = None)
-            self.balanceo.ejecutar_balanceo_interno_de_pool(None, estado_limpio)
+            self.balanceo.ejecutar_balanceo_interno_de_pool(None, estado_global)
             if self._shutdown_event.is_set():
                 return
 
             # Etapa 3: Desborde y Demanda Adicional Global
-            self.balanceo.ejecutar_fase_de_desborde_global(estado_limpio)
+            self.balanceo.ejecutar_fase_de_desborde_global(estado_global, mapa_config_robots)
 
         except Exception as e:
             logger.critical(f"Error fatal durante el ciclo de balanceo: {e}", exc_info=True)
@@ -137,7 +155,6 @@ class BalanceadorService:
             self.db_rpa360.cerrar_conexion()
 
         logger.info("Limpieza de recursos completada.")
-
 
     def _obtener_carga_de_trabajo_consolidada(self) -> Dict[int, int]:
         """Obtiene la carga de trabajo de todas las fuentes de forma concurrente."""

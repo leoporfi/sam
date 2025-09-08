@@ -19,6 +19,8 @@ class AutomationAnywhereClient:
     _ENDPOINT_DEVICES_LIST_V2 = "/v2/devices/list"
     _ENDPOINT_FILES_LIST_V2 = "/v2/repository/workspaces/public/files/list"
 
+    CONCILIADOR_BATCH_SIZE = 50  # Procesar de 50 en 50 para evitar timeouts
+
     def __init__(self, control_room_url: str, username: str, password: str, **kwargs):
         self.url_base = control_room_url.strip("/")
         self.username = username
@@ -202,12 +204,31 @@ class AutomationAnywhereClient:
         return robots_mapeados
 
     async def obtener_detalles_por_deployment_ids(self, deployment_ids: List[str]) -> List[Dict]:
+        """Obtiene detalles de deployments procesando los IDs en lotes para evitar timeouts."""
         if not deployment_ids:
             return []
-        logger.info(f"Obteniendo detalles de {len(deployment_ids)} deployments...")
-        payload = self._crear_filtro_deployment_ids(deployment_ids)
-        response_json = await self._realizar_peticion_api("POST", self._ENDPOINT_ACTIVITY_LIST_V3, json=payload)
-        return response_json.get("list", [])
+
+        all_details = []
+        logger.info(f"Obteniendo detalles de {len(deployment_ids)} deployments en lotes de {self.CONCILIADOR_BATCH_SIZE}...")
+
+        for i in range(0, len(deployment_ids), self.CONCILIADOR_BATCH_SIZE):
+            batch_ids = deployment_ids[i : i + self.CONCILIADOR_BATCH_SIZE]
+            logger.debug(f"Procesando lote {i // self.CONCILIADOR_BATCH_SIZE + 1} con {len(batch_ids)} IDs.")
+
+            payload = self._crear_filtro_deployment_ids(batch_ids)
+
+            try:
+                response_json = await self._realizar_peticion_api("POST", self._ENDPOINT_ACTIVITY_LIST_V3, json=payload)
+                batch_details = response_json.get("list", [])
+                if batch_details:
+                    all_details.extend(batch_details)
+            except httpx.ReadTimeout as e:
+                logger.error(f"Timeout al procesar un lote de deployment IDs. Lote omitido. Error: {e}")
+            except Exception as e:
+                logger.error(f"Error inesperado al procesar un lote de deployment IDs. Lote omitido. Error: {e}", exc_info=True)
+
+        logger.info(f"Se obtuvieron detalles para {len(all_details)} de {len(deployment_ids)} deployments solicitados.")
+        return all_details
 
     async def desplegar_bot(
         self, file_id: int, user_ids: List[int], bot_input: Optional[Dict] = None, callback_auth_headers: Optional[Dict[str, str]] = None

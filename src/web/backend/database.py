@@ -1,5 +1,6 @@
 # Agrega estas importaciones al inicio del archivo database.py
 import asyncio
+import logging
 from typing import Dict, List, Optional
 
 from common.clients.aa_client import AutomationAnywhereClient
@@ -7,6 +8,8 @@ from common.database.sql_client import DatabaseConnector
 from common.utils.config_manager import ConfigManager
 
 from .schemas import RobotCreateRequest, RobotUpdateRequest, ScheduleData
+
+logger = logging.getLogger(__name__)
 
 
 # Robots
@@ -152,6 +155,7 @@ def get_available_teams_for_robot(db: DatabaseConnector, robot_id: int) -> List[
         AND EquipoId NOT IN (
             SELECT EquipoId FROM dbo.Asignaciones WHERE RobotId = ?
         )
+        ORDER BY Equipo
     """
     return db.ejecutar_consulta(query, (robot_id,), es_select=True)
 
@@ -398,16 +402,27 @@ async def sync_with_a360(db: DatabaseConnector) -> Dict:
                 device["Licencia"] = users_by_id[user_id].get("Licencia")
             equipos_procesados.append(device)
 
+        # La API de A360 puede devolver duplicados. Los eliminamos antes de enviar a la BD.
+        equipos_unicos = {}
+        for equipo in equipos_procesados:
+            equipo_id = equipo.get("EquipoId")
+            if equipo_id:
+                if equipo_id in equipos_unicos:
+                    logger.warning(f"Se encontró un EquipoId duplicado de la API de A360 y se ha eliminado: ID = {equipo_id}")
+                equipos_unicos[equipo_id] = equipo
+
+        equipos_finales = list(equipos_unicos.values())
+
         # --- BLOQUE 3: Actualización de la Base de Datos ---
-        print(f"Paso 4: Actualizando la base de datos con {len(robots_list)} robots y {len(equipos_procesados)} equipos...")
-        db.merge_equipos(equipos_procesados)
+        print(f"Paso 4: Actualizando la base de datos con {len(robots_list)} robots y {len(equipos_finales)} equipos...")
+        db.merge_equipos(equipos_finales)
         db.merge_robots(robots_list)
 
         print("Paso 5: Sincronización completada exitosamente.")
 
         return {
             "robots_sincronizados": len(robots_list),
-            "equipos_sincronizados": len(equipos_procesados),
+            "equipos_sincronizados": len(equipos_finales),
         }
 
     except Exception as e:

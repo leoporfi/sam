@@ -176,6 +176,7 @@ class ConfigManager:
             "intervalo_ciclo_balanceo_seg": int(os.getenv("BALANCEADOR_INTERVALO_CICLO_SEG", "120")),
             "default_tickets_por_equipo": int(os.getenv("BALANCEADOR_DEFAULT_TICKETS_POR_EQUIPO", "10")),
             "cooling_period_seg": int(os.getenv("BALANCEADOR_COOLING_PERIOD_SEG", "300")),  # Nuevo parámetro
+            "aislamiento_estricto_pool": os.getenv("BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", "True").lower() == "true",
             "mapa_robots": json.loads(os.getenv("MAPA_ROBOTS", "{}")),
         }
 
