@@ -164,6 +164,7 @@ class ConfigManager:
             "port": int(os.getenv("CALLBACK_SERVER_PORT", 8008)),
             "threads": int(os.getenv("CALLBACK_SERVER_THREADS", 8)),
             "callback_token": os.getenv("CALLBACK_TOKEN", ""),
+            "auth_mode": os.getenv("CALLBACK_AUTH_MODE", "strict").lower(),
             "public_host": os.getenv("CALLBACK_SERVER_PUBLIC_HOST", os.getenv("CALLBACK_SERVER_HOST", "localhost")),
             "endpoint_path": os.getenv("CALLBACK_ENDPOINT_PATH", "/api/callback").strip("/"),
         }
