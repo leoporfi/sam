@@ -112,9 +112,35 @@ def get_db() -> DatabaseConnector:
     return db_connector
 
 
-async def verify_token(token: str = Security(api_key_header_scheme)):
+async def verify_token(x_authorization: Optional[str] = Header(None, alias="X-Authorization")):
     """
     Dependencia de seguridad para validar el token de autorización.
+    Respeta el CALLBACK_AUTH_MODE ('strict' u 'optional').
+    """
+    auth_mode = cb_config.get("auth_mode", "strict")
+
+    # En modo opcional, si no se provee el header, se permite el acceso.
+    if auth_mode == "optional" and x_authorization is None:
+        logger.debug("Acceso permitido sin token en modo 'optional'.")
+        return
+
+    # Si estamos en modo 'strict' o si el token fue provisto en modo 'optional',
+    # se debe realizar la validación.
+    auth_token = cb_config.get("callback_token")
+
+    if not auth_token:
+        logger.error("Error de configuración del servidor: No se ha definido un CALLBACK_TOKEN para validar.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Servidor no configurado para validar tokens.")
+
+    if not x_authorization or not hmac.compare_digest(auth_token, x_authorization):
+        logger.warning(f"Intento de acceso no autorizado. Token recibido: '{str(x_authorization)[:10]}...'")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de autorización inválido o ausente.")
+
+
+async def verify_token_old(token: str = Security(api_key_header_scheme)):
+    """
+    Dependencia de seguridad para validar el token de autorización.
+    Respeta el CALLBACK_AUTH_MODE ('strict' u 'optional').
     """
     auth_token = cb_config.get("callback_token")
     # En el swagger la seguridad es obligatoria, por lo que imitamos el modo 'strict'.
