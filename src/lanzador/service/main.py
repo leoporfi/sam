@@ -29,11 +29,13 @@ class LanzadorService:
         self._tasks: List[asyncio.Task] = []
 
         # --- Obtener configuración y crear clientes ---
-        lanzador_cfg = ConfigManager.get_lanzador_config()
         db_cfg = ConfigManager.get_sql_server_config("SQL_SAM")
         aa_cfg = ConfigManager.get_aa_config()
         # Obtener la nueva configuración del API Gateway
         gateway_cfg = ConfigManager.get_api_gateway_config()
+        # Obtener configuración del servidor de callbacks
+        callback_server_cfg = ConfigManager.get_callback_server_config()
+        self.static_callback_token = callback_server_cfg.get("callback_token")
 
         self.db_connector = DatabaseConnector(
             servidor=db_cfg["server"], base_datos=db_cfg["database"], usuario=db_cfg["uid"], contrasena=db_cfg["pwd"]
@@ -99,21 +101,29 @@ class LanzadorService:
                 robots_a_ejecutar = self.db_connector.obtener_robots_ejecutables()
 
                 if robots_a_ejecutar:
-                    auth_headers = {}
+                    # Preparar ambas cabeceras de autorización
+                    combined_headers = {}
                     try:
-                        logger.info("LAUNCHER: Obteniendo token de autorización para callbacks...")
-                        auth_headers = await self.api_gateway_client.get_auth_header()
-                        if not auth_headers:
-                            logger.warning("LAUNCHER: No se pudo obtener token. Callbacks podrían no funcionar.")
+                        logger.info("LAUNCHER: Obteniendo token dinámico del API Gateway...")
+                        gateway_headers = await self.api_gateway_client.get_auth_header()
+                        if gateway_headers:
+                            combined_headers.update(gateway_headers)
+                        else:
+                            logger.warning("LAUNCHER: No se pudo obtener token del API Gateway.")
                     except Exception as token_error:
-                        logger.error(f"LAUNCHER: Excepción al obtener token: {token_error}. Se continuará sin cabecera.", exc_info=True)
+                        logger.error(f"LAUNCHER: Excepción al obtener token del API Gateway: {token_error}.", exc_info=True)
+                    if self.static_callback_token:
+                        logger.info("LAUNCHER: Añadiendo token estático (X-Authorization).")
+                        combined_headers["X-Authorization"] = self.static_callback_token
+                    else:
+                        logger.warning("LAUNCHER: El token estático (CALLBACK_TOKEN) no está configurado.")
 
                     logger.info(f"LAUNCHER: {len(robots_a_ejecutar)} robots encontrados. Desplegando en paralelo (límite: {concurrency_limit})...")
 
                     # Crear una lista de tareas de despliegue
                     tasks = []
                     for robot_info in robots_a_ejecutar:
-                        task = asyncio.create_task(self._deploy_and_register_robot(robot_info, bot_input, auth_headers))
+                        task = asyncio.create_task(self._deploy_and_register_robot(robot_info, bot_input, combined_headers))
                         tasks.append(task)
 
                     # Ejecutar tareas en lotes para respetar el límite de concurrencia
@@ -139,57 +149,30 @@ class LanzadorService:
             except asyncio.TimeoutError:
                 pass
 
-    async def _run_launcher_cycle(self, interval: int):
-        """Ciclo asíncrono para el lanzamiento de robots."""
-        lanzador_cfg = ConfigManager.get_lanzador_config()
-        bot_input = {"in_NumRepeticion": {"type": "NUMBER", "number": lanzador_cfg.get("repeticiones", 1)}}
-
+    async def _run_sync_cycle(self, interval: int):
+        """Ciclo asíncrono para la sincronización de tablas maestras."""
         while not self._shutdown_event.is_set():
             try:
-                logger.info("LAUNCHER: Buscando robots para ejecutar...")
-                robots_a_ejecutar = self.db_connector.obtener_robots_ejecutables()
-                if robots_a_ejecutar:
-                    auth_headers = {}  # Inicializar como diccionario vacío por defecto
-                    try:
-                        logger.info("LAUNCHER: Obteniendo token de autorización para callbacks...")
-                        auth_headers = await self.api_gateway_client.get_auth_header()
-                        if not auth_headers:
-                            # Si get_auth_header devuelve un diccionario vacío, significa que falló la obtención
-                            logger.warning("LAUNCHER: No se pudo obtener el token del API Gateway. Los robots se lanzarán sin cabecera de callback.")
-                    except Exception as token_error:
-                        logger.error(
-                            f"LAUNCHER: Excepción al obtener token del API Gateway: {token_error}. Se continuará sin cabecera de callback.",
-                            exc_info=True,
-                        )
+                logger.info("SYNC: Iniciando ciclo de sincronización...")
+                robots_task = self.aa_client.obtener_robots()
+                devices_task = self.aa_client.obtener_devices()
+                users_task = self.aa_client.obtener_usuarios_detallados()
+                robots, devices, users = await asyncio.gather(robots_task, devices_task, users_task)
 
-                    logger.info(f"LAUNCHER: {len(robots_a_ejecutar)} robots encontrados. Desplegando...")
-                    for robot in robots_a_ejecutar:
-                        try:
-                            # 2. Pasar las cabeceras al método de despliegue.
-                            deployment_result = await self.aa_client.desplegar_bot(
-                                robot["RobotId"],
-                                [robot["UserId"]],
-                                bot_input=bot_input,
-                                callback_auth_headers=auth_headers,  # <-- Pasamos el token (o un dict vacío si falló)
-                            )
-                            if deployment_result and "deploymentId" in deployment_result:
-                                self.db_connector.insertar_registro_ejecucion(
-                                    id_despliegue=deployment_result["deploymentId"],
-                                    db_robot_id=robot["RobotId"],
-                                    db_equipo_id=robot.get("EquipoId"),
-                                    a360_user_id=robot["UserId"],
-                                    marca_tiempo_programada=robot.get("Hora"),
-                                    estado="DEPLOYED",
-                                )
-                                logger.info(f"LAUNCHER: Robot {robot['RobotId']} desplegado con ID: {deployment_result['deploymentId']}")
-                            else:
-                                logger.error(f"LAUNCHER: Fallo al obtener deploymentId para robot {robot['RobotId']}")
-                        except Exception as robot_error:
-                            logger.error(f"LAUNCHER: Error al desplegar robot {robot['RobotId']}: {robot_error}", exc_info=True)
-                else:
-                    logger.info("LAUNCHER: No hay robots para ejecutar en este ciclo.")
+                users_by_id = {user["UserId"]: user for user in users if isinstance(user, dict) and user.get("UserId")}
+                devices_procesados = []
+                for device in devices:
+                    if isinstance(device, dict):
+                        user_id = device.get("UserId")
+                        if user_id in users_by_id:
+                            device["Licencia"] = users_by_id[user_id].get("Licencia")
+                        devices_procesados.append(device)
+
+                self.db_connector.merge_robots(robots)
+                self.db_connector.merge_equipos(devices_procesados)
+                logger.info(f"SYNC: Ciclo completado. {len(robots)} robots y {len(devices_procesados)} equipos sincronizados.")
             except Exception as e:
-                logger.error(f"LAUNCHER: Error en el ciclo: {e}", exc_info=True)
+                logger.error(f"SYNC: Error en el ciclo: {e}", exc_info=True)
             try:
                 await asyncio.wait_for(self._shutdown_event.wait(), timeout=interval)
             except asyncio.TimeoutError:
