@@ -1,4 +1,5 @@
-# SAM/src/balanceador/service/main.py ()
+# SAM/src/balanceador/service/main.py
+
 import logging
 import math
 import threading
@@ -50,10 +51,7 @@ class BalanceadorService:
         )
 
         self.clouders_client = CloudersClient()
-
         self.notificador = EmailAlertClient(service_name="Balanceador")
-
-        # --- Componentes del Servicio ---
         self.balanceo = Balanceo(self)
         self.executor = ThreadPoolExecutor(max_workers=4)
 
@@ -66,10 +64,7 @@ class BalanceadorService:
         """Inicia el ciclo principal del servicio."""
         intervalo = self.cfg_balanceador_specifics.get("intervalo_ciclo_balanceo_seg", 60)
         schedule.every(intervalo).seconds.do(self._execute_cycle)
-
         logger.info(f"Ciclo de balanceo programado cada {intervalo} segundos. El servicio está activo.")
-
-        # Ejecutar un ciclo inmediatamente al arrancar
         self._execute_cycle()
 
         while not self._shutdown_event.is_set():
@@ -84,7 +79,6 @@ class BalanceadorService:
         self._is_shutting_down = True
         self._shutdown_event.set()
 
-    # --- MÉTODO AÑADIDO ---
     def obtener_pools_activos(self) -> List[Dict[str, Any]]:
         """Obtiene todos los pools activos de la base de datos."""
         try:
@@ -106,27 +100,25 @@ class BalanceadorService:
         try:
             # Etapa 0: Obtener la fotografía completa del estado del sistema UNA SOLA VEZ
             estado_global = self.balanceo._obtener_estado_inicial_global()
-            if self._shutdown_event.is_set():
-                return
+            if self._shutdown_event.is_set(): return
 
             # Etapa 1: Limpieza Global (ahora pasamos el estado)
             mapa_config_robots = self.balanceo.ejecutar_limpieza_global(estado_global)
-            if self._shutdown_event.is_set():
-                return
+            if self._shutdown_event.is_set(): return
 
             # Etapa 2: Balanceo Interno de cada Pool
             pools_activos = self.obtener_pools_activos()
 
             # Procesar cada pool específico
             for pool in pools_activos:
-                self.balanceo.ejecutar_balanceo_interno_de_pool(pool["PoolId"], estado_global)
-                if self._shutdown_event.is_set():
-                    return
+                # CORRECCIÓN: Se pasa el mapa global de robots para mantener la consistencia
+                self.balanceo.ejecutar_balanceo_interno_de_pool(pool["PoolId"], estado_global, mapa_config_robots)
+                if self._shutdown_event.is_set(): return
 
             # Procesar el Pool General (PoolId = None)
-            self.balanceo.ejecutar_balanceo_interno_de_pool(None, estado_global)
-            if self._shutdown_event.is_set():
-                return
+            # CORRECCIÓN: Se pasa el mapa global de robots también aquí
+            self.balanceo.ejecutar_balanceo_interno_de_pool(None, estado_global, mapa_config_robots)
+            if self._shutdown_event.is_set(): return
 
             # Etapa 3: Desborde y Demanda Adicional Global
             self.balanceo.ejecutar_fase_de_desborde_global(estado_global, mapa_config_robots)
@@ -147,10 +139,8 @@ class BalanceadorService:
 
         if self.executor:
             self.executor.shutdown(wait=True)
-
         if self.db_sam:
             self.db_sam.cerrar_conexion()
-
         if self.db_rpa360:
             self.db_rpa360.cerrar_conexion()
 
