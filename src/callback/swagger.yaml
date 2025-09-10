@@ -4,7 +4,7 @@ info:
   version: "2.3.0"
   description: |
     API para recibir callbacks desde Control Room a través del API Gateway.
-    **Requiere obligatoriamente un token de autorización en el header `X-Authorization`.**
+    **Requiere obligatoriamente una Clave de API (API Key) en el header `X-Authorization`.**
 servers:
   - url: "http://10.167.181.41:8008"
     description: Servidor de Producción
@@ -42,7 +42,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: "Autenticación Fallida. El token en 'X-Authorization' es inválido o no fue proporcionado."
+          description: "Autenticación Fallida. La Clave de API en 'X-Authorization' es inválida o no fue proporcionada."
           content:
             application/json:
               schema:
@@ -109,11 +109,11 @@ components:
           example: "ERROR"
         message:
           type: string
-          example: "Token de autorización inválido."
+          example: "Clave de API inválida."
 
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
       in: header
       name: X-Authorization
-      description: "Token de seguridad para validar que la llamada es legítima."
+      description: "Clave de API (API Key) para validar que la llamada es legítima."
