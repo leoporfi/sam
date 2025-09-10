@@ -1,4 +1,4 @@
-# SAM/src/callback/service/main.py
+# src/callback/service/main.py
 import hmac
 import logging
 from typing import Any, Dict, Optional
