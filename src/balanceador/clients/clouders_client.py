@@ -1,3 +1,4 @@
+# src\balanceador\clients\clouders_client.py
 import logging
 from typing import Any, Dict, List
 
@@ -25,8 +26,8 @@ class CloudersClient:
 
         self.base_url = config.get("clouders_api_url")
         self.auth_header = config.get("clouders_auth")
-        self.timeout = config.get("api_timeout", 30)
-        self.verify_ssl = config.get("verify_ssl", False)
+        self.timeout = config.get("clouders_api_timeout", 30)
+        self.verify_ssl = config.get("clouders_verify_ssl", False)
         self.mapa_robots = ConfigManager.get_mapa_robots()
 
         if not self.base_url or not self.auth_header:
