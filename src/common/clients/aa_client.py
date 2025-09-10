@@ -15,6 +15,7 @@ class AutomationAnywhereClient:
     _ENDPOINT_AUTH_V2 = "/v2/authentication"
     _ENDPOINT_ACTIVITY_LIST_V3 = "/v3/activity/list"
     _ENDPOINT_AUTOMATIONS_DEPLOY_V3 = "/v3/automations/deploy"
+    _ENDPOINT_AUTOMATIONS_DEPLOY_V4 = "/v4/automations/deploy"
     _ENDPOINT_USERS_LIST_V2 = "/v2/usermanagement/users/list"
     _ENDPOINT_DEVICES_LIST_V2 = "/v2/devices/list"
     _ENDPOINT_FILES_LIST_V2 = "/v2/repository/workspaces/public/files/list"
@@ -230,15 +231,15 @@ class AutomationAnywhereClient:
         logger.info(f"Se obtuvieron detalles para {len(all_details)} de {len(deployment_ids)} deployments solicitados.")
         return all_details
 
-    async def desplegar_bot(
+    async def desplegar_bot_v3(
         self, file_id: int, user_ids: List[int], bot_input: Optional[Dict] = None, callback_auth_headers: Optional[Dict[str, str]] = None
     ) -> Dict:
-        logger.info(f"Desplegando bot con FileID: {file_id} en UserIDs: {user_ids}")
-        payload = {"fileId": file_id, "runAsUserIds": user_ids}
+        logger.info(f"Desplegando bot v3 con FileID: {file_id} en UserIDs: {user_ids}")
+        payload = dict(fileId=file_id, runAsUserIds=user_ids)
         if bot_input:
             payload["botInput"] = bot_input
         if self.callback_url_deploy:
-            payload["callbackInfo"] = {"url": self.callback_url_deploy}
+            payload["callbackInfo"] = dict(url=self.callback_url_deploy)
             logger.debug(f"Callback URL de despliegue configurada: {self.callback_url_deploy}")
         # Si se proporcionan cabeceras de autorización, las añadimos
         if callback_auth_headers:
@@ -248,6 +249,39 @@ class AutomationAnywhereClient:
         try:
             logger.debug(f"Payload de despliegue: {payload}")
             response = await self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V3, json=payload)
+            logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
+            return response
+        except Exception as e:
+            logger.error(f"Fallo en el despliegue del bot {file_id}: {e}", exc_info=True)
+            return {"error": str(e)}
+
+    async def close(self):
+        """Cierra la sesión del cliente httpx de forma segura."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            logger.info("Cliente API de A360 cerrado.")
+
+    async def desplegar_bot_v4(
+        self, file_id: int, user_ids: List[int], bot_input: Optional[Dict] = None, callback_auth_headers: Optional[Dict[str, str]] = None
+    ) -> Dict:
+        logger.info(f"Desplegando bot v4 con FileID: {file_id} en UserIDs: {user_ids}")
+
+        unattendedRequest = dict(runAsUserIds=user_ids, deviceUsageType="RUN_ONLY_ON_DEFAULT_DEVICE")
+        payload = dict(botId=file_id, unattendedRequest=unattendedRequest)
+
+        if bot_input:
+            payload["botInput"] = bot_input
+        if self.callback_url_deploy:
+            payload["callbackInfo"] = dict(url=self.callback_url_deploy)
+            logger.debug(f"Callback URL de despliegue configurada: {self.callback_url_deploy}")
+        # Si se proporcionan cabeceras de autorización, las añadimos
+        if callback_auth_headers:
+            payload["callbackInfo"]["headers"] = callback_auth_headers
+            logger.debug("Cabeceras de autorización añadidas al callback.")
+
+        try:
+            logger.debug(f"Payload de despliegue: {payload}")
+            response = await self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V4, json=payload)
             logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
             return response
         except Exception as e:

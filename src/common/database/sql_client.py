@@ -1,4 +1,4 @@
-# SAM/src/common/database/sql_client.py (Normalizado)
+# SAM/src/common/database/sql_client.py
 
 import logging
 import threading
@@ -227,7 +227,7 @@ class DatabaseConnector:
     def obtener_ejecuciones_en_curso(self) -> List[Dict[str, Any]]:
         try:
             query = (
-                "SELECT DeploymentId, RobotId, EquipoId, UserId FROM dbo.Ejecuciones "
+                "SELECT DeploymentId, RobotId, EquipoId, UserId, IntentosConciliadorFallidos FROM dbo.Ejecuciones "
                 "WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'RUN_ABORTED', 'DEPLOY_FAILED', 'UNKNOWN') "
                 "AND DATEDIFF(SECOND, FechaInicio, GETDATE()) > 30;"
             )
@@ -298,7 +298,7 @@ class DatabaseConnector:
             a360_deployment_id = None
             error_lanzamiento = None
             try:
-                resultado_despliegue = aa_client.desplegar_bot(file_id=db_robot_id, run_as_user_ids=[a360_user_id], bot_input=botInput_plantilla)
+                resultado_despliegue = aa_client.desplegar_bot_v3(file_id=db_robot_id, run_as_user_ids=[a360_user_id], bot_input=botInput_plantilla)
                 a360_deployment_id = resultado_despliegue.get("deploymentId")  # Asumiendo que desplegar_bot devuelve dict
                 error_lanzamiento = resultado_despliegue.get("error")
 
