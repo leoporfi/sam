@@ -1,13 +1,14 @@
 # src/lanzador/service/conciliador.py
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional
 
 import pytz
 from dateutil import parser as dateutil_parser
 
 from src.common.clients.aa_client import AutomationAnywhereClient
 from src.common.database.sql_client import DatabaseConnector
+from src.common.utils.config_manager import ConfigManager
 
 # --- OBTENER EL LOGGER ---
 # Simplemente obtenemos el logger. La configuración ya fue realizada
@@ -19,6 +20,8 @@ class ConciliadorImplementaciones:
     def __init__(self, db_connector: DatabaseConnector, aa_client: AutomationAnywhereClient):
         self.db_connector = db_connector
         self.aa_client = aa_client
+        lanzador_cfg = ConfigManager.get_lanzador_config()
+        self.max_intentos_fallidos = lanzador_cfg.get("conciliador_max_intentos_fallidos", 3)
         # Estados válidos que la API de A360 podría devolver para el conciliador.
         self.ESTADOS_VALIDOS_API_PARA_CONCILIACION = {
             "COMPLETED",
@@ -70,7 +73,7 @@ class ConciliadorImplementaciones:
             if detalles_api:
                 self._actualizar_estados_encontrados_db(detalles_api)
 
-            self._actualizar_estados_perdidos_db(deployment_ids, detalles_api)
+            self._gestionar_deployments_perdidos(deployment_ids, detalles_api)
             logger.info("Conciliador: Proceso de conciliación completado.")
 
         except Exception as e:
@@ -124,6 +127,7 @@ class ConciliadorImplementaciones:
             except Exception as e_db_update:
                 logger.error(f"Conciliador: Error de BD al actualizar estados encontrados con fechas locales: {e_db_update}", exc_info=True)
 
+    # SIN USO - REEPLAZADO POR _gestionar_deployments_perdidos
     def _actualizar_estados_perdidos_db(self, deployment_ids_en_db: list, detalles_api: list):
         """Marca como UNKNOWN los deployments que estaban en BD pero no se encontraron en la API."""
         if not deployment_ids_en_db:
@@ -156,3 +160,44 @@ class ConciliadorImplementaciones:
                     logger.info(f"Conciliador: Marcados {affected_count} deployments perdidos como UNKNOWN.")
             except Exception as e:
                 logger.error(f"Conciliador: Error de BD al actualizar estados perdidos: {e}", exc_info=True)
+
+    def _gestionar_deployments_perdidos(self, deployment_ids_en_db: list, detalles_api: list):
+        """
+        Incrementa el contador para deployments no encontrados y los marca como UNKNOWN
+        si superan el umbral de reintentos.
+        """
+        if not deployment_ids_en_db:
+            return
+
+        ids_encontrados_api = {item.get("deploymentId") for item in detalles_api if item.get("deploymentId")}
+        ids_perdidos = [dep_id for dep_id in deployment_ids_en_db if dep_id not in ids_encontrados_api]
+
+        if not ids_perdidos:
+            return
+
+        try:
+            # 1. Incrementar el contador para todos los deployments perdidos en este ciclo
+            placeholders = ",".join("?" for _ in ids_perdidos)
+            query_increment = f"UPDATE dbo.Ejecuciones SET IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1, FechaActualizacion = GETDATE() WHERE DeploymentId IN ({placeholders})"
+            count_incrementados = self.db_connector.ejecutar_consulta(query_increment, tuple(ids_perdidos), es_select=False)
+            logger.info(f"Conciliador: Incrementado contador de intentos para {count_incrementados} deployment(s) no encontrados.")
+
+            # 2. Marcar como UNKNOWN aquellos que han superado el umbral
+            query_unknown = (
+                "UPDATE dbo.Ejecuciones SET "
+                "Estado = 'UNKNOWN', "
+                "FechaFin = GETDATE(), "
+                "FechaActualizacion = GETDATE() "
+                f"WHERE DeploymentId IN ({placeholders}) AND IntentosConciliadorFallidos >= ?;"
+            )
+
+            params_unknown = tuple(ids_perdidos) + (self.max_intentos_fallidos,)
+            count_unknown = self.db_connector.ejecutar_consulta(query_unknown, params_unknown, es_select=False)
+
+            if count_unknown > 0:
+                logger.warning(
+                    f"Conciliador: Marcados {count_unknown} deployment(s) como UNKNOWN tras superar los {self.max_intentos_fallidos} intentos."
+                )
+
+        except Exception as e:
+            logger.error(f"Conciliador: Error de BD al gestionar deployments perdidos: {e}", exc_info=True)

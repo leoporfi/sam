@@ -1,9 +1,11 @@
-# src/lanzador/service/main.py (Corregido)
+# src/lanzador/service/main.py
 import asyncio
 import logging
+from datetime import datetime, time
 from typing import Dict, List, Tuple
 
 import httpx
+import pytz
 
 from src.common.clients.aa_client import AutomationAnywhereClient
 from src.common.clients.api_gateway_client import ApiGatewayClient
@@ -35,17 +37,58 @@ class LanzadorService:
         gateway_cfg = ConfigManager.get_api_gateway_config()
         # Obtener configuración del servidor de callbacks
         callback_server_cfg = ConfigManager.get_callback_server_config()
-        self.static_callback_token = callback_server_cfg.get("callback_token")
+        self.static_callback_api_key = callback_server_cfg.get("callback_api_key")
 
         self.db_connector = DatabaseConnector(
             servidor=db_cfg["server"], base_datos=db_cfg["database"], usuario=db_cfg["uid"], contrasena=db_cfg["pwd"]
         )
+
         self.aa_client = AutomationAnywhereClient(
-            control_room_url=aa_cfg["url"], username=aa_cfg["user"], password=aa_cfg["pwd"], callback_url_deploy=aa_cfg.get("url_callback")
+            control_room_url=aa_cfg["url"],
+            username=aa_cfg["user"],
+            password=aa_cfg["pwd"],
+            callback_url_deploy=aa_cfg.get("url_callback"),
+            api_timeout_seconds=aa_cfg.get("api_timeout_seconds"),
         )
+
         self.api_gateway_client = ApiGatewayClient(gateway_cfg)
         self.conciliador = ConciliadorImplementaciones(self.db_connector, self.aa_client)
         logger.info("Componentes del servicio inicializados correctamente.")
+
+    # --- Lógica de Pausa ---
+    def _is_in_pause_window(self, config: Dict) -> bool:
+        """
+        Verifica si la hora actual se encuentra dentro de la ventana de pausa definida en la configuración.
+        Maneja correctamente los intervalos que cruzan la medianoche (ej: 23:00 a 05:00).
+        """
+        start_str = config.get("pausa_lanzamiento_inicio_hhmm")
+        end_str = config.get("pausa_lanzamiento_fin_hhmm")
+
+        if not start_str or not end_str:
+            return False
+
+        try:
+            start_time = datetime.strptime(start_str, "%H:%M").time()
+            end_time = datetime.strptime(end_str, "%H:%M").time()
+
+            # Usar la misma zona horaria que el conciliador para consistencia
+            tz = pytz.timezone("America/Argentina/Buenos_Aires")
+            current_time = datetime.now(tz).time()
+
+            # Lógica para manejar pausas que cruzan la medianoche
+            if start_time > end_time:
+                # Pausa va desde la noche hasta la mañana del día siguiente
+                if current_time >= start_time or current_time < end_time:
+                    return True
+            else:
+                # Pausa ocurre en el mismo día
+                if start_time <= current_time < end_time:
+                    return True
+
+            return False
+        except (ValueError, pytz.exceptions.UnknownTimeZoneError) as e:
+            logger.error(f"Error al procesar la ventana de pausa. Verifique el formato HH:MM y la zona horaria. Error: {e}")
+            return False
 
     def run(self):
         """Punto de entrada para ejecutar el servicio."""
@@ -91,12 +134,22 @@ class LanzadorService:
 
     async def _run_launcher_cycle(self, interval: int):
         """Ciclo asíncrono para el lanzamiento de robots de forma concurrente."""
-        lanzador_cfg = ConfigManager.get_lanzador_config()
-        bot_input = {"in_NumRepeticion": {"type": "NUMBER", "number": lanzador_cfg.get("repeticiones", 1)}}
-        concurrency_limit = lanzador_cfg.get("max_lanzamientos_concurrentes", 10)
-
         while not self._shutdown_event.is_set():
             try:
+                lanzador_cfg = ConfigManager.get_lanzador_config()
+
+                # --- Verificación de Pausa ---
+                if self._is_in_pause_window(lanzador_cfg):
+                    logger.info("LAUNCHER: El servicio se encuentra en la ventana de pausa operacional. No se lanzarán robots.")
+                    # Espera el intervalo y salta al siguiente ciclo
+                    try:
+                        await asyncio.wait_for(self._shutdown_event.wait(), timeout=interval)
+                    except asyncio.TimeoutError:
+                        continue  # Salta el resto del código del ciclo
+
+                bot_input = {"in_NumRepeticion": {"type": "NUMBER", "number": lanzador_cfg.get("repeticiones", 1)}}
+                concurrency_limit = lanzador_cfg.get("max_lanzamientos_concurrentes", 10)
+
                 logger.info("LAUNCHER: Buscando robots para ejecutar...")
                 robots_a_ejecutar = self.db_connector.obtener_robots_ejecutables()
 
@@ -112,11 +165,12 @@ class LanzadorService:
                             logger.warning("LAUNCHER: No se pudo obtener token del API Gateway.")
                     except Exception as token_error:
                         logger.error(f"LAUNCHER: Excepción al obtener token del API Gateway: {token_error}.", exc_info=True)
-                    if self.static_callback_token:
-                        logger.info("LAUNCHER: Añadiendo token estático (X-Authorization).")
-                        combined_headers["X-Authorization"] = self.static_callback_token
+
+                    if self.static_callback_api_key:
+                        logger.info("LAUNCHER: Añadiendo ApiKey (X-Authorization).")
+                        combined_headers["X-Authorization"] = self.static_callback_api_key
                     else:
-                        logger.warning("LAUNCHER: El token estático (CALLBACK_TOKEN) no está configurado.")
+                        logger.warning("LAUNCHER: El apikey (CALLBACK_API_KEY) no está configurado.")
 
                     logger.info(f"LAUNCHER: {len(robots_a_ejecutar)} robots encontrados. Desplegando en paralelo (límite: {concurrency_limit})...")
 
@@ -132,15 +186,12 @@ class LanzadorService:
                     for i in range(0, len(tasks), concurrency_limit):
                         batch = tasks[i : i + concurrency_limit]
                         results = await asyncio.gather(*batch)
-
                         successful_deploys += sum(1 for _, success in results if success)
                         failed_deploys += sum(1 for _, success in results if not success)
 
                     logger.info(f"LAUNCHER: Ciclo de despliegue completado. Exitosos: {successful_deploys}, Fallidos: {failed_deploys}.")
-
                 else:
                     logger.info("LAUNCHER: No hay robots para ejecutar en este ciclo.")
-
             except Exception as e:
                 logger.error(f"LAUNCHER: Error fatal en el ciclo de lanzamiento: {e}", exc_info=True)
 
@@ -204,7 +255,7 @@ class LanzadorService:
 
         for attempt in range(1, max_attempts + 1):
             try:
-                deployment_result = await self.aa_client.desplegar_bot(
+                deployment_result = await self.aa_client.desplegar_bot_v4(
                     file_id=robot_id, user_ids=[robot_info["UserId"]], bot_input=bot_input, callback_auth_headers=auth_headers
                 )
 
