@@ -19,7 +19,7 @@ cb_config = ConfigManager.get_callback_server_config()
 sql_config = ConfigManager.get_sql_server_config("SQL_SAM")
 
 # --- Definición de Seguridad  ---
-api_key_header_scheme = APIKeyHeader(name="X-Authorization", auto_error=False)
+api_key_scheme = APIKeyHeader(name="X-Authorization", auto_error=False, description="Clave de API para la autenticación del callback.")
 
 
 # --- Modelos de Datos (Pydantic) ---
@@ -51,7 +51,7 @@ app = FastAPI(
     version="2.3.0",
     description="""
 API para recibir callbacks desde Control Room a través del API Gateway.
-**Requiere obligatoriamente un token de autorización en el header `X-Authorization`.**
+**Requiere obligatoriamente una Clave de API en el header `X-Authorization`.**
     """,
     servers=[
         {"url": "http://10.167.181.41:8008", "description": "Servidor de Producción"},
@@ -112,45 +112,29 @@ def get_db() -> DatabaseConnector:
     return db_connector
 
 
-async def verify_token(x_authorization: Optional[str] = Header(None, alias="X-Authorization")):
+async def verify_api_key(x_authorization: Optional[str] = Header(None, alias="X-Authorization")):
     """
-    Dependencia de seguridad para validar el token de autorización.
+    Dependencia de seguridad para validar la Clave de API (API Key).
     Respeta el CALLBACK_AUTH_MODE ('strict' u 'optional').
     """
     auth_mode = cb_config.get("auth_mode", "strict")
 
     # En modo opcional, si no se provee el header, se permite el acceso.
     if auth_mode == "optional" and x_authorization is None:
-        logger.debug("Acceso permitido sin token en modo 'optional'.")
+        logger.debug("Acceso permitido sin API Key en modo 'optional'.")
         return
 
-    # Si estamos en modo 'strict' o si el token fue provisto en modo 'optional',
+    # Si estamos en modo 'strict' o si la API Key fue provista en modo 'optional',
     # se debe realizar la validación.
-    auth_token = cb_config.get("callback_token")
+    server_api_key = cb_config.get("callback_api_key")
 
-    if not auth_token:
-        logger.error("Error de configuración del servidor: No se ha definido un CALLBACK_TOKEN para validar.")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Servidor no configurado para validar tokens.")
+    if not server_api_key:
+        logger.error("Error de configuración del servidor: No se ha definido un CALLBACK_API_KEY para validar.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Servidor no configurado para validar claves de API.")
 
-    if not x_authorization or not hmac.compare_digest(auth_token, x_authorization):
-        logger.warning(f"Intento de acceso no autorizado. Token recibido: '{str(x_authorization)[:10]}...'")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de autorización inválido o ausente.")
-
-
-async def verify_token_old(token: str = Security(api_key_header_scheme)):
-    """
-    Dependencia de seguridad para validar el token de autorización.
-    Respeta el CALLBACK_AUTH_MODE ('strict' u 'optional').
-    """
-    auth_token = cb_config.get("callback_token")
-    # En el swagger la seguridad es obligatoria, por lo que imitamos el modo 'strict'.
-    if not auth_token:
-        logger.error("Error de configuración del servidor: No se ha definido un CALLBACK_TOKEN.")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Servidor no configurado para validar tokens.")
-
-    if not token or not hmac.compare_digest(auth_token, token):
-        logger.warning(f"Intento de acceso no autorizado. Token recibido: '{str(token)[:10]}...'")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de autorización inválido o ausente.")
+    if not x_authorization or not hmac.compare_digest(server_api_key, x_authorization):
+        logger.warning(f"Intento de acceso no autorizado. API Key recibida: '{str(x_authorization)[:10]}...'")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Clave de API inválida o ausente.")
 
 
 # --- Endpoints de la API ---
@@ -167,10 +151,13 @@ if not endpoint_path.startswith("/"):
     responses={
         200: {"description": "Callback procesado correctamente.", "model": SuccessResponse},
         400: {"description": "Petición inválida (JSON malformado o faltan campos requeridos).", "model": ErrorResponse},
-        401: {"description": "Autenticación Fallida. El token en 'X-Authorization' es inválido o no fue proporcionado.", "model": ErrorResponse},
+        401: {
+            "description": "Autenticación Fallida. La Clave de API en 'X-Authorization' es inválida o no fue proporcionada.",
+            "model": ErrorResponse,
+        },
         500: {"description": "Error interno del servidor.", "model": ErrorResponse},
     },
-    dependencies=[Depends(verify_token)],
+    dependencies=[Depends(verify_api_key)],
 )
 async def handle_callback(payload: CallbackPayload, request: Request, db: DatabaseConnector = Depends(get_db)):
     """
@@ -179,7 +166,7 @@ async def handle_callback(payload: CallbackPayload, request: Request, db: Databa
     try:
         raw_payload = await request.body()
         payload_str = raw_payload.decode("utf-8")
-        logger.info(f"Procesando callback para DeploymentId: {payload.deployment_id} con estado: {payload.status}")
+        logger.info(f"Callback recibido para DeploymentId: {payload.deployment_id}. Body: {payload_str}")
 
         success = db.actualizar_ejecucion_desde_callback(
             deployment_id=payload.deployment_id, estado_callback=payload.status, callback_payload_str=payload_str
