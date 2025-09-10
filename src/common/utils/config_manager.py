@@ -6,6 +6,12 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
+def get_ip_local():
+    import socket
+
+    return socket.gethostbyname(socket.gethostname())
+
+
 class ConfigManager:
     """
     Gestor de Configuración Centralizado para el Proyecto SAM.
@@ -78,10 +84,9 @@ class ConfigManager:
     def get_aa_config() -> Dict[str, Any]:
         """Obtiene la configuración de Automation Anywhere."""
         # Construcción dinámica de URL de callback
-        callback_host = os.getenv("CALLBACK_SERVER_PUBLIC_HOST", os.getenv("CALLBACK_SERVER_HOST", "localhost"))
+        callback_host = os.getenv("CALLBACK_SERVER_PUBLIC_HOST", os.getenv("CALLBACK_SERVER_HOST", get_ip_local()))
         callback_port = int(os.getenv("CALLBACK_SERVER_PORT", 8008))
-        callback_path = os.getenv("CALLBACK_ENDPOINT_PATH", "/sam_callback").strip("/")
-
+        callback_path = os.getenv("CALLBACK_ENDPOINT_PATH", "/api/callback").strip("/")
         default_callback_url = f"http://{callback_host}:{callback_port}/{callback_path}".rstrip("/")
 
         config = {
@@ -92,8 +97,8 @@ class ConfigManager:
             "url_callback": os.getenv("AA_URL_CALLBACK", default_callback_url),
             "api_timeout_seconds": int(os.getenv("AA_API_TIMEOUT_SECONDS", 60)),
             "token_ttl_refresh_buffer_sec": int(os.getenv("AA_TOKEN_REFRESH_BUFFER_SEC", 1140)),
-            "api_default_page_size": int(os.getenv("API_DEFAULT_PAGE_SIZE", 100)),
-            "api_max_pagination_pages": int(os.getenv("API_MAX_PAGINATION_PAGES", 1000)),
+            "api_default_page_size": int(os.getenv("AA_DEFAULT_PAGE_SIZE", 100)),
+            "api_max_pagination_pages": int(os.getenv("AA_MAX_PAGINATION_PAGES", 1000)),
         }
 
         return config
@@ -154,6 +159,7 @@ class ConfigManager:
             "pausa_lanzamiento_inicio_hhmm": os.getenv("LANZADOR_PAUSA_INICIO_HHMM", "23:00"),
             "pausa_lanzamiento_fin_hhmm": os.getenv("LANZADOR_PAUSA_FIN_HHMM", "05:00"),
             "habilitar_sync": os.getenv("LANZADOR_HABILITAR_SYNC", "True").lower() == "true",
+            "conciliador_max_intentos_fallidos": int(os.getenv("CONCILIADOR_MAX_INTENTOS_FALLIDOS", 3)),
         }
 
     @staticmethod
@@ -163,7 +169,7 @@ class ConfigManager:
             "host": os.getenv("CALLBACK_SERVER_HOST", "0.0.0.0"),
             "port": int(os.getenv("CALLBACK_SERVER_PORT", 8008)),
             "threads": int(os.getenv("CALLBACK_SERVER_THREADS", 8)),
-            "callback_token": os.getenv("CALLBACK_TOKEN", ""),
+            "callback_api_key": os.getenv("CALLBACK_API_KEY", ""),
             "auth_mode": os.getenv("CALLBACK_AUTH_MODE", "strict").lower(),
             "public_host": os.getenv("CALLBACK_SERVER_PUBLIC_HOST", os.getenv("CALLBACK_SERVER_HOST", "localhost")),
             "endpoint_path": os.getenv("CALLBACK_ENDPOINT_PATH", "/api/callback").strip("/"),
@@ -237,8 +243,8 @@ class ConfigManager:
         return {
             "clouders_api_url": os.getenv("CLOUDERS_API_URL"),
             "clouders_auth": os.getenv("CLOUDERS_AUTH"),
-            "api_timeout": int(os.getenv("API_TIMEOUT", "30")),
-            "verify_ssl": os.getenv("CLOUDERS_VERIFY_SSL", "false").lower() == "true",
+            "clouders_api_timeout": int(os.getenv("CLOUDERS_API_TIMEOUT", "30")),
+            "clouders_verify_ssl": os.getenv("CLOUDERS_VERIFY_SSL", "false").lower() == "true",
         }
 
     @staticmethod
