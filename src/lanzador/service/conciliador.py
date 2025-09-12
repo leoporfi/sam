@@ -174,7 +174,13 @@ class ConciliadorImplementaciones:
         try:
             # 1. Incrementar el contador para todos los deployments perdidos en este ciclo
             placeholders = ",".join("?" for _ in ids_perdidos)
-            query_increment = f"UPDATE dbo.Ejecuciones SET IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1, FechaActualizacion = GETDATE() WHERE DeploymentId IN ({placeholders})"
+            # Se añade "AND CallbackInfo IS NULL" para no incrementar contadores de ejecuciones que ya terminaron
+            query_increment = (
+                "UPDATE dbo.Ejecuciones "
+                "SET IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1, "
+                "FechaActualizacion = GETDATE() "
+                f"WHERE DeploymentId IN ({placeholders}) AND CallbackInfo IS NULL;"
+            )
             count_incrementados = self.db_connector.ejecutar_consulta(query_increment, tuple(ids_perdidos), es_select=False)
             logger.info(f"Conciliador: Incrementado contador de intentos para {count_incrementados} deployment(s) no encontrados.")
 
