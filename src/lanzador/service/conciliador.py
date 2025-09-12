@@ -108,13 +108,9 @@ class ConciliadorImplementaciones:
                 Estado = ?, 
                 FechaFin = CASE WHEN ? IS NOT NULL THEN ? ELSE FechaFin END, 
                 FechaActualizacion = GETDATE() 
-            WHERE DeploymentId = ?
-              AND (
-                    Estado <> ? OR 
-                    (Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'RUN_ABORTED', 'DEPLOY_FAILED', 'UNKNOWN') 
-                    AND CallbackInfo IS NULL)
-                  );
+            WHERE DeploymentId = ? AND CallbackInfo IS NULL;
             """
+
             formatted_params_for_update = [(p[0], p[1], p[1], p[2], p[3]) for p in updates_params]
 
             try:
