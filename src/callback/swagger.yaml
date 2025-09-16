@@ -5,6 +5,8 @@ info:
   description: |
     API para recibir callbacks desde Control Room a través del API Gateway.
     **Requiere obligatoriamente una Clave de API (API Key) en el header `X-Authorization`.**
+
+    Este endpoint es **idempotente**: si se recibe una notificación para una ejecución que ya se encuentra en un estado final, el servicio responderá con un éxito (`200 OK`) indicando que no se realizaron cambios, en lugar de generar un error.
 servers:
   - url: "http://10.167.181.41:8008"
     description: Servidor de Producción
@@ -30,11 +32,23 @@ paths:
               $ref: '#/components/schemas/CallbackPayload'
       responses:
         '200':
-          description: "Callback procesado correctamente."
+          description: "Callback procesado. El mensaje de respuesta indicará si se realizó una nueva actualización o si la ejecución ya había sido registrada como finalizada previamente."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+              # --- CORRECCIÓN: 'examples' se mueve aquí ---
+              examples:
+                NewUpdate:
+                  summary: "Actualización exitosa"
+                  value:
+                    status: "OK"
+                    message: "Callback procesado y estado actualizado correctamente."
+                AlreadyProcessed:
+                  summary: "Ejecución ya finalizada"
+                  value:
+                    status: "OK"
+                    message: "Callback recibido, pero la ejecución ya se encontraba en un estado final. No se realizaron cambios."
         '400':
           description: "Petición inválida (JSON malformado o faltan campos requeridos)."
           content:
@@ -47,20 +61,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: "Ruta no encontrada. El endpoint solicitado no existe."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '405':
-          description: "Método no permitido (solo se acepta POST)."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: "Error interno del servidor."
+          description: "Error interno del servidor al procesar la solicitud."
           content:
             application/json:
               schema:
@@ -99,7 +101,8 @@ components:
           example: "OK"
         message:
           type: string
-          example: "Callback procesado."
+          example: "Callback procesado y estado actualizado correctamente."
+      # --- CORRECCIÓN: El bloque 'examples' se eliminó de aquí ---
 
     ErrorResponse:
       type: object
@@ -117,3 +120,4 @@ components:
       in: header
       name: X-Authorization
       description: "Clave de API (API Key) para validar que la llamada es legítima."
+
