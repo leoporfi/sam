@@ -5,6 +5,7 @@ import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime, time
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import pyodbc
@@ -22,6 +23,14 @@ if TYPE_CHECKING:
 # Simplemente obtenemos el logger para este módulo. La configuración
 # (handlers, level, etc.) ya fue establecida por el script de arranque.
 logger = logging.getLogger(__name__)
+
+
+# NUEVO: Enum para los estados de actualización del callback.
+# Esto hace que el código sea mucho más legible y mantenible.
+class UpdateStatus(Enum):
+    UPDATED = 1  # El registro fue actualizado exitosamente.
+    ALREADY_PROCESSED = 2  # El registro ya estaba en un estado final, no se hizo nada.
+    ERROR = 3
 
 
 class DatabaseConnector:
@@ -422,53 +431,57 @@ class DatabaseConnector:
                 logger.error(f"Error inesperado durante executemany con query: {query[:150]}. Error: {ex}", exc_info=True)
                 raise
 
-    def actualizar_ejecucion_desde_callback(self, deployment_id: str, estado_callback: str, callback_payload_str: str) -> bool:
+    def actualizar_ejecucion_desde_callback(self, deployment_id: str, estado_callback: str, callback_payload_str: str) -> UpdateStatus:
         """
-        Actualiza un registro en la tabla Ejecuciones basado en un callback de A360.
-        Intenta parsear la fecha de fin si el estado es terminal.
+        MODIFICADO: Actualiza un registro en la tabla Ejecuciones basado en un callback de A360.
+        Devuelve un Enum UpdateStatus para indicar el resultado de la operación.
         """
         if not deployment_id or not estado_callback:
             logger.error("actualizar_ejecucion_desde_callback: Falta deployment_id o estado_callback.")
-            return False
+            return UpdateStatus.ERROR
 
-        # Estados terminales donde se debería registrar FechaFin
-        ESTADOS_TERMINALES_CALLBACK = ["RUN_COMPLETED", "RUN_FAILED", "RUN_ABORTED", "RUN_TIMED_OUT"]
+        ESTADOS_TERMINALES_CALLBACK = ["RUN_COMPLETED", "RUN_FAILED", "RUN_ABORTED", "RUN_TIMED_OUT", "COMPLETED"]
 
         fecha_fin_para_db = None
         if estado_callback.upper() in ESTADOS_TERMINALES_CALLBACK:
-            fecha_fin_para_db = datetime.now()  # Usar la hora actual del servidor de callback como FechaFin
+            fecha_fin_para_db = datetime.now()
 
         try:
-            # Tu tabla Ejecuciones tiene: DeploymentId, Estado, FechaFin, CallbackInfo
-            # FechaInicio ya debería estar. # Solo actualiza FechaFin si se provee
-            query = """UPDATE dbo.Ejecuciones SET  Estado = ?, 
-            FechaFin = CASE WHEN ? IS NOT NULL THEN ? ELSE FechaFin END, CallbackInfo = ?, FechaActualizacion = GETDATE()
-            WHERE DeploymentId = ?;
-            """  # noqa: W291
-
+            # MODIFICADO: La consulta ahora tiene una cláusula WHERE adicional para evitar
+            # actualizar registros que ya están en un estado terminal.
+            query = """
+            UPDATE dbo.Ejecuciones 
+            SET  
+                Estado = ?, 
+                FechaFin = CASE WHEN ? IS NOT NULL THEN ? ELSE FechaFin END, 
+                CallbackInfo = ?, 
+                FechaActualizacion = GETDATE()
+            WHERE 
+                DeploymentId = ?
+                AND Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'RUN_ABORTED', 'RUN_TIMED_OUT', 'UNKNOWN');
+            """
             params = (estado_callback, fecha_fin_para_db, fecha_fin_para_db, callback_payload_str, deployment_id)
-
             rowcount = self.ejecutar_consulta(query, params, es_select=False)
 
             if rowcount is not None and rowcount > 0:
                 logger.info(
                     f"ÉXITO: Callback para DeploymentId: {deployment_id} actualizado a estado '{estado_callback}'. Filas afectadas: {rowcount}"
                 )
-                return True
+                return UpdateStatus.UPDATED
             elif rowcount == 0:
                 logger.warning(
-                    f"AVISO: Callback para DeploymentId: {deployment_id} (Estado: {estado_callback}) no actualizó registros. El ID podría ser incorrecto o ya estaba en estado terminal."
+                    f"AVISO: Callback para DeploymentId: {deployment_id} (Estado: {estado_callback}) no actualizó registros. El ID podría no existir o ya estaba en un estado final."
                 )
-                return False  # Técnicamente no es un fallo del sistema, pero la operación no tuvo efecto.
-            else:
+                return UpdateStatus.ALREADY_PROCESSED
+            else:  # rowcount is None
                 logger.info(
-                    f"ÉXITO: Callback para DeploymentId: {deployment_id} procesado (estado: {estado_callback}). Driver no reportó conteo de filas."
+                    f"ÉXITO: Callback para DeploymentId: {deployment_id} procesado (estado: {estado_callback}). Driver no reportó conteo de filas, asumiendo éxito."
                 )
-                return True
+                return UpdateStatus.UPDATED
 
         except Exception as e:
             logger.error(f"Error al actualizar ejecución desde callback para DeploymentId {deployment_id}: {e}", exc_info=True)
-            return False
+            return UpdateStatus.ERROR
 
     def actualizar_asignaciones_robot(self, robot_id: int, ids_para_asignar: list[int], ids_para_desasignar: list[int]):
         """
