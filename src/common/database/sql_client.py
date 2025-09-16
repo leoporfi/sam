@@ -28,9 +28,10 @@ logger = logging.getLogger(__name__)
 # NUEVO: Enum para los estados de actualización del callback.
 # Esto hace que el código sea mucho más legible y mantenible.
 class UpdateStatus(Enum):
-    UPDATED = 1  # El registro fue actualizado exitosamente.
-    ALREADY_PROCESSED = 2  # El registro ya estaba en un estado final, no se hizo nada.
-    ERROR = 3
+    UPDATED = 1
+    ALREADY_PROCESSED = 2
+    NOT_FOUND = 3
+    ERROR = 4
 
 
 class DatabaseConnector:

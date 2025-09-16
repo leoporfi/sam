@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
-from src.common.database.sql_client import DatabaseConnector
+from src.common.database.sql_client import DatabaseConnector, UpdateStatus
 from src.common.utils.config_manager import ConfigManager
 
 # --- Configuración Inicial ---
@@ -161,30 +161,39 @@ if not endpoint_path.startswith("/"):
 )
 async def handle_callback(payload: CallbackPayload, request: Request, db: DatabaseConnector = Depends(get_db)):
     """
-    Procesa el callback de A360, actualizando el estado en la base de datos.
+    Procesa el callback de A360. Es idempotente: maneja correctamente los callbacks duplicados.
     """
     try:
         raw_payload = await request.body()
         payload_str = raw_payload.decode("utf-8")
         logger.info(f"Callback recibido para DeploymentId: {payload.deployment_id}. Body: {payload_str}")
 
-        success = db.actualizar_ejecucion_desde_callback(
+        update_result = db.actualizar_ejecucion_desde_callback(
             deployment_id=payload.deployment_id, estado_callback=payload.status, callback_payload_str=payload_str
         )
 
-        if success:
-            return SuccessResponse(message="Callback procesado correctamente.")
-        else:
-            logger.error(f"Error funcional al actualizar la BD para DeploymentId: {payload.deployment_id}")
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error al actualizar el estado en la base de datos.")
+        # Esta lógica ahora funciona porque 'UpdateStatus' fue importado.
+        if update_result == UpdateStatus.UPDATED:
+            return SuccessResponse(message="Callback procesado y estado actualizado correctamente.")
+
+        elif update_result == UpdateStatus.ALREADY_PROCESSED:
+            return SuccessResponse(message="Callback recibido, pero la ejecución ya se encontraba en un estado final. No se realizaron cambios.")
+
+        elif update_result == UpdateStatus.NOT_FOUND:
+            return SuccessResponse(
+                message=f"Callback procesado, pero el DeploymentId '{payload.deployment_id}' no fue encontrado en la base de datos."
+            )
+
+        else:  # update_result == UpdateStatus.ERROR
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ocurrió un error al intentar actualizar el estado en la base de datos."
+            )
 
     except HTTPException as http_exc:
-        raise http_exc  # Re-lanzar excepciones HTTP ya manejadas
+        raise http_exc
     except Exception as e:
-        logger.error(f"Error inesperado procesando el payload: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor durante el procesamiento del callback."
-        )
+        logger.error(f"Error inesperado no controlado en el endpoint de callback: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor.")
 
 
 @app.get("/health", tags=["Monitoring"], summary="Verifica el estado del servicio", response_model=SuccessResponse)
