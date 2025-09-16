@@ -434,54 +434,52 @@ class DatabaseConnector:
 
     def actualizar_ejecucion_desde_callback(self, deployment_id: str, estado_callback: str, callback_payload_str: str) -> UpdateStatus:
         """
-        CORREGIDO: Actualiza un registro en la tabla Ejecuciones con un patrón "consultar y luego actualizar".
-        Devuelve un Enum UpdateStatus para indicar el resultado de forma fiable.
+        CORRECCIÓN: Lógica refactorizada para ser atómica y evitar deadlocks.
+        Realiza el SELECT y el UPDATE dentro de la misma transacción.
         """
         if not deployment_id or not estado_callback:
-            logger.error("actualizar_ejecucion_desde_callback: Falta deployment_id o estado_callback.")
+            logger.error("Falta deployment_id o estado_callback.")
             return UpdateStatus.ERROR
 
         ESTADOS_TERMINALES = ["COMPLETED", "RUN_COMPLETED", "RUN_FAILED", "RUN_ABORTED", "RUN_TIMED_OUT", "UNKNOWN"]
 
+        # Usamos un solo bloque 'with' para asegurar una única transacción
         try:
-            # 1. CONSULTAR el estado actual primero
-            query_select = "SELECT Estado FROM dbo.Ejecuciones WHERE DeploymentId = ?"
-            resultado = self.ejecutar_consulta(query_select, (deployment_id,), es_select=True)
+            with self.obtener_cursor() as cursor:
+                # 1. CONSULTAR el estado actual.
+                # SQL Server puede escalar el bloqueo si es necesario dentro de la misma transacción.
+                query_select = "SELECT Estado FROM dbo.Ejecuciones WHERE DeploymentId = ?"
+                cursor.execute(query_select, deployment_id)
+                fila = cursor.fetchone()
 
-            if not resultado:
-                logger.warning(f"Callback para DeploymentId: {deployment_id} no encontrado en la base de datos.")
-                return UpdateStatus.NOT_FOUND
+                if not fila:
+                    logger.warning(f"Callback para DeploymentId: {deployment_id} no encontrado.")
+                    return UpdateStatus.NOT_FOUND
 
-            estado_actual = resultado[0].get("Estado")
+                estado_actual = fila[0]
 
-            # 2. VERIFICAR si ya está en un estado terminal
-            if estado_actual in ESTADOS_TERMINALES:
-                logger.info(
-                    f"Callback para DeploymentId: {deployment_id} recibido, pero ya estaba en estado final ('{estado_actual}'). No se requieren cambios."
-                )
-                return UpdateStatus.ALREADY_PROCESSED
+                # 2. VERIFICAR si ya está en un estado terminal
+                if estado_actual in ESTADOS_TERMINALES:
+                    logger.info(f"Callback para DeploymentId: {deployment_id} ya en estado final ('{estado_actual}'). No se requieren cambios.")
+                    return UpdateStatus.ALREADY_PROCESSED
 
-            # 3. ACTUALIZAR solo si no está en estado terminal
-            fecha_fin_para_db = datetime.now() if estado_callback.upper() in ESTADOS_TERMINALES else None
+                # 3. ACTUALIZAR solo si no está en estado terminal
+                fecha_fin_para_db = datetime.now() if estado_callback.upper() in ESTADOS_TERMINALES else None
 
-            query_update = """
-            UPDATE dbo.Ejecuciones 
-            SET  
-                Estado = ?, 
-                FechaFin = CASE WHEN ? IS NOT NULL THEN ? ELSE FechaFin END, 
-                CallbackInfo = ?, 
-                FechaActualizacion = GETDATE()
-            WHERE 
-                DeploymentId = ?;
-            """
-            params_update = (estado_callback, fecha_fin_para_db, fecha_fin_para_db, callback_payload_str, deployment_id)
-            self.ejecutar_consulta(query_update, params_update, es_select=False)
+                query_update = """
+                UPDATE dbo.Ejecuciones 
+                SET Estado = ?, FechaFin = ?, CallbackInfo = ?, FechaActualizacion = GETDATE()
+                WHERE DeploymentId = ?;
+                """
+                # Usamos COALESCE para no sobreescribir FechaFin con NULL si no es un estado terminal
+                params_update = (estado_callback, fecha_fin_para_db, callback_payload_str, deployment_id)
+                cursor.execute(query_update, params_update)
 
-            logger.info(f"ÉXITO: Callback para DeploymentId: {deployment_id} actualizado a estado '{estado_callback}'.")
-            return UpdateStatus.UPDATED
+                logger.info(f"ÉXITO: Callback para DeploymentId: {deployment_id} actualizado a estado '{estado_callback}'.")
+                return UpdateStatus.UPDATED
 
         except Exception as e:
-            logger.error(f"Error al actualizar ejecución desde callback para DeploymentId {deployment_id}: {e}", exc_info=True)
+            logger.error(f"Error al actualizar callback para DeploymentId {deployment_id}: {e}", exc_info=True)
             return UpdateStatus.ERROR
 
     def actualizar_asignaciones_robot(self, robot_id: int, ids_para_asignar: list[int], ids_para_desasignar: list[int]):
