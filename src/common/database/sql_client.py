@@ -433,23 +433,37 @@ class DatabaseConnector:
 
     def actualizar_ejecucion_desde_callback(self, deployment_id: str, estado_callback: str, callback_payload_str: str) -> UpdateStatus:
         """
-        MODIFICADO: Actualiza un registro en la tabla Ejecuciones basado en un callback de A360.
-        Devuelve un Enum UpdateStatus para indicar el resultado de la operación.
+        CORREGIDO: Actualiza un registro en la tabla Ejecuciones con un patrón "consultar y luego actualizar".
+        Devuelve un Enum UpdateStatus para indicar el resultado de forma fiable.
         """
         if not deployment_id or not estado_callback:
             logger.error("actualizar_ejecucion_desde_callback: Falta deployment_id o estado_callback.")
             return UpdateStatus.ERROR
 
-        ESTADOS_TERMINALES_CALLBACK = ["RUN_COMPLETED", "RUN_FAILED", "RUN_ABORTED", "RUN_TIMED_OUT", "COMPLETED"]
-
-        fecha_fin_para_db = None
-        if estado_callback.upper() in ESTADOS_TERMINALES_CALLBACK:
-            fecha_fin_para_db = datetime.now()
+        ESTADOS_TERMINALES = ["COMPLETED", "RUN_COMPLETED", "RUN_FAILED", "RUN_ABORTED", "RUN_TIMED_OUT", "UNKNOWN"]
 
         try:
-            # MODIFICADO: La consulta ahora tiene una cláusula WHERE adicional para evitar
-            # actualizar registros que ya están en un estado terminal.
-            query = """
+            # 1. CONSULTAR el estado actual primero
+            query_select = "SELECT Estado FROM dbo.Ejecuciones WHERE DeploymentId = ?"
+            resultado = self.ejecutar_consulta(query_select, (deployment_id,), es_select=True)
+
+            if not resultado:
+                logger.warning(f"Callback para DeploymentId: {deployment_id} no encontrado en la base de datos.")
+                return UpdateStatus.NOT_FOUND
+
+            estado_actual = resultado[0].get("Estado")
+
+            # 2. VERIFICAR si ya está en un estado terminal
+            if estado_actual in ESTADOS_TERMINALES:
+                logger.info(
+                    f"Callback para DeploymentId: {deployment_id} recibido, pero ya estaba en estado final ('{estado_actual}'). No se requieren cambios."
+                )
+                return UpdateStatus.ALREADY_PROCESSED
+
+            # 3. ACTUALIZAR solo si no está en estado terminal
+            fecha_fin_para_db = datetime.now() if estado_callback.upper() in ESTADOS_TERMINALES else None
+
+            query_update = """
             UPDATE dbo.Ejecuciones 
             SET  
                 Estado = ?, 
@@ -457,27 +471,13 @@ class DatabaseConnector:
                 CallbackInfo = ?, 
                 FechaActualizacion = GETDATE()
             WHERE 
-                DeploymentId = ?
-                AND Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'RUN_ABORTED', 'RUN_TIMED_OUT', 'UNKNOWN');
+                DeploymentId = ?;
             """
-            params = (estado_callback, fecha_fin_para_db, fecha_fin_para_db, callback_payload_str, deployment_id)
-            rowcount = self.ejecutar_consulta(query, params, es_select=False)
+            params_update = (estado_callback, fecha_fin_para_db, fecha_fin_para_db, callback_payload_str, deployment_id)
+            self.ejecutar_consulta(query_update, params_update, es_select=False)
 
-            if rowcount is not None and rowcount > 0:
-                logger.info(
-                    f"ÉXITO: Callback para DeploymentId: {deployment_id} actualizado a estado '{estado_callback}'. Filas afectadas: {rowcount}"
-                )
-                return UpdateStatus.UPDATED
-            elif rowcount == 0:
-                logger.warning(
-                    f"AVISO: Callback para DeploymentId: {deployment_id} (Estado: {estado_callback}) no actualizó registros. El ID podría no existir o ya estaba en un estado final."
-                )
-                return UpdateStatus.ALREADY_PROCESSED
-            else:  # rowcount is None
-                logger.info(
-                    f"ÉXITO: Callback para DeploymentId: {deployment_id} procesado (estado: {estado_callback}). Driver no reportó conteo de filas, asumiendo éxito."
-                )
-                return UpdateStatus.UPDATED
+            logger.info(f"ÉXITO: Callback para DeploymentId: {deployment_id} actualizado a estado '{estado_callback}'.")
+            return UpdateStatus.UPDATED
 
         except Exception as e:
             logger.error(f"Error al actualizar ejecución desde callback para DeploymentId {deployment_id}: {e}", exc_info=True)
