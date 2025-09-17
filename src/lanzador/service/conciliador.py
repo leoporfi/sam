@@ -111,7 +111,7 @@ class ConciliadorImplementaciones:
             WHERE DeploymentId = ? AND CallbackInfo IS NULL;
             """
 
-            formatted_params_for_update = [(p[0], p[1], p[1], p[2], p[3]) for p in updates_params]
+            formatted_params_for_update = [(p[0], p[1], p[1], p[2]) for p in updates_params]
 
             try:
                 affected_count = 0
