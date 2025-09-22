@@ -237,7 +237,7 @@ class DatabaseConnector:
     def obtener_ejecuciones_en_curso(self) -> List[Dict[str, Any]]:
         try:
             query = (
-                "SELECT DeploymentId, RobotId, EquipoId, UserId, IntentosConciliadorFallidos FROM dbo.Ejecuciones "
+                "SELECT EjecucionId, DeploymentId, RobotId, EquipoId, UserId, IntentosConciliadorFallidos FROM dbo.Ejecuciones "
                 "WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'RUN_ABORTED', 'DEPLOY_FAILED', 'UNKNOWN') "
                 "AND DATEDIFF(SECOND, FechaInicio, GETDATE()) > 30;"
             )
