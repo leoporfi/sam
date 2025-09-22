@@ -190,11 +190,11 @@ class AutomationAnywhereClient:
                     {"operator": "substring", "field": "path", "value": "RPA"},
                     {"operator": "eq", "field": "type", "value": "application/vnd.aa.taskbot"},
                 ],
-            }
+            },"sort": [{"field": "id", "direction": "desc"}]
         }
         robots_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_FILES_LIST_V2, payload)
 
-        patron_nombre = re.compile(r"^P[A-Z0-9]*[0-9].*_.*")
+        patron_nombre = re.compile(r"^(P|CP)\S+[0-9]+_.+$") # re.compile(r"^P[A-Z0-9]*[0-9].*_.*")
         robots_mapeados = []
         for bot in robots_api:
             nombre = bot.get("name")
