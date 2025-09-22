@@ -196,8 +196,47 @@ def delete_schedule_full(db: DatabaseConnector, programacion_id: int, robot_id: 
     query = "EXEC dbo.EliminarProgramacionCompleta @ProgramacionId = ?, @RobotId = ?"
     db.ejecutar_consulta(query, (programacion_id, robot_id), es_select=False)
 
-
 def create_new_schedule(db: DatabaseConnector, data: ScheduleData):
+    """
+    Crea una nueva programación llamando al Stored Procedure unificado y eficiente
+    'CrearProgramacion'.
+    """
+    # 1. Obtener los nombres de los equipos a partir de sus IDs.
+    #    STRING_AGG es una forma eficiente de hacer esto en la BD.
+    equipos_str = ""
+    if data.Equipos:
+        placeholders = ",".join("?" for _ in data.Equipos)
+        equipos_nombres_result = db.ejecutar_consulta(
+            f"SELECT STRING_AGG(Equipo, ',') AS Nombres FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
+            tuple(data.Equipos),
+            es_select=True,
+        )
+        if equipos_nombres_result and equipos_nombres_result[0]["Nombres"]:
+            equipos_str = equipos_nombres_result[0]["Nombres"]
+
+    # 2. Obtener el nombre del robot a partir de su ID.
+    robot_nombre_result = db.ejecutar_consulta("SELECT Robot FROM dbo.Robots WHERE RobotId = ?", (data.RobotId,), es_select=True)
+    if not robot_nombre_result:
+        raise ValueError(f"No se encontró un robot con el ID {data.RobotId}")
+    robot_str = robot_nombre_result[0]["Robot"]
+
+    # 3. Preparar los parámetros para el SP 'CrearProgramacion'.
+    query = "EXEC dbo.CrearProgramacion @Robot=?, @Equipos=?, @TipoProgramacion=?, @HoraInicio=?, @Tolerancia=?, @DiasSemana=?, @DiaDelMes=?, @FechaEspecifica=?"
+    params = (
+        robot_str,
+        equipos_str,
+        data.TipoProgramacion,
+        data.HoraInicio,
+        data.Tolerancia,
+        data.DiasSemana,
+        data.DiaDelMes,
+        data.FechaEspecifica,
+    )
+
+    # 4. Ejecutar el Stored Procedure.
+    db.ejecutar_consulta(query, params, es_select=False)
+
+def create_new_schedule_old(db: DatabaseConnector, data: ScheduleData):
     equipos_nombres_result = db.ejecutar_consulta(
         f"SELECT STRING_AGG(Equipo, ',') AS Nombres FROM dbo.Equipos WHERE EquipoId IN ({','.join('?' for _ in data.Equipos)})",
         tuple(data.Equipos),

@@ -62,7 +62,15 @@ class ConciliadorImplementaciones:
                 logger.info("Conciliador: No hay ejecuciones en curso para conciliar.")
                 return
 
-            deployment_ids = [imp["DeploymentId"] for imp in ejecuciones_en_curso if imp.get("DeploymentId")]
+            # Creamos un mapa para relacionar DeploymentId con EjecucionId
+            mapa_deploy_a_ejecucion = {
+                imp["DeploymentId"]: imp["EjecucionId"] for imp in ejecuciones_en_curso if imp.get("DeploymentId") and imp.get("EjecucionId")
+            }
+            if not mapa_deploy_a_ejecucion:
+                logger.info("Conciliador: No se encontraron DeploymentIds válidos.")
+                return
+
+            deployment_ids = list(mapa_deploy_a_ejecucion.keys())
             if not deployment_ids:
                 logger.info("Conciliador: No se encontraron DeploymentIds válidos.")
                 return
@@ -71,15 +79,17 @@ class ConciliadorImplementaciones:
             detalles_api = await self.aa_client.obtener_detalles_por_deployment_ids(deployment_ids)
 
             if detalles_api:
-                self._actualizar_estados_encontrados_db(detalles_api)
+                # Pasamos el mapa al método de actualización
+                self._actualizar_estados_encontrados_db(detalles_api, mapa_deploy_a_ejecucion)
 
-            self._gestionar_deployments_perdidos(deployment_ids, detalles_api)
+            # Pasamos el mapa también para gestionar los perdidos
+            self._gestionar_deployments_perdidos(deployment_ids, detalles_api, mapa_deploy_a_ejecucion)
             logger.info("Conciliador: Proceso de conciliación completado.")
 
         except Exception as e:
             logger.error(f"Error en conciliar_implementaciones: {e}", exc_info=True)
 
-    def _actualizar_estados_encontrados_db(self, detalles_api: list):
+    def _actualizar_estados_encontrados_db(self, detalles_api: list, mapa_deploy_a_ejecucion: dict):
         """Actualiza la BD SAM con los estados de los deployments encontrados en la API."""
         if not detalles_api:
             return
@@ -90,7 +100,9 @@ class ConciliadorImplementaciones:
             status_api = detalle.get("status")
             end_date_str = detalle.get("endDateTime")
 
-            if not dep_id or not status_api:
+            # Obtenemos el EjecucionId desde nuestro mapa
+            ejecucion_id = mapa_deploy_a_ejecucion.get(dep_id)
+            if not ejecucion_id or not status_api:
                 logger.warning(f"Conciliador: Item de API sin deploymentId o status, omitiendo: {str(detalle)[:100]}")
                 continue
 
@@ -99,65 +111,23 @@ class ConciliadorImplementaciones:
                 continue
 
             fecha_fin_dt = self._convertir_utc_a_local_sam(end_date_str)
-            updates_params.append((final_status_db, fecha_fin_dt, dep_id, final_status_db))
+            updates_params.append((final_status_db, fecha_fin_dt, ejecucion_id))
 
         if updates_params:
             query = """
                 UPDATE dbo.Ejecuciones 
-            SET 
-                Estado = ?, 
-                FechaFin = CASE WHEN ? IS NOT NULL THEN ? ELSE FechaFin END, 
-                FechaActualizacion = GETDATE() 
-            WHERE DeploymentId = ? AND CallbackInfo IS NULL;
+                SET Estado = ?, FechaFin = ?, FechaActualizacion = GETDATE() 
+                WHERE EjecucionId = ? AND CallbackInfo IS NULL;
             """
 
-            formatted_params_for_update = [(p[0], p[1], p[1], p[2]) for p in updates_params]
-
             try:
-                affected_count = 0
-                for param_tuple in formatted_params_for_update:
-                    count = self.db_connector.ejecutar_consulta(query, param_tuple, es_select=False)
-                    if count is not None and count > 0:
-                        affected_count += count
-                logger.info(f"Conciliador: Actualizados {affected_count} registros de ejecuciones desde API con fechas locales.")
+                # Usamos ejecutar_consulta_multiple para eficiencia
+                affected_count = self.db_connector.ejecutar_consulta_multiple(query, updates_params)
+                logger.info(f"Conciliador: Actualizados {affected_count} registros de ejecuciones desde API con fechas locales..")
             except Exception as e_db_update:
-                logger.error(f"Conciliador: Error de BD al actualizar estados encontrados con fechas locales: {e_db_update}", exc_info=True)
+                logger.error(f"Conciliador: Error de BD al actualizar estados: {e_db_update}", exc_info=True)
 
-    # SIN USO - REEPLAZADO POR _gestionar_deployments_perdidos
-    def _actualizar_estados_perdidos_db(self, deployment_ids_en_db: list, detalles_api: list):
-        """Marca como UNKNOWN los deployments que estaban en BD pero no se encontraron en la API."""
-        if not deployment_ids_en_db:
-            return
-
-        ids_encontrados_api = {item.get("deploymentId") for item in detalles_api if item.get("deploymentId")}
-        ids_perdidos = [dep_id for dep_id in deployment_ids_en_db if dep_id not in ids_encontrados_api]
-
-        if ids_perdidos:
-            logger.warning(f"Conciliador: Deployments no encontrados en API, marcando como UNKNOWN: {ids_perdidos}")
-            query = """
-                UPDATE dbo.Ejecuciones 
-            SET 
-                Estado = 'UNKNOWN', 
-                FechaFin = GETDATE(), 
-                FechaActualizacion = GETDATE()
-            WHERE DeploymentId = ?
-              AND Estado NOT IN ('COMPLETED','RUN_COMPLETED','RUN_FAILED','RUN_ABORTED','DEPLOY_FAILED', 'UNKNOWN')
-              AND CallbackInfo IS NULL 
-              AND DATEDIFF(SECOND, FechaInicio, GETDATE()) > 60
-            """
-            params_perdidos = [(id_perdido,) for id_perdido in ids_perdidos]
-            try:
-                affected_count = 0
-                for param_tuple in params_perdidos:
-                    count = self.db_connector.ejecutar_consulta(query, param_tuple, es_select=False)
-                    if count is not None and count > 0:
-                        affected_count += count
-                if affected_count > 0:
-                    logger.info(f"Conciliador: Marcados {affected_count} deployments perdidos como UNKNOWN.")
-            except Exception as e:
-                logger.error(f"Conciliador: Error de BD al actualizar estados perdidos: {e}", exc_info=True)
-
-    def _gestionar_deployments_perdidos(self, deployment_ids_en_db: list, detalles_api: list):
+    def _gestionar_deployments_perdidos(self, deployment_ids_en_db: list, detalles_api: list, mapa_deploy_a_ejecucion: dict):
         """
         Incrementa el contador para deployments no encontrados y los marca como UNKNOWN
         si superan el umbral de reintentos.
@@ -171,35 +141,34 @@ class ConciliadorImplementaciones:
         if not ids_perdidos:
             return
 
+        # CAMBIO: Obtenemos la lista de EjecucionId para los perdidos
+        ejecucion_ids_perdidos = [mapa_deploy_a_ejecucion[dep_id] for dep_id in ids_perdidos if dep_id in mapa_deploy_a_ejecucion]
+
         try:
             # 1. Incrementar el contador para todos los deployments perdidos en este ciclo
-            placeholders = ",".join("?" for _ in ids_perdidos)
+            placeholders = ",".join("?" for _ in ejecucion_ids_perdidos)
             # Se añade "AND CallbackInfo IS NULL" para no incrementar contadores de ejecuciones que ya terminaron
             query_increment = (
                 "UPDATE dbo.Ejecuciones "
                 "SET IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1, "
                 "FechaActualizacion = GETDATE() "
-                f"WHERE DeploymentId IN ({placeholders}) AND CallbackInfo IS NULL;"
+                f"WHERE EjecucionId IN ({placeholders}) AND CallbackInfo IS NULL;"
             )
-            count_incrementados = self.db_connector.ejecutar_consulta(query_increment, tuple(ids_perdidos), es_select=False)
+            count_incrementados = self.db_connector.ejecutar_consulta(query_increment, tuple(ejecucion_ids_perdidos), es_select=False)
             logger.info(f"Conciliador: Incrementado contador de intentos para {count_incrementados} deployment(s) no encontrados.")
 
             # 2. Marcar como UNKNOWN aquellos que han superado el umbral
             query_unknown = (
                 "UPDATE dbo.Ejecuciones SET "
-                "Estado = 'UNKNOWN', "
-                "FechaFin = GETDATE(), "
-                "FechaActualizacion = GETDATE() "
-                f"WHERE DeploymentId IN ({placeholders}) AND IntentosConciliadorFallidos >= ?;"
+                "Estado = 'UNKNOWN', FechaFin = GETDATE(), FechaActualizacion = GETDATE() "
+                f"WHERE EjecucionId IN ({placeholders}) AND IntentosConciliadorFallidos >= ?;"
             )
 
-            params_unknown = tuple(ids_perdidos) + (self.max_intentos_fallidos,)
+            params_unknown = tuple(ejecucion_ids_perdidos) + (self.max_intentos_fallidos,)
             count_unknown = self.db_connector.ejecutar_consulta(query_unknown, params_unknown, es_select=False)
 
             if count_unknown > 0:
-                logger.warning(
-                    f"Conciliador: Marcados {count_unknown} deployment(s) como UNKNOWN tras superar los {self.max_intentos_fallidos} intentos."
-                )
+                logger.warning(f"Conciliador: Marcados {count_unknown} deployment(s) como UNKNOWN - {self.max_intentos_fallidos} intentos .")
 
         except Exception as e:
             logger.error(f"Conciliador: Error de BD al gestionar deployments perdidos: {e}", exc_info=True)
