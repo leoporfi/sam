@@ -1,4 +1,4 @@
-# /src/web/frontend/features/dashboard/components.py
+# /src/web/frontend/features/dashboard/dashboard_components.py
 
 from typing import Callable, Dict, List
 

@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# ARCHIVO: src/interfaz_web/features/pools/components.py
+# ARCHIVO: src/interfaz_web/features/pools/pool_components.py
 # ---------------------------------------------------------------------------
 from typing import Callable, Dict, List
 
@@ -7,7 +7,7 @@ from reactpy import component, event, html, use_state
 
 from ...hooks.use_pools_hook import use_pools_management
 from ...shared.common_components import ConfirmationModal, LoadingSpinner
-from .modals import PoolAssignmentsModal, PoolEditModal
+from .pool_modals import PoolAssignmentsModal, PoolEditModal
 
 
 @component

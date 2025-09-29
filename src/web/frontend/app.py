@@ -5,8 +5,8 @@ from reactpy import component, html, use_effect, use_state
 from reactpy_router import browser_router, route
 
 # Importamos los componentes de la UI
-from .features.dashboard.components import RobotDashboard
-from .features.pools.components import PoolsDashboard
+from .features.dashboard.dashboard_components import RobotDashboard
+from .features.pools.pool_components import PoolsDashboard
 from .shared.layout import AppLayout
 from .shared.notifications import NotificationContext, ToastContainer
 
