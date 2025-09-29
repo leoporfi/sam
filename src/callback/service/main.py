@@ -3,7 +3,7 @@ import hmac
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Security, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
@@ -12,11 +12,24 @@ from pydantic import BaseModel, Field
 from src.common.database.sql_client import DatabaseConnector, UpdateStatus
 from src.common.utils.config_manager import ConfigManager
 
-# --- Configuración Inicial ---
 logger = logging.getLogger(__name__)
-# Cargar configuración del servicio de callback
-cb_config = ConfigManager.get_callback_server_config()
-sql_config = ConfigManager.get_sql_server_config("SQL_SAM")
+
+# Se crea la instancia de FastAPI a nivel de módulo para que Uvicorn pueda importarla.
+app = FastAPI(
+    title="SAM Callback Service API",
+    version="3.0.0",
+    description="""
+        API para recibir callbacks desde Control Room a través del API Gateway.
+        **Requiere obligatoriamente una Clave de API en el header `X-Authorization`.**
+        """,
+    servers=[
+        {"url": "http://10.167.181.41:8008", "description": "Servidor de Producción"},
+        {"url": "http://10.167.181.42:8008", "description": "Servidor de Desarrollo"},
+    ],
+)
+
+# Se usará para "pasar" la dependencia a la app.
+_db_connector: Optional[DatabaseConnector] = None
 
 # --- Definición de Seguridad  ---
 api_key_scheme = APIKeyHeader(name="X-Authorization", auto_error=False, description="Clave de API para la autenticación del callback.")
@@ -45,160 +58,117 @@ class ErrorResponse(BaseModel):
     message: str
 
 
-# --- Inicialización de la Aplicación FastAPI ---
-app = FastAPI(
-    title="SAM Callback Service API",
-    version="2.3.0",
-    description="""
-API para recibir callbacks desde Control Room a través del API Gateway.
-**Requiere obligatoriamente una Clave de API en el header `X-Authorization`.**
-    """,
-    servers=[
-        {"url": "http://10.167.181.41:8008", "description": "Servidor de Producción"},
-        {"url": "http://10.167.181.42:8008", "description": "Servidor de Desarrollo"},
-    ],
-)
+# --- Función Fábrica para la App FastAPI ---
+def create_app(db_connector: DatabaseConnector) -> FastAPI:
+    """
+    Configura la instancia global de la aplicación FastAPI, inyectando las dependencias.
+    """
+    global _db_connector
+    _db_connector = db_connector
 
-db_connector: Optional[DatabaseConnector] = None
+    cb_config = ConfigManager.get_callback_server_config()
 
+    # --- Manejadores de Excepciones ---
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        """
+        Captura las excepciones HTTP y formatea la respuesta para que coincida con el formato estándar.
+        """
+        return JSONResponse(status_code=exc.status_code, content={"status": "ERROR", "message": exc.detail})
 
-# --- Ciclo de Vida de la Aplicación (Startup/Shutdown) ---
-@app.on_event("startup")
-def startup_event():
-    global db_connector
-    logger.info("Inicializando el conector de la base de datos para FastAPI...")
-    try:
-        db_connector = DatabaseConnector(
-            servidor=sql_config["server"], base_datos=sql_config["database"], usuario=sql_config["uid"], contrasena=sql_config["pwd"]
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        """
+        Captura los errores de validación de Pydantic y los formatea.
+        """
+        error_message = exc.errors()[0]["msg"] if exc.errors() else "Error de validación"
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"status": "ERROR", "message": f"Petición inválida: {error_message}"},
         )
-        logger.info("Conector de base de datos inicializado exitosamente.")
-    except Exception as e:
-        logger.critical(f"No se pudo inicializar el conector de la base de datos: {e}", exc_info=True)
-        db_connector = None
 
+    # --- Dependencias de FastAPI ---
+    def get_db() -> DatabaseConnector:
+        if not _db_connector:
+            raise HTTPException(status_code=503, detail="Conexión a BD no disponible.")
+        return _db_connector
 
-@app.on_event("shutdown")
-def shutdown_event():
-    if db_connector:
-        logger.info("Cerrando la conexión de la base de datos.")
+    async def verify_api_key(x_authorization: Optional[str] = Header(None, alias="X-Authorization")):
+        auth_mode = cb_config.get("auth_mode", "strict")
+        server_api_key = cb_config.get("token")
+
+        if auth_mode == "optional" and not x_authorization:
+            return
+
+        if not server_api_key:
+            logger.error("Configuración del servidor incompleta: CALLBACK_TOKEN no está definido.")
+            raise HTTPException(status_code=500, detail="Error de configuración del servidor.")
+
+        if not x_authorization or not hmac.compare_digest(server_api_key, x_authorization):
+            logger.warning("Intento de acceso con API Key inválida.")
+            raise HTTPException(status_code=401, detail="Clave de API inválida o ausente.")
+
+    # --- Eventos de Ciclo de Vida ---
+    @app.on_event("shutdown")
+    def shutdown_event():
+        logger.info("Cerrando la conexión de la base de datos al detener el servicio.")
         db_connector.cerrar_conexion()
 
+    # --- Endpoints ---
+    endpoint_path = cb_config.get("endpoint_path", "/api/callback").strip("/")
 
-# --- Manejadores de Excepciones Personalizados ---
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    """
-    Captura las excepciones HTTP y formatea la respuesta para que coincida con el formato estándar.
-    """
-    return JSONResponse(status_code=exc.status_code, content={"status": "ERROR", "message": exc.detail})
-
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """
-    Captura los errores de validación de Pydantic y los formatea.
-    """
-    error_message = exc.errors()[0]["msg"] if exc.errors() else "Error de validación en la petición"
-    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"status": "ERROR", "message": f"Petición inválida: {error_message}"})
-
-
-# --- Dependencias de FastAPI ---
-def get_db() -> DatabaseConnector:
-    """
-    Dependencia de FastAPI para obtener el conector de base de datos.
-    """
-    if not db_connector:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="La conexión con la base de datos no está disponible.")
-    return db_connector
-
-
-async def verify_api_key(x_authorization: Optional[str] = Header(None, alias="X-Authorization")):
-    """
-    Dependencia de seguridad para validar la Clave de API (API Key).
-    Respeta el CALLBACK_AUTH_MODE ('strict' u 'optional').
-    """
-    auth_mode = cb_config.get("auth_mode", "strict")
-
-    # En modo opcional, si no se provee el header, se permite el acceso.
-    if auth_mode == "optional" and x_authorization is None:
-        logger.debug("Acceso permitido sin API Key en modo 'optional'.")
-        return
-
-    # Si estamos en modo 'strict' o si la API Key fue provista en modo 'optional',
-    # se debe realizar la validación.
-    server_api_key = cb_config.get("callback_api_key")
-
-    if not server_api_key:
-        logger.error("Error de configuración del servidor: No se ha definido un CALLBACK_API_KEY para validar.")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Servidor no configurado para validar claves de API.")
-
-    if not x_authorization or not hmac.compare_digest(server_api_key, x_authorization):
-        logger.warning(f"Intento de acceso no autorizado. API Key recibida: '{str(x_authorization)[:10]}...'")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Clave de API inválida o ausente.")
-
-
-# --- Endpoints de la API ---
-endpoint_path = cb_config.get("endpoint_path", "/api/callback").strip()
-if not endpoint_path.startswith("/"):
-    endpoint_path = "/" + endpoint_path
-
-
-@app.post(
-    endpoint_path,
-    tags=["Callback"],
-    summary="Recibir notificación de callback de A360",
-    response_model=SuccessResponse,
-    responses={
-        200: {"description": "Callback procesado correctamente.", "model": SuccessResponse},
-        400: {"description": "Petición inválida (JSON malformado o faltan campos requeridos).", "model": ErrorResponse},
-        401: {
-            "description": "Autenticación Fallida. La Clave de API en 'X-Authorization' es inválida o no fue proporcionada.",
-            "model": ErrorResponse,
+    @app.post(
+        f"/{endpoint_path}",
+        tags=["Callback"],
+        summary="Recibir notificación de callback de A360",
+        response_model=SuccessResponse,
+        responses={
+            200: {"description": "Callback procesado correctamente.", "model": SuccessResponse},
+            400: {"description": "Petición inválida (JSON malformado o faltan campos requeridos).", "model": ErrorResponse},
+            401: {
+                "description": "Autenticación Fallida. La Clave de API en 'X-Authorization' es inválida o no fue proporcionada.",
+                "model": ErrorResponse,
+            },
+            500: {"description": "Error interno del servidor.", "model": ErrorResponse},
         },
-        500: {"description": "Error interno del servidor.", "model": ErrorResponse},
-    },
-    dependencies=[Depends(verify_api_key)],
-)
-async def handle_callback(payload: CallbackPayload, request: Request, db: DatabaseConnector = Depends(get_db)):
-    """
-    Procesa el callback de A360. Es idempotente: maneja correctamente los callbacks duplicados.
-    """
-    try:
+        dependencies=[Depends(verify_api_key)],
+    )
+    async def handle_callback(payload: CallbackPayload, request: Request, db: DatabaseConnector = Depends(get_db)):
+        """
+        Procesa el callback de A360. Es idempotente: maneja correctamente los callbacks duplicados.
+        """
         raw_payload = await request.body()
         payload_str = raw_payload.decode("utf-8")
-        logger.info(f"Callback recibido para DeploymentId: {payload.deployment_id}. Body: {payload_str}")
+        logger.info(f"Callback recibido para DeploymentId: {payload.deployment_id}")
 
         update_result = db.actualizar_ejecucion_desde_callback(
-            deployment_id=payload.deployment_id, estado_callback=payload.status, callback_payload_str=payload_str
+            deployment_id=payload.deployment_id,
+            estado_callback=payload.status,
+            callback_payload_str=payload_str,
         )
+        try:
+            if update_result == UpdateStatus.UPDATED:
+                return SuccessResponse(message="Callback procesado y estado actualizado.")
+            elif update_result == UpdateStatus.ALREADY_PROCESSED:
+                return SuccessResponse(message="La ejecución ya estaba en un estado final. No se realizaron cambios.")
+            elif update_result == UpdateStatus.NOT_FOUND:
+                return SuccessResponse(message=f"DeploymentId '{payload.deployment_id}' no encontrado.")
+            else:  # update_result == UpdateStatus.ERROR
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Ocurrió un error al intentar actualizar el estado en la base de datos.",
+                )
+        except HTTPException as http_exc:
+            raise http_exc
+        except Exception as e:
+            logger.error(f"Error inesperado no controlado en el endpoint de callback: {e}", exc_info=True)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor.")
 
-        # Esta lógica ahora funciona porque 'UpdateStatus' fue importado.
-        if update_result == UpdateStatus.UPDATED:
-            return SuccessResponse(message="Callback procesado y estado actualizado correctamente.")
+    @app.get("/health", tags=["Monitoring"], summary="Verifica el estado del servicio", response_model=SuccessResponse)
+    async def health_check():
+        """
+        Endpoint simple para verificar que el servicio está en línea.
+        """
+        return SuccessResponse(message="Servicio de Callback activo.")
 
-        elif update_result == UpdateStatus.ALREADY_PROCESSED:
-            return SuccessResponse(message="Callback recibido, pero la ejecución ya se encontraba en un estado final. No se realizaron cambios.")
-
-        elif update_result == UpdateStatus.NOT_FOUND:
-            return SuccessResponse(
-                message=f"Callback procesado, pero el DeploymentId '{payload.deployment_id}' no fue encontrado en la base de datos."
-            )
-
-        else:  # update_result == UpdateStatus.ERROR
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ocurrió un error al intentar actualizar el estado en la base de datos."
-            )
-
-    except HTTPException as http_exc:
-        raise http_exc
-    except Exception as e:
-        logger.error(f"Error inesperado no controlado en el endpoint de callback: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor.")
-
-
-@app.get("/health", tags=["Monitoring"], summary="Verifica el estado del servicio", response_model=SuccessResponse)
-async def health_check():
-    """
-    Endpoint simple para verificar que el servicio está en línea.
-    """
-    return SuccessResponse(message="Servicio de Callback activo.")
+    return app
