@@ -75,5 +75,5 @@ Feature: Gestión Dinámica de Recursos RPA (Servicio Balanceador)
 
     Then el sistema detecta que un equipo podría ser considerado excedente
     But el robot se encuentra dentro de su "período de enfriamiento" (cooling period)
+    And la disminución de la carga no supera el umbral de cambio drástico
     And por lo tanto, el equipo NO es desasignado para mantener la estabilidad
-    And el balanceador registrará en los logs que la desasignación fue omitida por el CoolingManager
