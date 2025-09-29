@@ -1,5 +1,4 @@
 # src/web/api.py
-
 import logging
 from typing import Dict, Optional
 
@@ -9,7 +8,7 @@ from common.database.sql_client import DatabaseConnector
 
 # Importa los servicios desde el archivo local de base de datos
 from . import database as db_service
-from .dependencies import get_db_connector
+from .dependencies import get_db
 
 # Importa los schemas desde el archivo local de schemas
 # Agrega estas importaciones al inicio de web/backend/api.py
@@ -17,14 +16,13 @@ from .schemas import AssignmentUpdateRequest, PoolAssignmentsRequest, PoolCreate
 
 logger = logging.getLogger(__name__)
 
-
 # --- Define un ÚNICO router para toda la API ---
 router = APIRouter()
 
 
 # Agrega esta ruta en api.py
 @router.post("/api/sync", tags=["Sincronización"])
-async def trigger_sync(db: DatabaseConnector = Depends(get_db_connector)):
+async def trigger_sync(db: DatabaseConnector = Depends(get_db)):
     """
     Dispara el proceso de sincronización manual con Automation Anywhere A360.
     """
@@ -40,7 +38,7 @@ async def trigger_sync(db: DatabaseConnector = Depends(get_db_connector)):
 # --- Rutas para Robots ---
 @router.get("/api/robots", tags=["Robots"])
 def get_robots_with_assignments(
-    db: DatabaseConnector = Depends(get_db_connector),
+    db: DatabaseConnector = Depends(get_db),
     name: Optional[str] = None,
     active: Optional[bool] = None,
     online: Optional[bool] = None,
@@ -56,7 +54,7 @@ def get_robots_with_assignments(
 
 
 @router.patch("/api/robots/{robot_id}", tags=["Robots"])
-def update_robot_status(robot_id: int, updates: Dict[str, bool] = Body(...), db: DatabaseConnector = Depends(get_db_connector)):
+def update_robot_status(robot_id: int, updates: Dict[str, bool] = Body(...), db: DatabaseConnector = Depends(get_db)):
     try:
         field_to_update = next(iter(updates))
         if field_to_update not in ["Activo", "EsOnline"]:
@@ -70,7 +68,7 @@ def update_robot_status(robot_id: int, updates: Dict[str, bool] = Body(...), db:
 
 
 @router.put("/api/robots/{robot_id}", tags=["Robots"])
-def update_robot_details(robot_id: int, robot_data: RobotUpdateRequest, db: DatabaseConnector = Depends(get_db_connector)):
+def update_robot_details(robot_id: int, robot_data: RobotUpdateRequest, db: DatabaseConnector = Depends(get_db)):
     try:
         updated_count = db_service.update_robot_details(db, robot_id, robot_data)
         if updated_count > 0:
@@ -82,7 +80,7 @@ def update_robot_details(robot_id: int, robot_data: RobotUpdateRequest, db: Data
 
 
 @router.post("/api/robots/{robot_id}", tags=["Robots"], status_code=201)
-def create_robot(robot_data: RobotCreateRequest, db: DatabaseConnector = Depends(get_db_connector)):
+def create_robot(robot_data: RobotCreateRequest, db: DatabaseConnector = Depends(get_db)):
     try:
         new_robot = db_service.create_robot(db, robot_data)
         if not new_robot:
@@ -97,7 +95,7 @@ def create_robot(robot_data: RobotCreateRequest, db: DatabaseConnector = Depends
 # router = APIRouter(tags=["Programaciones"])
 # --- Rutas para Programaciones ---
 @router.get("/api/robots/{robot_id}/programaciones", tags=["Programaciones"])
-def get_robot_schedules(robot_id: int, db: DatabaseConnector = Depends(get_db_connector)):
+def get_robot_schedules(robot_id: int, db: DatabaseConnector = Depends(get_db)):
     try:
         return db_service.get_schedules_for_robot(db, robot_id)
     except Exception as e:
@@ -105,7 +103,7 @@ def get_robot_schedules(robot_id: int, db: DatabaseConnector = Depends(get_db_co
 
 
 @router.delete("/api/robots/{robot_id}/programaciones/{programacion_id}", tags=["Programaciones"], status_code=204)
-def delete_schedule(robot_id: int, programacion_id: int, db: DatabaseConnector = Depends(get_db_connector)):
+def delete_schedule(robot_id: int, programacion_id: int, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.delete_schedule_full(db, programacion_id, robot_id)
         # No se devuelve contenido en un 204
@@ -114,7 +112,7 @@ def delete_schedule(robot_id: int, programacion_id: int, db: DatabaseConnector =
 
 
 @router.post("/api/programaciones", tags=["Programaciones"])
-def create_schedule(data: ScheduleData, db: DatabaseConnector = Depends(get_db_connector)):
+def create_schedule(data: ScheduleData, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.create_new_schedule(db, data)
         return {"message": "Programación creada con éxito."}
@@ -125,7 +123,7 @@ def create_schedule(data: ScheduleData, db: DatabaseConnector = Depends(get_db_c
 
 
 @router.put("/api/programaciones/{programacion_id}", tags=["Programaciones"])
-def update_schedule(programacion_id: int, data: ScheduleData, db: DatabaseConnector = Depends(get_db_connector)):
+def update_schedule(programacion_id: int, data: ScheduleData, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.update_existing_schedule(db, programacion_id, data)
         return {"message": "Programación actualizada con éxito"}
@@ -138,7 +136,7 @@ def update_schedule(programacion_id: int, data: ScheduleData, db: DatabaseConnec
 # router = APIRouter(prefix="/api/equipos", tags=["Equipos"])
 # --- Rutas para Equipos ---
 @router.get("/api/equipos/disponibles/{robot_id}", tags=["Equipos"])
-def get_available_teams(robot_id: int, db: DatabaseConnector = Depends(get_db_connector)):
+def get_available_teams(robot_id: int, db: DatabaseConnector = Depends(get_db)):
     """
     Obtiene la lista de equipos disponibles para ser asignados a un robot.
     """
@@ -150,7 +148,7 @@ def get_available_teams(robot_id: int, db: DatabaseConnector = Depends(get_db_co
 
 # router = APIRouter(prefix="/api/robots/{robot_id}/asignaciones", tags=["Asignaciones"])
 @router.get("/api/robots/{robot_id}/asignaciones", tags=["Asignaciones"])
-def get_robot_asignaciones(robot_id: int, db: DatabaseConnector = Depends(get_db_connector)):
+def get_robot_asignaciones(robot_id: int, db: DatabaseConnector = Depends(get_db)):
     try:
         return db_service.get_asignaciones_by_robot(db, robot_id)
     except Exception as e:
@@ -158,7 +156,7 @@ def get_robot_asignaciones(robot_id: int, db: DatabaseConnector = Depends(get_db
 
 
 @router.post("/api/robots/{robot_id}/asignaciones", tags=["Asignaciones"])
-def update_robot_asignaciones(robot_id: int, update_data: AssignmentUpdateRequest, db: DatabaseConnector = Depends(get_db_connector)):
+def update_robot_asignaciones(robot_id: int, update_data: AssignmentUpdateRequest, db: DatabaseConnector = Depends(get_db)):
     try:
         result = db_service.update_asignaciones_robot(db, robot_id, update_data.assign_team_ids, update_data.unassign_team_ids)
         return result
@@ -170,7 +168,7 @@ def update_robot_asignaciones(robot_id: int, update_data: AssignmentUpdateReques
 
 # --- Rutas para Pools ---
 @router.get("/api/pools", tags=["Pools"])
-def get_all_pools(db: DatabaseConnector = Depends(get_db_connector)):
+def get_all_pools(db: DatabaseConnector = Depends(get_db)):
     """
     Obtiene la lista completa de pools de recursos.
     """
@@ -187,7 +185,7 @@ def get_all_pools(db: DatabaseConnector = Depends(get_db_connector)):
 
 
 @router.post("/api/pools", tags=["Pools"], status_code=201)
-def create_new_pool(pool_data: PoolCreate, db: DatabaseConnector = Depends(get_db_connector)):
+def create_new_pool(pool_data: PoolCreate, db: DatabaseConnector = Depends(get_db)):
     """
     Crea un nuevo pool de recursos.
     """
@@ -204,7 +202,7 @@ def create_new_pool(pool_data: PoolCreate, db: DatabaseConnector = Depends(get_d
 
 
 @router.put("/api/pools/{pool_id}", tags=["Pools"])
-def update_existing_pool(pool_id: int, pool_data: PoolUpdate, db: DatabaseConnector = Depends(get_db_connector)):
+def update_existing_pool(pool_id: int, pool_data: PoolUpdate, db: DatabaseConnector = Depends(get_db)):
     """
     Actualiza un pool de recursos existente.
     """
@@ -237,7 +235,7 @@ def update_existing_pool(pool_id: int, pool_data: PoolUpdate, db: DatabaseConnec
 
 
 @router.delete("/api/pools/{pool_id}", tags=["Pools"], status_code=204)
-def delete_single_pool(pool_id: int, db: DatabaseConnector = Depends(get_db_connector)):
+def delete_single_pool(pool_id: int, db: DatabaseConnector = Depends(get_db)):
     """
     Elimina un pool de recursos específico.
     """
@@ -254,7 +252,7 @@ def delete_single_pool(pool_id: int, db: DatabaseConnector = Depends(get_db_conn
 
 
 @router.get("/api/pools/{pool_id}/asignaciones", tags=["Pools"])
-def get_pool_assignments(pool_id: int, db: DatabaseConnector = Depends(get_db_connector)):
+def get_pool_assignments(pool_id: int, db: DatabaseConnector = Depends(get_db)):
     """
     Obtiene los recursos asignados y disponibles para un pool específico.
     """
@@ -266,7 +264,7 @@ def get_pool_assignments(pool_id: int, db: DatabaseConnector = Depends(get_db_co
 
 
 @router.put("/api/pools/{pool_id}/asignaciones", tags=["Pools"])
-def set_pool_assignments(pool_id: int, data: PoolAssignmentsRequest, db: DatabaseConnector = Depends(get_db_connector)):
+def set_pool_assignments(pool_id: int, data: PoolAssignmentsRequest, db: DatabaseConnector = Depends(get_db)):
     """
     Establece (sobrescribe) las asignaciones de robots y equipos para un pool.
     """
