@@ -20,6 +20,7 @@ build/
 # Otros
 .DS_Store
 *copy*
+*copia*
 node_modules/
 tests/*
 test_*

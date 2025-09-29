@@ -136,7 +136,7 @@ class ConfigLoader:
     def _validate_critical_config(cls, service_name: str) -> None:
         """Valida que las configuraciones críticas estén presentes."""
         critical_vars = {
-            "lanzador": ["AA_URL", "AA_USER", "SQL_SAM_HOST", "SQL_SAM_DB_NAME"],
+            "lanzador": ["AA_CR_URL", "AA_CR_USER", "AA_CR_PWD","SQL_SAM_HOST", "SQL_SAM_DB_NAME"],
             "balanceador": ["SQL_SAM_HOST", "SQL_RPA360_HOST", "CLOUDERS_SSH_HOST"],
             "callback": ["CALLBACK_SERVER_HOST", "CALLBACK_SERVER_PORT"],
             "interfaz_web": ["SQL_SAM_HOST", "SQL_SAM_DB_NAME"],
