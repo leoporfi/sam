@@ -196,6 +196,7 @@ def delete_schedule_full(db: DatabaseConnector, programacion_id: int, robot_id: 
     query = "EXEC dbo.EliminarProgramacionCompleta @ProgramacionId = ?, @RobotId = ?"
     db.ejecutar_consulta(query, (programacion_id, robot_id), es_select=False)
 
+
 def create_new_schedule(db: DatabaseConnector, data: ScheduleData):
     """
     Crea una nueva programación llamando al Stored Procedure unificado y eficiente
@@ -235,6 +236,7 @@ def create_new_schedule(db: DatabaseConnector, data: ScheduleData):
 
     # 4. Ejecutar el Stored Procedure.
     db.ejecutar_consulta(query, params, es_select=False)
+
 
 def create_new_schedule_old(db: DatabaseConnector, data: ScheduleData):
     equipos_nombres_result = db.ejecutar_consulta(
@@ -418,9 +420,10 @@ async def sync_with_a360(db: DatabaseConnector) -> Dict:
         print("Paso 1: Conectando con Automation Anywhere y obteniendo datos...")
         aa_config = ConfigManager.get_aa_config()
         aa_client = AutomationAnywhereClient(
-            control_room_url=aa_config["url"],
-            username=aa_config["user"],
-            password=aa_config["pwd"],
+            control_room_url=aa_config["url_cr"],
+            username=aa_config["usuario"],
+            password=aa_config.get("pwd"),  # Usar .get() para la contraseña opcional
+            **aa_config,  # Pasar el resto de la configuración
         )
 
         devices_task = aa_client.obtener_devices()
