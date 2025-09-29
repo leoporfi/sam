@@ -1,4 +1,4 @@
-# common/clients/aa_client.py (Con Refresco de Token)
+# common/clients/aa_client.py (Con Refresco de Token y Lógica de Auth Mejorada)
 import asyncio
 import logging
 import re
@@ -22,7 +22,7 @@ class AutomationAnywhereClient:
 
     CONCILIADOR_BATCH_SIZE = 50  # Procesar de 50 en 50 para evitar timeouts
 
-    def __init__(self, control_room_url: str, username: str, password: str, **kwargs):
+    def __init__(self, control_room_url: str, username: str, password: Optional[str] = None, **kwargs):
         self.url_base = control_room_url.strip("/")
         self.username = username
         self.password = password
@@ -39,16 +39,27 @@ class AutomationAnywhereClient:
     # --- Métodos Internos: Gestión de Token y Peticiones ---
 
     async def _obtener_token(self, is_retry: bool = False):
-        """Obtiene un nuevo token de autenticación."""
-        # Este método se ejecuta dentro de un lock, por lo que es seguro.
+        """Obtiene un nuevo token de autenticación, priorizando apiKey sobre password."""
         if is_retry:
             logger.warning("Intentando obtener un nuevo token de A360...")
         else:
             logger.info("Obteniendo token de A360...")
 
-        payload = {"username": self.username, "password": self.password}
+        payload = {"username": self.username}
+
+        # Priorizar apiKey si está disponible y no es una cadena vacía
         if self.api_key:
             payload["apiKey"] = self.api_key
+            logger.info("Intentando autenticación con apiKey.")
+        # Si no hay apiKey, usar la contraseña como fallback
+        elif self.password:
+            payload["password"] = self.password
+            logger.info("Intentando autenticación con contraseña.")
+        else:
+            # Si no hay ni apiKey ni contraseña, es un error de configuración
+            error_msg = "Error de configuración: No se proporcionó ni AA_CR_API_KEY ni AA_CR_PWD para la autenticación en A360."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
         response = await self._client.post(self._ENDPOINT_AUTH_V2, json=payload)
         response.raise_for_status()
@@ -190,15 +201,20 @@ class AutomationAnywhereClient:
                     {"operator": "substring", "field": "path", "value": "RPA"},
                     {"operator": "eq", "field": "type", "value": "application/vnd.aa.taskbot"},
                 ],
-            },"sort": [{"field": "id", "direction": "desc"}]
+            },
+            "sort": [{"field": "id", "direction": "desc"}],
         }
         robots_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_FILES_LIST_V2, payload)
 
-        patron_nombre = re.compile(r"^(P|CP)\S+[0-9]+_.+$") # re.compile(r"^P[A-Z0-9]*[0-9].*_.*")
+        expression = r"^P[A-Z0-9]*[0-9].*_.*"  # ^(P|CP)\S+[0-9]+_.+$
+        patron_nombre = re.compile(expression)
         robots_mapeados = []
         for bot in robots_api:
             nombre = bot.get("name")
             if nombre and patron_nombre.match(nombre):
+                # Excluir robots que contienen "loop" en el nombre (insensible a mayúsculas/minúsculas)
+                if "loop" in nombre.lower():
+                    continue
                 robots_mapeados.append({"RobotId": bot.get("id"), "Robot": nombre, "Descripcion": bot.get("description")})
 
         logger.info(f"Se encontraron y filtraron {len(robots_mapeados)} robots.")
@@ -224,7 +240,7 @@ class AutomationAnywhereClient:
                 if batch_details:
                     all_details.extend(batch_details)
             except httpx.ReadTimeout as e:
-                logger.error(f"Timeout al procesar un lote de deployment IDs. Lote omitido. Error: {e}")
+                logger.error(f"Timeout ({self.api_timeout}s) al procesar un lote de {len(batch_ids)} deployment IDs. Lote omitido. IDs: {batch_ids}.")
             except Exception as e:
                 logger.error(f"Error inesperado al procesar un lote de deployment IDs. Lote omitido. Error: {e}", exc_info=True)
 
@@ -238,13 +254,16 @@ class AutomationAnywhereClient:
         payload = dict(fileId=file_id, runAsUserIds=user_ids)
         if bot_input:
             payload["botInput"] = bot_input
+
+        # Crear la sección callbackInfo solo si se ha definido una URL de callback.
         if self.callback_url_deploy:
-            payload["callbackInfo"] = dict(url=self.callback_url_deploy)
+            payload["callbackInfo"] = {"url": self.callback_url_deploy}
             logger.debug(f"Callback URL de despliegue configurada: {self.callback_url_deploy}")
-        # Si se proporcionan cabeceras de autorización, las añadimos
-        if callback_auth_headers:
-            payload["callbackInfo"]["headers"] = callback_auth_headers
-            logger.debug("Cabeceras de autorización añadidas al callback.")
+
+            # Si además hay cabeceras, las añadimos al objeto ya creado.
+            if callback_auth_headers:
+                payload["callbackInfo"]["headers"] = callback_auth_headers
+                logger.debug("Cabeceras de autorización añadidas al callback.")
 
         try:
             logger.debug(f"Payload de despliegue: {payload}")
@@ -254,12 +273,6 @@ class AutomationAnywhereClient:
         except Exception as e:
             logger.error(f"Fallo en el despliegue del bot {file_id}: {e}", exc_info=True)
             return {"error": str(e)}
-
-    async def close(self):
-        """Cierra la sesión del cliente httpx de forma segura."""
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
-            logger.info("Cliente API de A360 cerrado.")
 
     async def desplegar_bot_v4(
         self, file_id: int, user_ids: List[int], bot_input: Optional[Dict] = None, callback_auth_headers: Optional[Dict[str, str]] = None
@@ -271,13 +284,16 @@ class AutomationAnywhereClient:
 
         if bot_input:
             payload["botInput"] = bot_input
+
+        # Crear la sección callbackInfo solo si se ha definido una URL de callback.
         if self.callback_url_deploy:
-            payload["callbackInfo"] = dict(url=self.callback_url_deploy)
+            payload["callbackInfo"] = {"url": self.callback_url_deploy}
             logger.debug(f"Callback URL de despliegue configurada: {self.callback_url_deploy}")
-        # Si se proporcionan cabeceras de autorización, las añadimos
-        if callback_auth_headers:
-            payload["callbackInfo"]["headers"] = callback_auth_headers
-            logger.debug("Cabeceras de autorización añadidas al callback.")
+
+            # Si además hay cabeceras, las añadimos al objeto ya creado.
+            if callback_auth_headers:
+                payload["callbackInfo"]["headers"] = callback_auth_headers
+                logger.debug("Cabeceras de autorización añadidas al callback.")
 
         try:
             logger.debug(f"Payload de despliegue: {payload}")
