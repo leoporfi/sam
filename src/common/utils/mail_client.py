@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class EmailAlertClient:
     def __init__(self, service_name: str = "SAM"):
         # ConfigManager se importa desde common.utils.config_manager
-        config = ConfigManager.get_email_config("EMAIL")  # Usar prefijo "EMAIL" o el que corresponda
+        config = ConfigManager.get_email_config()
 
         self.smtp_server = config["smtp_server"]
         self.smtp_port = config["smtp_port"]

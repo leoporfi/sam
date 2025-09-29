@@ -12,6 +12,35 @@ from src.common.utils.config_manager import ConfigManager
 _is_configured = False
 
 
+class RelativePathFormatter(logging.Formatter):
+    """
+    Un formateador de logs que acorta el path del módulo para mayor legibilidad.
+    Transforma 'src.balanceador.service.main' en 'service.main'.
+    """
+
+    def __init__(self, *args, service_name: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.service_name = service_name
+        self.common_prefix = "src.common."
+        self.service_prefix = f"src.{service_name}."
+
+    def format(self, record):
+        # Hacemos una copia para no modificar el registro original
+        original_name = record.name
+
+        if original_name.startswith(self.service_prefix):
+            record.name = original_name[len(self.service_prefix) :]
+        elif original_name.startswith(self.common_prefix):
+            record.name = original_name[len(self.common_prefix) :]
+
+        # Llamamos al formateador original con el nombre modificado
+        result = super().format(record)
+
+        # Restauramos el nombre original por si el registro se usa en otro lugar
+        record.name = original_name
+        return result
+
+
 class RobustTimedRotatingFileHandler(TimedRotatingFileHandler):
     """
     Una versión más robusta de TimedRotatingFileHandler que maneja errores de permisos
@@ -33,41 +62,24 @@ class RobustTimedRotatingFileHandler(TimedRotatingFileHandler):
 def setup_logging(service_name: str):
     """
     Configura el logger raíz para un servicio específico.
-    Esta función debe ser llamada UNA SOLA VEZ al inicio del servicio.
-
-    Args:
-        service_name: El nombre del servicio (ej. 'lanzador', 'balanceador').
     """
     global _is_configured
     if _is_configured:
         return
 
-    # 1. Obtener la configuración de logging y del servicio específico
     log_config = ConfigManager.get_log_config()
-
-    # Mapeo de service_name a la clave de nombre de archivo en la configuración
-    filename_key_map = {
-        "lanzador": "app_log_filename_lanzador",
-        "balanceador": "app_log_filename_balanceador",
-        "callback": "callback_log_filename",
-        "interfaz_web": "interfaz_web_log_filename",
-    }
-
-    log_filename = log_config.get(filename_key_map.get(service_name, f"sam_{service_name}_app.log"))
+    log_filename = log_config.get(f"app_log_filename_{service_name}", f"sam_{service_name}_app.log")
     log_directory = Path(log_config.get("directory", "C:/RPA/Logs/SAM"))
     log_file_path = log_directory / log_filename
-
-    # Crear el directorio de logs si no existe
     log_directory.mkdir(parents=True, exist_ok=True)
 
-    # 2. Configurar el formateador
-    log_formatter = logging.Formatter(
+    # CORREGIDO: Usamos nuestro nuevo formateador personalizado
+    log_formatter = RelativePathFormatter(
         fmt=log_config.get("format"),
         datefmt=log_config.get("datefmt"),
+        service_name=service_name,  # Le pasamos el nombre del servicio
     )
 
-    # 3. Configurar los handlers
-    # Handler para escribir en archivo con rotación
     file_handler = RobustTimedRotatingFileHandler(
         filename=log_file_path,
         when=log_config.get("when", "midnight"),
@@ -77,20 +89,18 @@ def setup_logging(service_name: str):
     )
     file_handler.setFormatter(log_formatter)
 
-    # Handler para mostrar logs en la consola
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(log_formatter)
 
-    # 4. Configurar el logger raíz
     root_logger = logging.getLogger()
     root_logger.setLevel(log_config.get("level_str", "INFO").upper())
 
-    # Limpiar handlers existentes para evitar duplicados
-    root_logger.handlers.clear()
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
 
-    # Añadir los nuevos handlers
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
     _is_configured = True
-    logging.info(f"Logging configurado para el servicio '{service_name}'. Los logs se guardarán en: {log_file_path}")
+    # Usamos print para este mensaje inicial, ya que el logger acaba de ser configurado.
+    print(f"Logging configurado para el servicio '{service_name}'. Los logs se guardarán en: {log_file_path}")
