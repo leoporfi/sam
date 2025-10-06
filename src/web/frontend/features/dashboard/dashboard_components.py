@@ -1,20 +1,20 @@
-# /src/web/frontend/features/dashboard/dashboard_components.py
+# /src/web/features/dashboard/dashboard_components.py
 
 from typing import Callable, Dict, List
 
-from backend.schemas import Robot
 from reactpy import component, event, html, use_state
+
+# Corregimos la importación para que sea absoluta desde la raíz 'src'
+from web.backend.schemas import Robot
 
 from ...shared.common_components import LoadingSpinner, Pagination
 
 
 @component
 def DashboardControls(
-    # Props para los botones de acción
     is_syncing: bool,
     on_sync: Callable,
     on_create_robot: Callable,
-    # Props para los filtros
     search_term: str,
     on_search_change: Callable,
     active_filter: str,
@@ -23,84 +23,74 @@ def DashboardControls(
     on_online_change: Callable,
     is_searching: bool,
 ):
-    """
-    Componente que encapsula todos los controles superiores del dashboard,
-    con un layout responsivo avanzado usando CSS Grid.
-    """
+    """Controles para el dashboard de Robots (título, botones, filtros)."""
     is_expanded, set_is_expanded = use_state(False)
 
+    collapsible_panel_class = "collapsible-panel"
+    if is_expanded:
+        collapsible_panel_class += " is-expanded"
+
     return html.div(
-        {"style": {"display": "flex", "flexDirection": "column", "gap": "1rem"}},
-        # --- Fila No Colapsable (Título y Botón de Toggle) ---
+        {"class_name": "dashboard-controls"},
         html.div(
-            {"style": {"display": "flex", "justifyContent": "space-between", "alignItems": "center"}},
+            {"class_name": "controls-header"},
             html.h2("Gestión de Robots"),
-            html.div(
-                {"className": "mobile-controls-toggle"},
-                html.button(
-                    {"onClick": lambda e: set_is_expanded(not is_expanded), "className": "secondary outline"},
-                    html.i({"className": f"fa-solid {'fa-chevron-up' if is_expanded else 'fa-filter'}"}),
-                    " Controles",
-                ),
+            html.button(
+                {
+                    "class_name": "mobile-controls-toggle outline secondary",
+                    "on_click": lambda e: set_is_expanded(not is_expanded),
+                },
+                html.i({"class_name": f"fa-solid fa-chevron-{'up' if is_expanded else 'down'}"}),
+                " Controles",
             ),
         ),
-        # --- Panel Colapsable ---
         html.div(
-            {"className": f"collapsible-panel {'is-expanded' if is_expanded else ''}"},
-            # --- Nuevo Master Grid para todos los controles ---
+            {"class_name": collapsible_panel_class},
+            # Simplificamos la estructura para el CSS Grid
             html.div(
-                {"className": "master-controls-grid"},
-                # 1. Buscador (Ocupará el 50% en escritorio)
+                {"class_name": "master-controls-grid"},
                 html.input(
                     {
                         "type": "search",
-                        "className": "search-input",
                         "placeholder": "Buscar robots por nombre...",
                         "value": search_term,
-                        "onChange": lambda event: on_search_change(event["target"]["value"]),
+                        "on_change": lambda event: on_search_change(event["target"]["value"]),
                         "aria-busy": str(is_searching).lower(),
+                        "class_name": "search-input",  # Clase específica para el buscador
                     }
                 ),
-                # 2. Filtro de Activo
                 html.select(
                     {
-                        "className": "filter-select-active",
                         "value": active_filter,
-                        "onChange": lambda event: on_active_change(event["target"]["value"]),
+                        "on_change": lambda event: on_active_change(event["target"]["value"]),
                     },
                     html.option({"value": "all"}, "Activo: Todos"),
                     html.option({"value": "true"}, "Solo Activos"),
                     html.option({"value": "false"}, "Solo Inactivos"),
                 ),
-                # 3. Filtro de Online
                 html.select(
                     {
-                        "className": "filter-select-online",
                         "value": online_filter,
-                        "onChange": lambda event: on_online_change(event["target"]["value"]),
+                        "on_change": lambda event: on_online_change(event["target"]["value"]),
                     },
                     html.option({"value": "all"}, "Online: Todos"),
                     html.option({"value": "true"}, "Solo Online"),
                     html.option({"value": "false"}, "Solo No Online"),
                 ),
-                # 4. Contenedor de Botones
-                html.div(
-                    {"className": "action-buttons-container"},
-                    html.button(
-                        {
-                            "onClick": on_sync,
-                            "disabled": is_syncing,
-                            "aria-busy": str(is_syncing).lower(),
-                            "className": "secondary-ghost",
-                        },
-                        html.i({"className": "fa-solid fa-refresh"}),
-                        " Sincronizar",
-                    ),
-                    html.button(
-                        {"onClick": on_create_robot},
-                        html.i({"className": "fa-solid fa-plus"}),
-                        " Añadir",
-                    ),
+                html.button(
+                    {
+                        "on_click": on_sync,
+                        "disabled": is_syncing,
+                        "aria-busy": str(is_syncing).lower(),
+                        "class_name": "secondary-ghost",
+                    },
+                    html.i({"class_name": "fa-solid fa-refresh"}),
+                    " Sincronizar",
+                ),
+                html.button(
+                    {"on_click": on_create_robot},
+                    html.i({"class_name": "fa-solid fa-plus"}),
+                    " Añadir Robot",
                 ),
             ),
         ),
@@ -108,43 +98,34 @@ def DashboardControls(
 
 
 @component
-def RobotDashboard(robots_state: dict, on_action: Callable):
-    """
-    Componente presentacional para el dashboard de robots.
-    Ahora renderiza tanto la tabla como la vista de tarjetas.
-    """
-    robots = robots_state["robots"]
+def RobotDashboard(robots: List[Robot], on_action: Callable, robots_state: Dict, set_current_page: Callable):
+    """Componente principal que ahora solo renderiza la tabla/tarjetas y la paginación."""
     loading = robots_state["loading"]
     error = robots_state["error"]
+    current_page = robots_state["current_page"]
+    total_pages = robots_state["total_pages"]
 
     if error:
-        return html.article({"aria-invalid": "true"}, f"Error al cargar datos: {error}")
+        return html.article({"aria_invalid": "true"}, f"Error al cargar datos: {error}")
     if loading and not robots:
         return LoadingSpinner()
 
-    table_view = RobotTable(
-        robots=robots,
-        on_action=on_action,
-        sort_by=robots_state["sort_by"],
-        sort_dir=robots_state["sort_dir"],
-        on_sort=robots_state["handle_sort"],
-    )
-
-    card_view = html.div(
-        {"className": "cards-container grid"},
-        *[RobotCard(robot=robot, on_action=on_action) for robot in robots] if robots else html.p("No se encontraron robots."),
-    )
-
-    return html.div(
-        html.div({"className": "table-container"}, table_view),
-        html.div({"className": "cards-container"}, card_view),
-        Pagination(
-            current_page=robots_state["current_page"],
-            total_pages=robots_state["total_pages"],
-            on_page_change=robots_state["set_current_page"],
-        )
-        if robots_state["total_pages"] > 1
-        else None,
+    return html._(
+        html.div(
+            {"class_name": "cards-container robot-cards"},
+            *[RobotCard(robot=robot, on_action=on_action) for robot in robots],
+        ),
+        html.div(
+            {"class_name": "table-container"},
+            RobotTable(
+                robots=robots,
+                on_action=on_action,
+                sort_by=robots_state["sort_by"],
+                sort_dir=robots_state["sort_dir"],
+                on_sort=robots_state["handle_sort"],
+            ),
+        ),
+        Pagination(current_page=current_page, total_pages=total_pages, on_page_change=set_current_page) if total_pages > 1 else None,
     )
 
 
@@ -165,16 +146,14 @@ def RobotTable(robots: List[Robot], on_action: Callable, sort_by: str, sort_dir:
         is_sortable = header_info.get("sortable", True)
         if not is_sortable:
             return html.th(header_info["label"])
-
         sort_indicator = ""
         is_current_sort_col = sort_by == header_info["key"]
         if is_current_sort_col:
             sort_indicator = " ▲" if sort_dir == "asc" else " ▼"
-
         return html.th(
             {"scope": "col"},
             html.a(
-                {"href": "#", "onClick": event(lambda e: on_sort(header_info["key"]), prevent_default=True)},
+                {"href": "#", "on_click": event(lambda e: on_sort(header_info["key"]), prevent_default=True)},
                 header_info["label"],
                 sort_indicator,
             ),
@@ -187,29 +166,19 @@ def RobotTable(robots: List[Robot], on_action: Callable, sort_by: str, sort_dir:
                 *[RobotRow(robot=robot, on_action=on_action) for robot in robots]
                 if robots
                 else html.tr(
-                    html.td({"colSpan": len(table_headers), "style": {"textAlign": "center", "padding": "2rem"}}, "No se encontraron robots.")
+                    html.td({"col_span": len(table_headers), "style": {"text_align": "center", "padding": "2rem"}}, "No se encontraron robots.")
                 )
             ),
-        ),
+        )
     )
 
 
 @component
 def RobotRow(robot: Robot, on_action: Callable):
-    async def handle_toggle_active(event):
-        await on_action("toggle_active", robot)
-
-    async def handle_toggle_online(event):
-        await on_action("toggle_online", robot)
-
-    async def handle_edit(event):
-        await on_action("edit", robot)
-
-    async def handle_assign(event):
-        await on_action("assign", robot)
-
-    async def handle_schedule(event):
-        await on_action("schedule", robot)
+    # async def handle_action(action_name: str, event_data=None):
+    #     await on_action(action_name, robot)
+    def handle_action(action_name: str):
+        on_action(action_name, robot)
 
     return html.tr(
         {"key": robot["RobotId"]},
@@ -217,12 +186,30 @@ def RobotRow(robot: Robot, on_action: Callable):
         html.td(robot.get("CantidadEquiposAsignados", 0)),
         html.td(
             html.fieldset(
-                html.label(html.input({"type": "checkbox", "role": "switch", "checked": robot["Activo"], "onChange": handle_toggle_active}))
+                html.label(
+                    html.input(
+                        {
+                            "type": "checkbox",
+                            "role": "switch",
+                            "checked": robot["Activo"],
+                            "on_change": event(lambda e: handle_action("toggle_active")),
+                        }
+                    )
+                )
             )
         ),
         html.td(
             html.fieldset(
-                html.label(html.input({"type": "checkbox", "role": "switch", "checked": robot["EsOnline"], "onChange": handle_toggle_online}))
+                html.label(
+                    html.input(
+                        {
+                            "type": "checkbox",
+                            "role": "switch",
+                            "checked": robot["EsOnline"],
+                            "on_change": event(lambda e: handle_action("toggle_online")),
+                        }
+                    )
+                )
             )
         ),
         html.td("Programado" if robot.get("TieneProgramacion") else "A Demanda"),
@@ -230,24 +217,34 @@ def RobotRow(robot: Robot, on_action: Callable):
         html.td(str(robot.get("TicketsPorEquipoAdicional", "N/A"))),
         html.td(
             html.div(
-                {"className": "grid"},
+                {"class_name": "grid"},
                 html.a(
-                    {"href": "#", "onClick": event(handle_edit, prevent_default=True), "data-tooltip": "Editar Robot", "className": "secondary"},
-                    html.i({"className": "fa-solid fa-pencil"}),
-                ),
-                html.a(
-                    {"href": "#", "onClick": event(handle_assign, prevent_default=True), "data-tooltip": "Asignar Equipos", "className": "secondary"},
-                    html.i({"className": "fa-solid fa-users"}),
+                    {
+                        "href": "#",
+                        "on_click": event(lambda e: handle_action("edit"), prevent_default=True),
+                        "data-tooltip": "Editar Robot",
+                        "class_name": "secondary",
+                    },
+                    html.i({"class_name": "fa-solid fa-pencil"}),
                 ),
                 html.a(
                     {
                         "href": "#",
-                        "onClick": event(handle_schedule, prevent_default=True),
+                        "on_click": event(lambda e: handle_action("assign"), prevent_default=True),
+                        "data-tooltip": "Asignar Equipos",
+                        "class_name": "secondary",
+                    },
+                    html.i({"class_name": "fa-solid fa-users"}),
+                ),
+                html.a(
+                    {
+                        "href": "#",
+                        "on_click": event(lambda e: handle_action("schedule"), prevent_default=True),
                         "data-tooltip": "Programar Tareas",
                         "data-placement": "left",
-                        "className": "secondary",
+                        "class_name": "secondary",
                     },
-                    html.i({"className": "fa-solid fa-clock"}),
+                    html.i({"class_name": "fa-solid fa-clock"}),
                 ),
             )
         ),
@@ -256,57 +253,51 @@ def RobotRow(robot: Robot, on_action: Callable):
 
 @component
 def RobotCard(robot: Robot, on_action: Callable):
-    """
-    Nuevo componente para mostrar un robot en formato de tarjeta.
-    """
-
-    async def handle_toggle_active(event):
-        await on_action("toggle_active", robot)
-
-    async def handle_toggle_online(event):
-        await on_action("toggle_online", robot)
-
-    async def handle_edit(event):
-        await on_action("edit", robot)
-
-    async def handle_assign(event):
-        await on_action("assign", robot)
-
-    async def handle_schedule(event):
-        await on_action("schedule", robot)
+    # async def handle_action(action_name: str, event_data=None):
+    #     await on_action(action_name, robot)
+    def handle_action(action_name: str):
+        on_action(action_name, robot)
 
     return html.article(
-        {"className": "robot-card"},
-        html.header(
-            html.h3(robot["Robot"]),
+        {"key": robot["RobotId"], "class_name": "robot-card"},
+        html.div(
+            {"class_name": "robot-card-header"},
+            html.h5(robot["Robot"]),
         ),
         html.div(
-            {"className": "card-body"},
+            {"class_name": "robot-card-body"},
             html.div(
-                {"className": "status-switches"},
-                html.fieldset(
-                    html.label(
-                        html.input({"type": "checkbox", "role": "switch", "checked": robot["Activo"], "onChange": handle_toggle_active}), "Activo"
-                    )
+                {"class_name": "grid"},
+                html.label(
+                    html.input(
+                        {
+                            "type": "checkbox",
+                            "role": "switch",
+                            "checked": robot["Activo"],
+                            "on_change": event(lambda e: handle_action("toggle_active")),
+                        }
+                    ),
+                    "Activo",
                 ),
-                html.fieldset(
-                    html.label(
-                        html.input({"type": "checkbox", "role": "switch", "checked": robot["EsOnline"], "onChange": handle_toggle_online}), "Online"
-                    )
+                html.label(
+                    html.input(
+                        {
+                            "type": "checkbox",
+                            "role": "switch",
+                            "checked": robot["EsOnline"],
+                            "on_change": event(lambda e: handle_action("toggle_online")),
+                        }
+                    ),
+                    "Online",
                 ),
             ),
-            html.p(
-                html.strong("Equipos: "),
-                robot.get("CantidadEquiposAsignados", 0),
-            ),
-            html.p(
-                html.strong("Ejecución: "),
-                "Programado" if robot.get("TieneProgramacion") else "A Demanda",
-            ),
+            html.p(f"Equipos: {robot.get('CantidadEquiposAsignados', 0)}"),
+            html.p(f"Ejecución: {'Programado' if robot.get('TieneProgramacion') else 'A Demanda'}"),
         ),
         html.footer(
-            html.button({"className": "outline", "onClick": handle_edit}, "Editar"),
-            html.button({"className": "outline", "onClick": handle_assign}, "Asignar"),
-            html.button({"className": "outline", "onClick": handle_schedule}, "Programar"),
+            {"class_name": "robot-card-footer"},
+            html.button({"class_name": "outline secondary", "on_click": event(lambda e: handle_action("edit"))}, "Editar"),
+            html.button({"class_name": "outline secondary", "on_click": event(lambda e: handle_action("assign"))}, "Asignar"),
+            html.button({"class_name": "outline secondary", "on_click": event(lambda e: handle_action("schedule"))}, "Programar"),
         ),
     )
