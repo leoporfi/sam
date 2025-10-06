@@ -1,20 +1,15 @@
-# ---------------------------------------------------------------------------
-# ARCHIVO: src/interfaz_web/hooks/use_robots_hook.py
-# ---------------------------------------------------------------------------
-# NOTA: He añadido la lógica de sondeo (polling) para que los datos
-# se actualicen automáticamente cada 15 segundos.
-# ---------------------------------------------------------------------------
 import asyncio
 from typing import Dict
 
-from backend.schemas import RobotFilters
-from frontend.api_client import get_api_client
-from reactpy import use_callback, use_effect, use_memo, use_state
+from reactpy import component, event, html, use_callback, use_context, use_effect, use_memo, use_state
+
+from ..api_client import get_api_client
+from ..shared.notifications import NotificationContext
 
 # --- Constantes de configuración ---
 PAGE_SIZE = 20
 INITIAL_FILTERS = {"name": None, "active": True, "online": None}
-POLLING_INTERVAL_SECONDS = 15  # <--- NUEVO: Intervalo de actualización en segundos
+POLLING_INTERVAL_SECONDS = 15
 
 
 def use_robots():
@@ -23,10 +18,12 @@ def use_robots():
     filtrado, paginación, ordenación y actualización automática.
     """
     api_client = get_api_client()
+    notification_ctx = use_context(NotificationContext)
 
     # --- Estados del hook ---
     robots, set_robots = use_state([])
     loading, set_loading = use_state(True)
+    is_syncing, set_is_syncing = use_state(False)  # <-- NUEVO ESTADO
     error, set_error = use_state(None)
     total_count, set_total_count = use_state(0)
     filters, set_filters = use_state(INITIAL_FILTERS)
@@ -57,45 +54,49 @@ def use_robots():
         finally:
             set_loading(False)
 
-    # --- Efecto para la carga inicial y cuando cambian las dependencias ---
+    # --- NUEVA FUNCIÓN DE SINCRONIZACIÓN ---
+    @use_callback
+    async def trigger_sync():
+        if is_syncing:
+            return
+        set_is_syncing(True)
+        notification_ctx["show_notification"]("Iniciando sincronización con A360...", "info")
+        try:
+            summary = await api_client.trigger_sync()
+            notification_ctx["show_notification"](
+                f"Sincronización completa. Robots: {summary.get('robots_sincronizados', 0)}, Equipos: {summary.get('equipos_sincronizados', 0)}.",
+                "success",
+            )
+            await load_robots()  # Refresca la tabla después de sincronizar
+        except Exception as e:
+            notification_ctx["show_notification"](f"Error en la sincronización: {e}", "error")
+            set_error(f"Error en la sincronización: {e}")
+        finally:
+            set_is_syncing(False)
+
+    # --- Efectos y Manejadores ---
     use_effect(load_robots, [filters, current_page, sort_by, sort_dir])
 
-    # --- NUEVO: Efecto para la actualización automática (Polling) ---
+    # Polling effect (sin cambios)
     @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
     def setup_polling():
-        """
-        Este efecto establece un bucle que llama a `load_robots` periódicamente.
-        """
-        # Se crea una tarea asíncrona que se ejecutará en segundo plano.
         task = asyncio.ensure_future(polling_loop())
 
-        # La función de limpieza es crucial: se ejecuta cuando el componente
-        # se "desmonta" o cuando las dependencias cambian, cancelando la
-        # tarea anterior para evitar fugas de memoria o ejecuciones múltiples.
         def cleanup():
             task.cancel()
 
         return cleanup
 
     async def polling_loop():
-        """
-        Bucle infinito que espera el intervalo definido y luego recarga los datos.
-        """
         while True:
             await asyncio.sleep(POLLING_INTERVAL_SECONDS)
             try:
-                # No queremos que el spinner de "Cargando..." aparezca en cada
-                # actualización de fondo, por lo que no llamamos a set_loading(True) aquí.
-                # La recarga será silenciosa para el usuario.
                 await load_robots()
             except asyncio.CancelledError:
-                # Si la tarea se cancela, salimos del bucle limpiamente.
                 break
             except Exception as e:
-                # Si hay un error durante el polling, lo mostramos en el estado.
                 set_error(f"Error de actualización automática: {e}")
 
-    # --- Manejadores de eventos  ---
     def handle_sort(column_name: str):
         if sort_by == column_name:
             set_sort_dir("desc" if sort_dir == "asc" else "asc")
@@ -118,15 +119,18 @@ def use_robots():
 
     total_pages = use_memo(lambda: max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE), [total_count])
 
+    # --- Devolvemos los nuevos estados y funciones ---
     return {
         "robots": robots,
         "loading": loading,
+        "is_syncing": is_syncing,
         "error": error,
         "total_count": total_count,
         "filters": filters,
         "set_filters": handle_set_filters,
         "update_robot_status": update_robot_status,
         "refresh": load_robots,
+        "trigger_sync": trigger_sync,
         "current_page": current_page,
         "set_current_page": set_current_page,
         "total_pages": total_pages,
