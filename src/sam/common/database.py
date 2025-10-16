@@ -157,7 +157,6 @@ class DatabaseConnector:
                     raise
         return None
 
-    # ... (el resto de los métodos de la clase permanecen igual) ...
     def ejecutar_consulta_multiple(self, query: str, params_list: List[tuple]) -> int:
         if not params_list:
             return 0
