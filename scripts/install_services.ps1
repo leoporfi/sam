@@ -6,7 +6,7 @@
 $ErrorActionPreference = "Stop"
 
 # Configuración
-$projectRoot = "C:\RPA\rpa_sam"
+$projectRoot = "C:\RPA\sam"
 $pythonExe = "$projectRoot\.venv\Scripts\python.exe"
 $logDir = "C:\RPA\Logs\SAM"
 
