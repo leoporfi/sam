@@ -55,7 +55,27 @@ class DatabaseConnector:
             if not self._pool:
                 logger.info(f"Pool de conexiones vacío. Creando nueva conexión para {self.db_config_prefix}...")
                 return self.conectar_base_datos()
-            return self._pool.pop()
+
+            conn = self._pool.pop()
+            try:
+                # Ejecuta una consulta simple y rápida para validar la conexión.
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1")
+                cursor.close()
+                # Si la consulta tiene éxito, la conexión es válida.
+                return conn
+            except pyodbc.Error as e:
+                # Si la consulta falla, la conexión está obsoleta (stale).
+                logger.warning(
+                    f"Se detectó una conexión obsoleta a la BD ({self.db_config_prefix}). Descartándola y creando una nueva. Error: {e}"
+                )
+                # Cierra la conexión rota de forma segura.
+                try:
+                    conn.close()
+                except pyodbc.Error:
+                    pass  # La conexión ya podría estar cerrada.
+                # Crea y devuelve una conexión completamente nueva para reemplazar la rota.
+                return self.conectar_base_datos()
 
     def _devolver_conexion_al_pool(self, conn):
         with self._pool_lock:
