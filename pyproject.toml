@@ -13,6 +13,8 @@ dependencies = [
     "reactpy[fastapi]>=1.0.0",
     "schedule>=1.2.2",
     "reactpy-router>=0.0.1",
+    "pytz>=2025.2",
+    "python-dateutil>=2.9.0.post0",
 ]
 
 [project.optional-dependencies]
