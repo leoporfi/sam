@@ -254,11 +254,28 @@ class Balanceo:
             return False
         query = "INSERT INTO dbo.Asignaciones (RobotId, EquipoId, EsProgramado, Reservado, AsignadoPor) VALUES (?, ?, 0, 0, ?)"
         try:
+            # 1. Capturar estado ANTES del cambio
+            equipos_antes = len(estado_global["mapa_asignaciones_dinamicas"].get(robot_id, []))
+            tickets = estado_global["carga_trabajo_por_robot"].get(robot_id, 0)
+            pool_id = estado_global["mapa_config_robots"].get(robot_id, {}).get("PoolId")
+
+            # 2. Ejecutar la operación
             self.db_sam.ejecutar_consulta(query, (robot_id, equipo_id, motivo), es_select=False)
+
+            # 3. Actualizar el estado en memoria
             estado_global["mapa_asignaciones_dinamicas"].setdefault(robot_id, []).append(equipo_id)
-            self.cooling_manager.registrar_ampliacion(
-                robot_id, estado_global["carga_trabajo_por_robot"].get(robot_id, 0), 1
+
+            # 4. Registrar en histórico y Cooling Manager
+            self.historico_client.registrar_decision_balanceo(
+                robot_id=robot_id,
+                pool_id=pool_id,
+                tickets_pendientes=tickets,
+                equipos_antes=equipos_antes,
+                equipos_despues=equipos_antes + 1,
+                accion=motivo,
+                justificacion=justificacion,
             )
+            self.cooling_manager.registrar_ampliacion(robot_id, tickets, 1)
             return True
         except Exception as e:
             logger.error(f"Error al asignar RobotId {robot_id} a EquipoId {equipo_id}: {e}")
@@ -275,15 +292,32 @@ class Balanceo:
             return False
         query = "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ? AND (EsProgramado = 0 OR EsProgramado IS NULL) AND (Reservado = 0 OR Reservado IS NULL)"
         try:
+            # 1. Capturar estado ANTES del cambio
+            equipos_antes = len(estado_global["mapa_asignaciones_dinamicas"].get(robot_id, []))
+            tickets = estado_global["carga_trabajo_por_robot"].get(robot_id, 0)
+            pool_id = estado_global["mapa_config_robots"].get(robot_id, {}).get("PoolId")
+
+            # 2. Ejecutar la operación
             self.db_sam.ejecutar_consulta(query, (robot_id, equipo_id), es_select=False)
+
+            # 3. Actualizar el estado en memoria
             if (
                 robot_id in estado_global["mapa_asignaciones_dinamicas"]
                 and equipo_id in estado_global["mapa_asignaciones_dinamicas"][robot_id]
             ):
                 estado_global["mapa_asignaciones_dinamicas"][robot_id].remove(equipo_id)
-            self.cooling_manager.registrar_reduccion(
-                robot_id, estado_global["carga_trabajo_por_robot"].get(robot_id, 0), 1
+
+            # 4. Registrar en histórico y Cooling Manager
+            self.historico_client.registrar_decision_balanceo(
+                robot_id=robot_id,
+                pool_id=pool_id,
+                tickets_pendientes=tickets,
+                equipos_antes=equipos_antes,
+                equipos_despues=equipos_antes - 1,
+                accion=motivo,
+                justificacion=justificacion,
             )
+            self.cooling_manager.registrar_reduccion(robot_id, tickets, 1)
             return True
         except Exception as e:
             logger.error(f"Error al desasignar RobotId {robot_id} de EquipoId {equipo_id}: {e}")
