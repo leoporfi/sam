@@ -71,9 +71,13 @@ def get_db() -> DatabaseConnector:
         raise HTTPException(status_code=503, detail="La conexión a la base de datos no está disponible.")
     return db
 
-
 async def verify_api_key(x_authorization: str = Header(...)):
-    server_api_key = ConfigManager.get_callback_server_config().get("token", "")
+    server_api_key = ConfigManager.get_callback_server_config().get("token")
+    
+    if not server_api_key:
+        logger.critical("El token de seguridad (CALLBACK_TOKEN) no está configurado en el servidor.")
+        raise HTTPException(status_code=500, detail="Error de configuración interna del servidor.")
+
     if not hmac.compare_digest(server_api_key, x_authorization):
         raise HTTPException(status_code=401, detail="X-Authorization header inválido.")
 
