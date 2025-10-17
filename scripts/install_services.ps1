@@ -70,7 +70,7 @@ foreach ($svc in $services) {
     nssm set $svc.Name AppRotateFiles 1
     nssm set $svc.Name AppRotateOnline 1
     nssm set $svc.Name AppRotateBytes 10485760  # 10MB
-    nssm set $svc.Name Start SERVICE_AUTO_START
+    # nssm set $svc.Name Start SERVICE_AUTO_START
     
     Write-Host "  ✓ Instalado correctamente" -ForegroundColor Green
 }
