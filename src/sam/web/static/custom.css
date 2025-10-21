@@ -217,6 +217,183 @@ dialog[open] {
   color: white;
 }
 
+
+/* --- Tags de Estado de Equipos --- */
+.tag {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.tag-programado {
+  background-color: var(--pico-color-blue-500);
+  color: white;
+}
+
+.tag-reservado {
+  background-color: var(--pico-color-orange-500);
+  color: white;
+}
+
+.tag-dinamico {
+  background-color: var(--pico-color-green-500);
+  color: white;
+}
+
+/* --- Listas de Equipos en Modales --- */
+.device-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+}
+
+.device-list-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.device-list-header h5 {
+  margin-bottom: 0;
+}
+
+.device-list-table {
+  height: 35vh;
+  overflow-y: auto;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+}
+
+.device-list-table table {
+  margin-bottom: 0;
+  font-size: 0.90rem;
+}
+
+.device-list-table thead {
+  position: sticky;
+  top: 0;
+  background-color: var(--pico-background-color);
+  z-index: 1;
+  box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+.device-list-table thead th {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 2px solid var(--pico-muted-border-color);
+}
+
+.device-list-table tbody td {
+  padding: 0.75rem 0.5rem;
+  vertical-align: middle;
+}
+
+.device-list-table tbody tr:hover {
+  background-color: var(--pico-table-row-stripped-background-color);
+}
+
+/* --- Listas de Equipos en Modales --- */
+.device-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+}
+
+.device-list-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.device-list-header h5 {
+  margin-bottom: 0;
+}
+
+.device-list-table {
+  height: 35vh;
+  overflow-y: auto;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+}
+
+.device-list-table table {
+  margin-bottom: 0;
+  font-size: 0.90rem;
+}
+
+.device-list-table thead {
+  position: sticky;
+  top: 0;
+  background-color: var(--pico-background-color);
+  z-index: 1;
+  box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+.device-list-table thead th {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 2px solid var(--pico-muted-border-color);
+}
+
+.device-list-table tbody td {
+  padding: 0.75rem 0.5rem;
+  vertical-align: middle;
+}
+
+.device-list-table tbody tr:hover {
+  background-color: var(--pico-table-row-stripped-background-color);
+}
+
+/* --- Solapas (Tabs) --- */
+.tabs-container {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--pico-muted-border-color);
+  margin-bottom: 1.5rem;
+}
+
+.tab-button {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--pico-muted-color);
+  transition: all 0.2s ease;
+  margin-bottom: -2px;
+}
+
+.tab-button:hover {
+  background: none;
+  color: var(--pico-color);
+  border-bottom-color: var(--pico-muted-border-color);
+}
+
+.tab-button.active {
+  color: var(--pico-primary);
+  border-bottom-color: var(--pico-primary);
+  background: none;
+}
+
+.tab-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* --- Contenedor de Controles --- */
 .dashboard-controls {
   margin-bottom: var(--pico-typography-spacing-vertical); /* Añade espacio debajo de los controles */

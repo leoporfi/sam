@@ -95,7 +95,7 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
 
 
 @component
-def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callable):
+def PoolAssignmentsModal_old(pool: Dict, on_close: Callable, on_save_success: Callable):
     """Modal para asignar recursos (Robots y Equipos) a un pool."""
     api_client = get_api_client()
     notification_ctx = use_context(NotificationContext)
@@ -184,7 +184,127 @@ def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callab
                 html.div(
                     {"class_name": "grid"},
                     html.button({"class_name": "secondary", "on_click": lambda e: on_close()}, "Cancelar"),
-                    html.button({"on_click": handle_save}, "Guardar Cambios"),
+                    html.button({"on_click": handle_save}, "Guardar"),
+                )
+            ),
+        ),
+    )
+
+
+@component
+def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callable):
+    """Modal para asignar recursos (Robots y Equipos) a un pool."""
+    api_client = get_api_client()
+    notification_ctx = use_context(NotificationContext)
+    is_loading, set_is_loading = use_state(True)
+    active_tab, set_active_tab = use_state("robots")  # Nuevo estado para las solapas
+
+    available_robots, set_available_robots = use_state([])
+    assigned_robots, set_assigned_robots = use_state([])
+    available_equipos, set_available_equipos = use_state([])
+    assigned_equipos, set_assigned_equipos = use_state([])
+
+    # RFR-20: Se cambia el estado de 'set' a 'list' para evitar errores de serialización JSON.
+    selected_avail_robots, set_selected_avail_robots = use_state([])
+    selected_asgn_robots, set_selected_asgn_robots = use_state([])
+    selected_avail_equipos, set_selected_avail_equipos = use_state([])
+    selected_asgn_equipos, set_selected_asgn_equipos = use_state([])
+
+    @use_effect(dependencies=[pool])
+    def _load_data():
+        if not pool or not pool.get("PoolId"):
+            return
+
+        async def _fetch():
+            set_is_loading(True)
+            try:
+                data = await api_client.get_pool_assignments(pool["PoolId"])
+                set_available_robots([r for r in data.get("available", []) if r["Tipo"] == "Robot"])
+                set_assigned_robots([r for r in data.get("assigned", []) if r["Tipo"] == "Robot"])
+                set_available_equipos([e for e in data.get("available", []) if e["Tipo"] == "Equipo"])
+                set_assigned_equipos([e for e in data.get("assigned", []) if e["Tipo"] == "Equipo"])
+            except Exception as e:
+                notification_ctx["show_notification"](f"Error al cargar asignaciones: {e}", "error")
+            finally:
+                set_is_loading(False)
+
+        asyncio.create_task(_fetch())
+
+    if not pool:
+        return None
+
+    async def handle_save(e):
+        set_is_loading(True)
+        try:
+            robot_ids = [r["ID"] for r in assigned_robots]
+            team_ids = [eq["ID"] for eq in assigned_equipos]
+            await api_client.update_pool_assignments(pool["PoolId"], robot_ids, team_ids)
+            await on_save_success()
+            notification_ctx["show_notification"]("Asignaciones guardadas con éxito.", "success")
+            on_close()
+        except Exception as e:
+            notification_ctx["show_notification"](f"Error al guardar asignaciones: {e}", "error")
+        finally:
+            set_is_loading(False)
+
+    return html.dialog(
+        {"open": True, "style": {"maxWidth": "90vw", "width": "1200px"}},
+        html.article(
+            {"aria-busy": str(is_loading).lower()},
+            html.header(
+                html.button({"aria-label": "Close", "rel": "prev", "on_click": lambda e: on_close()}),
+                html.h3(f"Asignar Recursos a: {pool.get('Nombre')}"),
+            ),
+            # Solapas de navegación
+            html.div(
+                {"class_name": "tabs-container"},
+                html.button(
+                    {
+                        "class_name": "tab-button" + (" active" if active_tab == "robots" else ""),
+                        "on_click": lambda e: set_active_tab("robots"),
+                    },
+                    html.i({"class_name": "fa-solid fa-robot"}),
+                    " Robots",
+                ),
+                html.button(
+                    {
+                        "class_name": "tab-button" + (" active" if active_tab == "equipos" else ""),
+                        "on_click": lambda e: set_active_tab("equipos"),
+                    },
+                    html.i({"class_name": "fa-solid fa-computer"}),
+                    " Equipos",
+                ),
+            ),
+            # Contenido de las solapas
+            html.div(
+                {"class_name": "tab-content"},
+                AssignmentBox(
+                    available_items=available_robots,
+                    set_available_items=set_available_robots,
+                    assigned_items=assigned_robots,
+                    set_assigned_items=set_assigned_robots,
+                    selected_available_ids=selected_avail_robots,
+                    set_selected_available_ids=set_selected_avail_robots,
+                    selected_assigned_ids=selected_asgn_robots,
+                    set_selected_assigned_ids=set_selected_asgn_robots,
+                )
+                if active_tab == "robots"
+                else AssignmentBox(
+                    available_items=available_equipos,
+                    set_available_items=set_available_equipos,
+                    assigned_items=assigned_equipos,
+                    set_assigned_items=set_assigned_equipos,
+                    selected_available_ids=selected_avail_equipos,
+                    set_selected_available_ids=set_selected_avail_equipos,
+                    selected_assigned_ids=selected_asgn_equipos,
+                    set_selected_assigned_ids=set_selected_asgn_equipos,
+                ),
+            ),
+            html.footer(
+                html.div(
+                    {"class_name": "grid"},
+                    html.button({"class_name": "secondary", "on_click": lambda e: on_close()}, "Cancelar"),
+                    html.button({"on_click": handle_save}, "Guardar"),
                 )
             ),
         ),
@@ -226,8 +346,9 @@ def AssignmentBox(
                         set_selected_available_ids,
                     ),
                     "disabled": not selected_available_ids,
+                    "data-tooltip": "Asignar seleccionados",
                 },
-                "➡️",
+                html.i({"class_name": "fa-solid fa-arrow-right"}),
             ),
             html.button(
                 {
@@ -240,8 +361,9 @@ def AssignmentBox(
                         set_selected_assigned_ids,
                     ),
                     "disabled": not selected_assigned_ids,
+                    "data-tooltip": "Desasignar seleccionados",
                 },
-                "⬅️",
+                html.i({"class_name": "fa-solid fa-arrow-left"}),
             ),
         ),
         ResourceListBox("Asignados", assigned_items, selected_assigned_ids, set_selected_assigned_ids),
@@ -255,6 +377,8 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
     # RFR-20: Se usa un 'set' localmente para optimizar la comprobación 'in',
     # pero el estado principal que se recibe y se emite sigue siendo una lista.
     selected_ids_set = use_memo(lambda: set(selected_ids), [selected_ids])
+    all_item_ids = use_memo(lambda: [item["ID"] for item in items], [items])
+    are_all_selected = len(selected_ids) > 0 and all(item_id in selected_ids_set for item_id in all_item_ids)
 
     def handle_selection(item_id):
         current_selection = list(selected_ids)
@@ -264,31 +388,64 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
             current_selection.append(item_id)
         set_selected_ids(current_selection)
 
+    def handle_select_all(event):
+        if event["target"]["checked"]:
+            set_selected_ids(all_item_ids)
+        else:
+            set_selected_ids([])
+
     return html.div(
-        html.p(html.strong(title)),
+        {"class_name": "device-list-section"},
         html.div(
-            {
-                "style": {
-                    "height": "20vh",
-                    "overflowY": "auto",
-                    "border": "1px solid var(--pico-color-primary-300)",
-                    "padding": "0.5rem",
-                    "borderRadius": "var(--pico-border-radius)",
-                }
-            },
-            *[
-                html.label(
-                    {"key": item["ID"]},
-                    html.input(
-                        {
-                            "type": "checkbox",
-                            "checked": item["ID"] in selected_ids_set,
-                            "on_change": lambda e, i_id=item["ID"]: handle_selection(i_id),
-                        }
-                    ),
-                    item["Nombre"],
-                )
-                for item in sorted(items, key=lambda x: x["Nombre"])
-            ],
+            {"class_name": "device-list-header"},
+            html.h5(title),
+        ),
+        html.div(
+            {"class_name": "device-list-table"},
+            html.table(
+                {"role": "grid"},
+                html.thead(
+                    html.tr(
+                        html.th(
+                            {"scope": "col", "style": {"width": "40px"}},
+                            html.input(
+                                {
+                                    "type": "checkbox",
+                                    "checked": are_all_selected,
+                                    "on_change": handle_select_all,
+                                }
+                            ),
+                        ),
+                        html.th({"scope": "col"}, "Nombre"),
+                    )
+                ),
+                html.tbody(
+                    *[
+                        html.tr(
+                            {"key": item["ID"]},
+                            html.td(
+                                html.input(
+                                    {
+                                        "type": "checkbox",
+                                        "checked": item["ID"] in selected_ids_set,
+                                        "on_change": lambda e, i_id=item["ID"]: handle_selection(i_id),
+                                    }
+                                )
+                            ),
+                            html.td(item["Nombre"]),
+                        )
+                        for item in sorted(items, key=lambda x: x["Nombre"])
+                    ]
+                    if items
+                    else [
+                        html.tr(
+                            html.td(
+                                {"colSpan": 2, "style": {"text_align": "center"}},
+                                "No hay recursos disponibles.",
+                            )
+                        )
+                    ]
+                ),
+            ),
         ),
     )
