@@ -85,8 +85,8 @@ def RobotsControls(
                         "aria-busy": str(is_syncing).lower(),
                         "class_name": "secondary-ghost",
                     },
-                    html.i({"class_name": "fa-solid fa-refresh"}),
-                    " Sincronizar",
+                    html.i({"class_name": "fa-solid fa-refresh"}) if not is_syncing else None,
+                    " Sincronizando..." if is_syncing else " Sincronizar",
                 ),
                 html.button(
                     {"on_click": on_create_robot},
