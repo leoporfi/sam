@@ -17,7 +17,7 @@ Sigue estos pasos para configurar y ejecutar el proyecto en tu máquina local.
 
 ### **1. Prerrequisitos**
 
-* **Python 3.8+**  
+* **Python 3.9+**  
 * **Git**  
 * **UV:** Un instalador y gestor de paquetes de Python extremadamente rápido. Se recomienda su uso para este proyecto.  
   pip install uv
