@@ -42,7 +42,7 @@ def Pagination(
                             "role": "button" if not is_current else None,
                             "class_name": "" if is_current else "secondary",
                             "aria-current": "page" if is_current else None,
-                            "onClick": event((lambda p: lambda e: handle_page_click(p))(i), prevent_default=True),
+                            "on_click": event((lambda p: lambda e: handle_page_click(p))(i), prevent_default=True),
                         },
                         str(i),
                     )
@@ -68,7 +68,7 @@ def Pagination(
                     {
                         "href": "#",
                         "class_name": "secondary",
-                        "onClick": event(lambda e: handle_page_click(1), prevent_default=True),
+                        "on_click": event(lambda e: handle_page_click(1), prevent_default=True),
                         "aria-label": "Primera página",
                         "data-tooltip": "Primera página",
                         "disabled": is_first_page,
@@ -81,7 +81,7 @@ def Pagination(
                     {
                         "href": "#",
                         "class_name": "secondary",
-                        "onClick": event(lambda e: handle_page_click(current_page - 1), prevent_default=True),
+                        "on_click": event(lambda e: handle_page_click(current_page - 1), prevent_default=True),
                         "aria-label": "Página anterior",
                         "data-tooltip": "Página anterior",
                         "disabled": is_first_page,
@@ -95,7 +95,7 @@ def Pagination(
                     {
                         "href": "#",
                         "class_name": "secondary",
-                        "onClick": event(lambda e: handle_page_click(current_page + 1), prevent_default=True),
+                        "on_click": event(lambda e: handle_page_click(current_page + 1), prevent_default=True),
                         "aria-label": "Página siguiente",
                         "data-tooltip": "Página siguiente",
                         "disabled": is_last_page,
@@ -108,7 +108,7 @@ def Pagination(
                     {
                         "href": "#",
                         "class_name": "secondary",
-                        "onClick": event(lambda e: handle_page_click(total_pages), prevent_default=True),
+                        "on_click": event(lambda e: handle_page_click(total_pages), prevent_default=True),
                         "aria-label": "Última página",
                         "data-tooltip": "Última página",
                         "disabled": is_last_page,
@@ -149,7 +149,7 @@ def ActionMenu(actions: List[Dict[str, any]]):
             *[
                 html.li(
                     html.a(
-                        {"href": "#", "onClick": event(action["on_click"], prevent_default=True)},
+                        {"href": "#", "on_click": event(action["on_click"], prevent_default=True)},
                         html.small(action["label"]),
                     )
                 )
@@ -177,7 +177,7 @@ def ThemeSwitcher(is_dark: bool, on_toggle: Callable):
                 "id": "theme-switcher",
                 "role": "switch",
                 "checked": is_dark,
-                "onChange": handle_change,
+                "on_change": handle_change,
             }
         ),
         html.span({"class_name": "material-symbols-outlined"}, "dark_mode"),
@@ -197,17 +197,17 @@ def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Calla
         {"open": True},
         html.article(
             html.header(
-                html.button({"aria-label": "Close", "rel": "prev", "onClick": lambda e: on_cancel()}),
+                html.button({"aria-label": "Close", "rel": "prev", "on_click": lambda e: on_cancel()}),
                 html.h3(title),
             ),
             html.p(message),
             html.footer(
                 html.div(
                     {"class_name": "grid"},
-                    html.button({"class_name": "secondary", "onClick": lambda e: on_cancel()}, "Cancelar"),
+                    html.button({"class_name": "secondary", "on_click": lambda e: on_cancel()}, "Cancelar"),
                     html.button(
                         {
-                            "onClick": handle_confirm_click,
+                            "on_click": handle_confirm_click,
                             "style": {
                                 "backgroundColor": "var(--pico-color-pink-550)",
                                 "borderColor": "var(--pico-color-pink-550)",
