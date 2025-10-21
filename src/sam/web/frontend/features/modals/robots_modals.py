@@ -308,27 +308,32 @@ def DeviceList(
     has_status_column = devices and "EsProgramado" in devices[0]
 
     return html.div(
-        html.h5(title),
-        html.input(
-            {
-                "type": "search",
-                "name": "search-equipos",
-                "placeholder": "Filtrar equipos...",
-                "value": search_term,
-                "on_change": lambda e: on_search_change(e["target"]["value"]),
-                "style": {"marginBottom": "0.5rem"},
-            }
+        {"class_name": "device-list-section"},
+        html.div(
+            {"class_name": "device-list-header"},
+            html.h5(title),
+            html.input(
+                {
+                    "type": "search",
+                    "name": "search-equipos",
+                    "placeholder": "Filtrar equipos...",
+                    "value": search_term,
+                    "onChange": lambda e: on_search_change(e["target"]["value"]),
+                }
+            ),
         ),
         html.div(
-            {"style": {"height": "35vh", "overflowY": "auto", "fontSize": "0.90rem"}},
+            {"class_name": "device-list-table"},
             html.table(
+                {"role": "grid"},
                 html.thead(
                     html.tr(
                         html.th(
-                            html.input({"type": "checkbox", "name": "checkbox-equipos", "on_change": handle_select_all})
+                            {"scope": "col", "style": {"width": "40px"}},
+                            html.input({"type": "checkbox", "name": "checkbox-equipos", "onChange": handle_select_all}),
                         ),
-                        html.th("Nombre Equipo"),
-                        html.th("Estado") if has_status_column else None,
+                        html.th({"scope": "col"}, "Nombre Equipo"),
+                        html.th({"scope": "col", "style": {"width": "120px"}}, "Estado") if has_status_column else None,
                     )
                 ),
                 html.tbody(
@@ -340,7 +345,7 @@ def DeviceList(
                                     {
                                         "type": "checkbox",
                                         "checked": device["EquipoId"] in selected_ids,
-                                        "on_change": lambda e, eid=device["EquipoId"]: handle_select_one(
+                                        "onChange": lambda e, eid=device["EquipoId"]: handle_select_one(
                                             eid, e["target"]["checked"]
                                         ),
                                     }
@@ -879,13 +884,20 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
 @component
 def DeviceSelector(available_devices: List[Dict], selected_devices: List[int], on_change: Callable):
     safe_selected_devices = selected_devices or []
-    all_available_ids = use_memo(lambda: [device["EquipoId"] for device in available_devices], [available_devices])
+    search_term, set_search_term = use_state("")
+
+    filtered_devices = use_memo(
+        lambda: [d for d in available_devices if search_term.lower() in d["Equipo"].lower()],
+        [available_devices, search_term],
+    )
+
+    all_filtered_ids = use_memo(lambda: [device["EquipoId"] for device in filtered_devices], [filtered_devices])
     are_all_devices_selected = len(safe_selected_devices) > 0 and all(
-        item in safe_selected_devices for item in all_available_ids
+        item in safe_selected_devices for item in all_filtered_ids
     )
 
     def handle_select_all_devices(event):
-        on_change(all_available_ids if event["target"]["checked"] else [])
+        on_change(all_filtered_ids if event["target"]["checked"] else [])
 
     def handle_device_select(device_id, checked):
         current_devices = list(safe_selected_devices)
@@ -898,29 +910,65 @@ def DeviceSelector(available_devices: List[Dict], selected_devices: List[int], o
         on_change(current_devices)
 
     return html.fieldset(
-        html.label(
-            html.input(
-                {"type": "checkbox", "checked": are_all_devices_selected, "on_change": handle_select_all_devices}
-            ),
-            "Asignar Equipos",
+        html.legend("Asignar Equipos"),
+        html.input(
+            {
+                "type": "search",
+                "name": "search-equipos-schedule",
+                "placeholder": "Filtrar equipos...",
+                "value": search_term,
+                "on_change": lambda e: set_search_term(e["target"]["value"]),
+                "style": {"marginBottom": "0.75rem"},
+            }
         ),
         html.div(
-            {"style": {"maxHeight": "200px", "overflowY": "auto"}},
-            *[
-                html.label(
-                    {"key": device["EquipoId"]},
-                    html.input(
-                        {
-                            "type": "checkbox",
-                            "checked": device["EquipoId"] in safe_selected_devices,
-                            "on_change": lambda e, tid=device["EquipoId"]: handle_device_select(
-                                tid, e["target"]["checked"]
+            {"class_name": "device-list-table", "style": {"height": "200px"}},
+            html.table(
+                {"role": "grid"},
+                html.thead(
+                    html.tr(
+                        html.th(
+                            {"scope": "col", "style": {"width": "40px"}},
+                            html.input(
+                                {
+                                    "type": "checkbox",
+                                    "checked": are_all_devices_selected,
+                                    "on_change": handle_select_all_devices,
+                                }
                             ),
-                        }
-                    ),
-                    device["Equipo"],
-                )
-                for device in available_devices
-            ],
+                        ),
+                        html.th({"scope": "col"}, "Equipo"),
+                    )
+                ),
+                html.tbody(
+                    *[
+                        html.tr(
+                            {"key": device["EquipoId"]},
+                            html.td(
+                                html.input(
+                                    {
+                                        "type": "checkbox",
+                                        "checked": device["EquipoId"] in safe_selected_devices,
+                                        "on_change": lambda e, tid=device["EquipoId"]: handle_device_select(
+                                            tid, e["target"]["checked"]
+                                        ),
+                                    }
+                                )
+                            ),
+                            html.td(device["Equipo"]),
+                        )
+                        for device in filtered_devices
+                    ]
+                    if filtered_devices
+                    else [
+                        html.tr(
+                            html.td(
+                                {"colSpan": 2, "style": {"text_align": "center"}},
+                                "No se encontraron equipos.",
+                            )
+                        )
+                    ]
+                ),
+            ),
         ),
     )
