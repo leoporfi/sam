@@ -13,6 +13,7 @@ from .dependencies import get_db
 # Importa los schemas desde el archivo local de schemas
 from .schemas import (
     AssignmentUpdateRequest,
+    EquipoStatusUpdate,
     PoolAssignmentsRequest,
     PoolCreate,
     PoolUpdate,
@@ -157,6 +158,44 @@ def get_available_devices(robot_id: int, db: DatabaseConnector = Depends(get_db)
         return db_service.get_available_teams_for_robot(db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener equipos disponibles: {e}")
+
+
+@router.get("/api/equipos", tags=["Equipos"])
+def get_all_equipos(
+    db: DatabaseConnector = Depends(get_db),
+    name: Optional[str] = Query(None),
+    active: Optional[bool] = Query(None),
+    balanceable: Optional[bool] = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    sort_by: Optional[str] = Query("Equipo"),
+    sort_dir: Optional[str] = Query("asc"),
+):
+    try:
+        return db_service.get_equipos(
+            db=db,
+            name=name,
+            active=active,
+            balanceable=balanceable,
+            page=page,
+            size=size,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener equipos: {e}")
+
+
+@router.patch("/api/equipos/{equipo_id}", tags=["Equipos"])
+def update_equipo_status(equipo_id: int, update_data: EquipoStatusUpdate, db: DatabaseConnector = Depends(get_db)):
+    try:
+        success = db_service.update_equipo_status(db, equipo_id, update_data.field, update_data.value)
+        if success:
+            return {"message": "Estado del equipo actualizado con éxito."}
+        # El SP ya lanza un error si no se encuentra, que será capturado por el except.
+    except Exception as e:
+        # Aquí capturamos los RAISERROR del SP.
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # --- Rutas para Asignaciones ---

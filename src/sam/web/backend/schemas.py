@@ -78,3 +78,19 @@ class PoolAssignmentsRequest(BaseModel):
     robot_ids: List[int]
     # RFR-34: Se estandariza el nombre del campo para que sea consistente.
     equipo_ids: List[int]
+
+
+class Equipo(TypedDict):
+    EquipoId: int
+    Equipo: str
+    UserName: Optional[str]
+    Licencia: Optional[str]
+    Activo_SAM: bool
+    PermiteBalanceoDinamico: bool
+    RobotAsignado: Optional[str]
+    Pool: Optional[str]
+
+
+class EquipoStatusUpdate(BaseModel):
+    field: str
+    value: bool

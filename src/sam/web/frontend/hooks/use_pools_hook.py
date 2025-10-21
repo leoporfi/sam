@@ -6,7 +6,7 @@
 # ---------------------------------------------------------------------------
 from reactpy import use_callback, use_effect, use_state
 
-from ..api_client import get_api_client
+from ..api.api_client import get_api_client
 
 
 def use_pools_management():
