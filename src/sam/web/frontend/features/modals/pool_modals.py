@@ -48,7 +48,7 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
         {"open": True},
         html.article(
             html.header(
-                html.button({"aria-label": "Close", "rel": "prev", "onClick": lambda e: on_close()}),
+                html.button({"aria-label": "Close", "rel": "prev", "on_click": lambda e: on_close()}),
                 html.h2("Editar Pool" if is_edit_mode else "Crear Nuevo Pool"),
             ),
             html.form(
@@ -60,7 +60,7 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
                             "type": "text",
                             "name": "text-pool",
                             "value": form_data.get("Nombre", ""),
-                            "onChange": lambda e: handle_change("Nombre", e["target"]["value"]),
+                            "on_change": lambda e: handle_change("Nombre", e["target"]["value"]),
                             "required": True,
                         }
                     ),
@@ -70,7 +70,7 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
                     html.textarea(
                         {
                             "value": form_data.get("Descripcion", ""),
-                            "onChange": lambda e: handle_change("Descripcion", e["target"]["value"]),
+                            "on_change": lambda e: handle_change("Descripcion", e["target"]["value"]),
                         }
                     ),
                 ),
@@ -82,7 +82,7 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
                         {
                             "type": "button",
                             "class_name": "secondary",
-                            "onClick": lambda e: on_close(),
+                            "on_click": lambda e: on_close(),
                             "disabled": is_loading,
                         },
                         "Cancelar",
@@ -154,7 +154,7 @@ def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callab
         html.article(
             {"aria-busy": str(is_loading).lower()},
             html.header(
-                html.button({"aria-label": "Close", "rel": "prev", "onClick": lambda e: on_close()}),
+                html.button({"aria-label": "Close", "rel": "prev", "on_click": lambda e: on_close()}),
                 html.h3(f"Asignar Recursos a: {pool.get('Nombre')}"),
             ),
             html.h5("Asignación de Robots"),
@@ -183,8 +183,8 @@ def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callab
             html.footer(
                 html.div(
                     {"class_name": "grid"},
-                    html.button({"class_name": "secondary", "onClick": lambda e: on_close()}, "Cancelar"),
-                    html.button({"onClick": handle_save}, "Guardar Cambios"),
+                    html.button({"class_name": "secondary", "on_click": lambda e: on_close()}, "Cancelar"),
+                    html.button({"on_click": handle_save}, "Guardar Cambios"),
                 )
             ),
         ),
@@ -217,7 +217,7 @@ def AssignmentBox(
             {"style": {"display": "flex", "flexDirection": "column", "gap": "1rem"}},
             html.button(
                 {
-                    "onClick": lambda e: move_items(
+                    "on_click": lambda e: move_items(
                         available_items,
                         set_available_items,
                         assigned_items,
@@ -231,7 +231,7 @@ def AssignmentBox(
             ),
             html.button(
                 {
-                    "onClick": lambda e: move_items(
+                    "on_click": lambda e: move_items(
                         assigned_items,
                         set_assigned_items,
                         available_items,
@@ -283,7 +283,7 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
                         {
                             "type": "checkbox",
                             "checked": item["ID"] in selected_ids_set,
-                            "onChange": lambda e, i_id=item["ID"]: handle_selection(i_id),
+                            "on_change": lambda e, i_id=item["ID"]: handle_selection(i_id),
                         }
                     ),
                     item["Nombre"],

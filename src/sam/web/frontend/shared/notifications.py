@@ -65,7 +65,7 @@ def Toast(message: str, style: str, on_dismiss: Callable):
                 {
                     "class_name": "toast-close",
                     "aria-label": "Cerrar notificación",
-                    "onClick": event(lambda e: on_dismiss(), prevent_default=True),
+                    "on_click": event(lambda e: on_dismiss(), prevent_default=True),
                 },
                 "×",
             ),

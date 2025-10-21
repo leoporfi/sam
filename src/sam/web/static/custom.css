@@ -46,17 +46,18 @@ button {
 
 /* --- Mejora del Spinner en Botones --- */
 button[aria-busy="true"] {
-  position: relative;
   /* Centra el spinner que Pico.css añade */
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 0.5rem;
 }
 
-button[aria-busy="true"] > :not(progress):not(.pico-loading) {
-  /* Oculta todo el contenido que no sea el spinner */
-  visibility: hidden;
+button[aria-busy="true"]::before {
+  /* El spinner de Pico.css se genera con ::before */
+  margin-right: 0 !important;
 }
+
 /* -------------------------------------------------------------------------- */
 /* COMPONENTES COMUNES                            */
 /* -------------------------------------------------------------------------- */
@@ -86,6 +87,7 @@ button[aria-busy="true"] > :not(progress):not(.pico-loading) {
   opacity: 0;
   transform: translateX(100%);
   transition: opacity 0.3s ease, transform 0.3s ease;
+  padding: 1rem 1.25rem;
 }
 .toast.show {
   opacity: 1;
@@ -102,6 +104,51 @@ button[aria-busy="true"] > :not(progress):not(.pico-loading) {
 }
 .toast-info {
   border-left: 4px solid var(--pico-color-blue-500);
+}
+.toast-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.toast-message {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+.toast-icon {
+  font-size: 1.25rem;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+.toast-text {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.toast-close {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--pico-muted-color);
+  cursor: pointer;
+  flex-shrink: 0;
+  width: auto;
+  height: auto;
+  min-width: auto;
+  transition: color 0.2s ease;
+}
+.toast-close:hover {
+  color: var(--pico-color);
+  background: none;
+}
+.toast-close:focus {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* --- Modales --- */
@@ -145,6 +192,30 @@ dialog[open] {
 /* -------------------------------------------------------------------------- */
 /* COMPONENTES DE DASHBOARD ROBOTS                      */
 /* -------------------------------------------------------------------------- */
+/* --- Tags de Estado de Equipos --- */
+.tag {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.tag-programado {
+  background-color: var(--pico-color-blue-500);
+  color: white;
+}
+
+.tag-reservado {
+  background-color: var(--pico-color-orange-500);
+  color: white;
+}
+
+.tag-dinamico {
+  background-color: var(--pico-color-green-500);
+  color: white;
+}
 
 /* --- Contenedor de Controles --- */
 .dashboard-controls {
