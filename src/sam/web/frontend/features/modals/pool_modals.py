@@ -372,13 +372,16 @@ def AssignmentBox(
 
 @component
 def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_selected_ids: Callable):
-    """Renderiza una lista de recursos seleccionables."""
+    """Renderiza una lista de recursos seleccionables con búsqueda."""
+    search_term, set_search_term = use_state("")
 
-    # RFR-20: Se usa un 'set' localmente para optimizar la comprobación 'in',
-    # pero el estado principal que se recibe y se emite sigue siendo una lista.
+    filtered_items = use_memo(
+        lambda: [item for item in items if search_term.lower() in item["Nombre"].lower()], [items, search_term]
+    )
+
     selected_ids_set = use_memo(lambda: set(selected_ids), [selected_ids])
-    all_item_ids = use_memo(lambda: [item["ID"] for item in items], [items])
-    are_all_selected = len(selected_ids) > 0 and all(item_id in selected_ids_set for item_id in all_item_ids)
+    all_filtered_ids = use_memo(lambda: [item["ID"] for item in filtered_items], [filtered_items])
+    are_all_selected = len(selected_ids) > 0 and all(item_id in selected_ids_set for item_id in all_filtered_ids)
 
     def handle_selection(item_id):
         current_selection = list(selected_ids)
@@ -390,7 +393,7 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
 
     def handle_select_all(event):
         if event["target"]["checked"]:
-            set_selected_ids(all_item_ids)
+            set_selected_ids(all_filtered_ids)
         else:
             set_selected_ids([])
 
@@ -399,6 +402,15 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
         html.div(
             {"class_name": "device-list-header"},
             html.h5(title),
+            html.input(
+                {
+                    "type": "search",
+                    "name": f"search-{title.lower()}",
+                    "placeholder": "Filtrar...",
+                    "value": search_term,
+                    "on_change": lambda e: set_search_term(e["target"]["value"]),
+                }
+            ),
         ),
         html.div(
             {"class_name": "device-list-table"},
@@ -434,14 +446,14 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
                             ),
                             html.td(item["Nombre"]),
                         )
-                        for item in sorted(items, key=lambda x: x["Nombre"])
+                        for item in filtered_items
                     ]
-                    if items
+                    if filtered_items
                     else [
                         html.tr(
                             html.td(
                                 {"colSpan": 2, "style": {"text_align": "center"}},
-                                "No hay recursos disponibles.",
+                                "No se encontraron recursos.",
                             )
                         )
                     ]
