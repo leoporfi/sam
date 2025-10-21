@@ -191,6 +191,45 @@ def get_available_teams_for_robot(db: DatabaseConnector) -> List[Dict]:
     return db.ejecutar_consulta(query, es_select=True)
 
 
+def get_equipos(
+    db: DatabaseConnector,
+    name: Optional[str] = None,
+    active: Optional[bool] = None,
+    balanceable: Optional[bool] = None,
+    page: int = 1,
+    size: int = 20,
+    sort_by: str = "Equipo",
+    sort_dir: str = "asc",
+) -> Dict:
+    params = (name, active, balanceable, page, size, sort_by, sort_dir)
+
+    try:
+        with db.obtener_cursor() as cursor:
+            # El SP devuelve dos result sets: primero el conteo, luego los datos.
+            cursor.execute("{CALL dbo.ListarEquipos(?, ?, ?, ?, ?, ?, ?)}", params)
+
+            total_count_result = cursor.fetchone()
+            total_count = total_count_result[0] if total_count_result else 0
+
+            cursor.nextset()
+
+            columns = [column[0] for column in cursor.description]
+            equipos_data = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        return {"total_count": total_count, "page": page, "size": size, "equipos": equipos_data}
+    except Exception as e:
+        logger.error(f"Error en get_equipos: {e}", exc_info=True)
+        raise
+
+
+def update_equipo_status(db: DatabaseConnector, equipo_id: int, field: str, value: bool) -> bool:
+    query = "{CALL dbo.ActualizarEstadoEquipo(?, ?, ?)}"
+    params = (equipo_id, field, value)
+    # El SP no devuelve filas, pero sí un recuento de filas afectadas.
+    rows_affected = db.ejecutar_consulta(query, params, es_select=False)
+    return rows_affected > 0
+
+
 # Programaciones
 def get_all_schedules(db: DatabaseConnector) -> List[Dict]:
     query = "EXEC dbo.ListarProgramaciones"

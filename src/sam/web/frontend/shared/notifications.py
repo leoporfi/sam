@@ -36,33 +36,38 @@ def Toast(message: str, style: str, on_dismiss: Callable):
         return cleanup
 
     style_config = {
-        "success": {"className": "toast-success", "icon": "✓", "aria_label": "Mensaje de éxito"},
-        "error": {"className": "toast-error", "icon": "✕", "aria_label": "Mensaje de error", "aria_invalid": "true"},
-        "warning": {"className": "toast-warning", "icon": "⚠", "aria_label": "Mensaje de advertencia"},
-        "info": {"className": "toast-info", "icon": "ℹ", "aria_label": "Mensaje informativo"},
+        "success": {"class_name": "toast-success", "icon": "✓", "aria_label": "Mensaje de éxito"},
+        "error": {"class_name": "toast-error", "icon": "✕", "aria_label": "Mensaje de error", "aria_invalid": "true"},
+        "warning": {"class_name": "toast-warning", "icon": "⚠", "aria_label": "Mensaje de advertencia"},
+        "info": {"class_name": "toast-info", "icon": "ℹ", "aria_label": "Mensaje informativo"},
     }
     config = style_config.get(style, style_config["info"])
 
     # 4. Construimos la clase dinámicamente: añadimos 'show' si is_visible es True.
-    final_className = f"toast {config['className']}"
+    final_className = f"toast {config['class_name']}"
     if is_visible:
         final_className += " show"
 
-    attributes = {"key": message, "className": final_className, "role": "alert", "aria-label": config["aria_label"]}
+    attributes = {"key": message, "class_name": final_className, "role": "alert", "aria-label": config["aria_label"]}
     if config.get("aria_invalid"):
         attributes["aria-invalid"] = config["aria_invalid"]
 
     return html.article(
         attributes,
         html.div(
-            {"className": "toast-content"},
+            {"class_name": "toast-content"},
             html.div(
-                {"className": "toast-message"},
-                html.span({"className": "toast-icon"}, config["icon"]),
-                html.span({"className": "toast-text"}, message),
+                {"class_name": "toast-message"},
+                html.span({"class_name": "toast-icon"}, config["icon"]),
+                html.span({"class_name": "toast-text"}, message),
             ),
             html.button(
-                {"className": "toast-close", "aria-label": "Cerrar notificación", "onClick": event(lambda e: on_dismiss(), prevent_default=True)}, "×"
+                {
+                    "class_name": "toast-close",
+                    "aria-label": "Cerrar notificación",
+                    "onClick": event(lambda e: on_dismiss(), prevent_default=True),
+                },
+                "×",
             ),
         ),
     )
@@ -88,9 +93,9 @@ def ToastContainer():
     dismiss_notification = notification_ctx["dismiss_notification"]
 
     return html.div(
-        {"className": "toast-container"},
+        {"class_name": "toast-container"},
         html.div(
-            {"className": "toast-stack"},
+            {"class_name": "toast-stack"},
             [
                 Toast(
                     key=n["id"],

@@ -17,8 +17,6 @@ def Pagination(
     Muestra botones de primero/último, anterior/siguiente y un rango de páginas.
     """
 
-    # RFR-15: Se simplifica la función. El event.prevent_default() ahora
-    # es manejado por el decorador event() en la llamada.
     def handle_page_click(page_number):
         if 1 <= page_number <= total_pages:
             on_page_change(page_number)
@@ -42,10 +40,8 @@ def Pagination(
                         {
                             "href": "#",
                             "role": "button" if not is_current else None,
-                            "className": "" if is_current else "secondary",
+                            "class_name": "" if is_current else "secondary",
                             "aria-current": "page" if is_current else None,
-                            # RFR-15: Se envuelve la lambda en el decorador event()
-                            # para manejar correctamente la prevención del evento por defecto.
                             "onClick": event((lambda p: lambda e: handle_page_click(p))(i), prevent_default=True),
                         },
                         str(i),
@@ -60,18 +56,18 @@ def Pagination(
     is_last_page = current_page == total_pages
 
     return html.nav(
-        {"aria-label": "Pagination", "className": "pagination-container"},
+        {"aria-label": "Pagination", "class_name": "pagination-container"},
         html.div(
-            {"className": "pagination-summary"},
+            {"class_name": "pagination-summary"},
             f"Mostrando {start_item}-{end_item} de {total_items} robots",
         ),
         html.ul(
-            {"className": "pagination-controls"},
+            {"class_name": "pagination-controls"},
             html.li(
                 html.a(
                     {
                         "href": "#",
-                        "className": "secondary",
+                        "class_name": "secondary",
                         "onClick": event(lambda e: handle_page_click(1), prevent_default=True),
                         "aria-label": "Primera página",
                         "data-tooltip": "Primera página",
@@ -84,7 +80,7 @@ def Pagination(
                 html.a(
                     {
                         "href": "#",
-                        "className": "secondary",
+                        "class_name": "secondary",
                         "onClick": event(lambda e: handle_page_click(current_page - 1), prevent_default=True),
                         "aria-label": "Página anterior",
                         "data-tooltip": "Página anterior",
@@ -98,7 +94,7 @@ def Pagination(
                 html.a(
                     {
                         "href": "#",
-                        "className": "secondary",
+                        "class_name": "secondary",
                         "onClick": event(lambda e: handle_page_click(current_page + 1), prevent_default=True),
                         "aria-label": "Página siguiente",
                         "data-tooltip": "Página siguiente",
@@ -111,7 +107,7 @@ def Pagination(
                 html.a(
                     {
                         "href": "#",
-                        "className": "secondary",
+                        "class_name": "secondary",
                         "onClick": event(lambda e: handle_page_click(total_pages), prevent_default=True),
                         "aria-label": "Última página",
                         "data-tooltip": "Última página",
@@ -130,7 +126,7 @@ def LoadingSpinner():
     Un spinner de carga estilizado usando el atributo aria-busy de Pico.css.
     """
     return html.div(
-        {"className": "container", "style": {"textAlign": "center", "padding": "2rem"}},
+        {"class_name": "container", "style": {"text_align": "center", "padding": "2rem"}},
         html.article(
             {"aria-busy": "true"},
             "Cargando datos...",
@@ -144,9 +140,9 @@ def ActionMenu(actions: List[Dict[str, any]]):
     Menú desplegable de acciones que usa la estructura <details> de Pico.css.
     """
     return html.details(
-        {"className": "dropdown"},
+        {"class_name": "dropdown"},
         html.summary(
-            {"role": "", "className": "outline"},
+            {"role": "", "class_name": "outline"},
         ),
         html.ul(
             {"role": "listbox"},
@@ -173,8 +169,8 @@ def ThemeSwitcher(is_dark: bool, on_toggle: Callable):
         on_toggle(event["target"]["checked"])
 
     return html.label(
-        {"htmlFor": "theme-switcher", "className": "theme-switcher"},
-        html.span({"className": "material-symbols-outlined"}, "light_mode"),
+        {"htmlFor": "theme-switcher", "class_name": "theme-switcher"},
+        html.span({"class_name": "material-symbols-outlined"}, "light_mode"),
         html.input(
             {
                 "type": "checkbox",
@@ -184,7 +180,7 @@ def ThemeSwitcher(is_dark: bool, on_toggle: Callable):
                 "onChange": handle_change,
             }
         ),
-        html.span({"className": "material-symbols-outlined"}, "dark_mode"),
+        html.span({"class_name": "material-symbols-outlined"}, "dark_mode"),
     )
 
 
@@ -207,8 +203,8 @@ def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Calla
             html.p(message),
             html.footer(
                 html.div(
-                    {"className": "grid"},
-                    html.button({"className": "secondary", "onClick": lambda e: on_cancel()}, "Cancelar"),
+                    {"class_name": "grid"},
+                    html.button({"class_name": "secondary", "onClick": lambda e: on_cancel()}, "Cancelar"),
                     html.button(
                         {
                             "onClick": handle_confirm_click,

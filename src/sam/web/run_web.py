@@ -1,4 +1,4 @@
-# sam/web/run_dashboard.py
+# sam/web/run_web.py
 import logging
 import signal
 import sys
