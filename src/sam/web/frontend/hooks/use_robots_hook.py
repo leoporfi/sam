@@ -3,7 +3,7 @@ from typing import Dict
 
 from reactpy import use_callback, use_context, use_effect, use_memo, use_state
 
-from ..api_client import get_api_client
+from ..api.api_client import get_api_client
 from ..shared.notifications import NotificationContext
 
 # --- Constantes de configuración ---

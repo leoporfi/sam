@@ -64,7 +64,7 @@ def PoolsTable(pools: List[Dict], on_edit: Callable, on_assign: Callable, on_del
                 *[PoolRow(pool=p, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete) for p in pools]
                 if pools
                 # RFR-17: Mensaje descriptivo cuando no hay datos.
-                else html.tr(html.td({"colSpan": 5, "style": {"textAlign": "center"}}, "No se encontraron pools."))
+                else html.tr(html.td({"colSpan": 5, "style": {"text_align": "center"}}, "No se encontraron pools."))
             ),
         )
     )

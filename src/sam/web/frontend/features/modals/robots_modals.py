@@ -1,10 +1,10 @@
-# src/interfaz_web/features/modals/dashboard_modal_components.py
+# src/interfaz_web/features/modals/robots_modals.py
 import asyncio
 from typing import Any, Callable, Dict, List
 
 from reactpy import component, event, html, use_callback, use_context, use_effect, use_memo, use_state
 
-from ...api_client import ApiClient, get_api_client
+from ...api.api_client import ApiClient, get_api_client
 from ...shared.common_components import ConfirmationModal
 from ...shared.notifications import NotificationContext
 
@@ -49,8 +49,17 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
 
     @use_effect(dependencies=[robot])
     def populate_form_data():
-        if robot is not None:
-            set_form_data(robot if is_edit_mode else DEFAULT_ROBOT_STATE)
+        if robot is None:
+            # Si el robot es None, reseteamos el formulario completamente
+            set_form_data(DEFAULT_ROBOT_STATE)
+            return
+
+        if is_edit_mode:
+            # Modo ediciÃ³n: rellenamos con los datos del robot
+            set_form_data(robot)
+        else:
+            # Modo creaciÃ³n: reseteamos explÃ­citamente al estado por defecto
+            set_form_data(DEFAULT_ROBOT_STATE)
 
     if robot is None:
         return None
@@ -58,7 +67,8 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
     def handle_form_change(field_name, field_value):
         if field_name in ["RobotId", "MinEquipos", "MaxEquipos", "PrioridadBalanceo", "TicketsPorEquipoAdicional"]:
             try:
-                field_value = int(field_value) if field_value != "" else None
+                # Permitir que el campo quede vacío temporalmente durante la edición
+                field_value = int(field_value) if field_value not in [None, ""] else None
             except (ValueError, TypeError):
                 field_value = None
         set_form_data(lambda old_data: {**old_data, field_name: field_value})
@@ -82,7 +92,9 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                     show_notification("El campo 'Robot ID' es requerido.", "error")
                     set_is_loading(False)
                     return
-                await api_service.create_robot(form_data)
+                # Creamos una copia para no modificar el estado directamente
+                payload_to_create = form_data.copy()
+                await api_service.create_robot(payload_to_create)
                 show_notification("Robot creado con éxito.", "success")
             await on_save_success()
         except Exception as e:
@@ -100,7 +112,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
             html.form(
                 {"id": "robot-form", "onSubmit": event(handle_save, prevent_default=True)},
                 html.div(
-                    {"className": "grid"},
+                    {"class_name": "grid"},
                     html.label(
                         {"htmlFor": "robot-name"},
                         "Nombre",
@@ -108,6 +120,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                             {
                                 "id": "robot-name",
                                 "type": "text",
+                                "name": "text-robot-name",
                                 "value": form_data.get("Robot", ""),
                                 "onChange": lambda e: handle_form_change("Robot", e["target"]["value"]),
                                 "required": True,
@@ -121,6 +134,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                             {
                                 "id": "robot-id",
                                 "type": "number",
+                                "name": "number-robot-id",
                                 "value": form_data.get("RobotId", ""),
                                 "onChange": lambda e: handle_form_change("RobotId", e["target"]["value"]),
                                 "required": not is_edit_mode,
@@ -142,20 +156,21 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                     ),
                 ),
                 html.div(
-                    {"className": "grid"},
+                    {"class_name": "grid"},
                     html.label(
                         {"htmlFor": "min-equipos"},
                         "Mín. Equipos",
                         html.div(
-                            {"className": "range"},
+                            {"class_name": "range"},
                             html.output(form_data.get("MinEquipos", "0")),
                             html.input(
                                 {
                                     "id": "min-equipos",
                                     "type": "range",
+                                    "name": "range-min-equipos",
                                     "min": "0",
                                     "max": "99",
-                                    "value": form_data.get("MinEquipos", ""),
+                                    "value": form_data.get("MinEquipos", 0),
                                     "onChange": lambda e: handle_form_change("MinEquipos", e["target"]["value"]),
                                     "style": {"flexGrow": "1"},
                                 }
@@ -166,15 +181,16 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                         {"htmlFor": "max-equipos"},
                         "Máx. Equipos",
                         html.div(
-                            {"className": "range"},
+                            {"class_name": "range"},
                             html.output(form_data.get("MaxEquipos", "0")),
                             html.input(
                                 {
                                     "id": "max-equipos",
                                     "type": "range",
+                                    "name": "range-max-equipos",
                                     "min": "-1",
                                     "max": "100",
-                                    "value": form_data.get("MaxEquipos", ""),
+                                    "value": form_data.get("MaxEquipos", -1),
                                     "onChange": lambda e: handle_form_change("MaxEquipos", e["target"]["value"]),
                                     "style": {"flexGrow": "1"},
                                 }
@@ -183,21 +199,22 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                     ),
                 ),
                 html.div(
-                    {"className": "grid"},
+                    {"class_name": "grid"},
                     html.label(
                         {"htmlFor": "prioridad"},
                         "Prioridad",
                         html.div(
-                            {"className": "range"},
-                            html.output({"className": "button"}, form_data.get("PrioridadBalanceo", "0")),
+                            {"class_name": "range"},
+                            html.output({"class_name": "button"}, form_data.get("PrioridadBalanceo", "0")),
                             html.input(
                                 {
                                     "id": "prioridad",
                                     "type": "range",
+                                    "name": "range-prioridad",
                                     "min": "0",
                                     "max": "100",
                                     "step": "10",
-                                    "value": form_data.get("PrioridadBalanceo", ""),
+                                    "value": form_data.get("PrioridadBalanceo", 100),
                                     "onChange": lambda e: handle_form_change("PrioridadBalanceo", e["target"]["value"]),
                                     "style": {"flexGrow": "1"},
                                 }
@@ -208,15 +225,16 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                         {"htmlFor": "tickets"},
                         "Tickets/Equipo Adic.",
                         html.div(
-                            {"className": "range"},
+                            {"class_name": "range"},
                             html.output(form_data.get("TicketsPorEquipoAdicional", "0")),
                             html.input(
                                 {
                                     "id": "tickets",
                                     "type": "range",
+                                    "name": "range-tickets",
                                     "min": "1",
                                     "max": "100",
-                                    "value": form_data.get("TicketsPorEquipoAdicional", ""),
+                                    "value": form_data.get("TicketsPorEquipoAdicional", 10),
                                     "onChange": lambda e: handle_form_change(
                                         "TicketsPorEquipoAdicional", e["target"]["value"]
                                     ),
@@ -229,9 +247,9 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
             ),
             html.footer(
                 html.div(
-                    {"className": "grid"},
+                    {"class_name": "grid"},
                     html.button(
-                        {"type": "button", "className": "secondary", "onClick": on_close, "disabled": is_loading},
+                        {"type": "button", "class_name": "secondary", "onClick": on_close, "disabled": is_loading},
                         "Cancelar",
                     ),
                     html.button(
@@ -292,6 +310,7 @@ def DeviceList(
         html.input(
             {
                 "type": "search",
+                "name": "search-equipos",
                 "placeholder": "Filtrar equipos...",
                 "value": search_term,
                 "onChange": lambda e: on_search_change(e["target"]["value"]),
@@ -303,7 +322,9 @@ def DeviceList(
             html.table(
                 html.thead(
                     html.tr(
-                        html.th(html.input({"type": "checkbox", "onChange": handle_select_all})),
+                        html.th(
+                            html.input({"type": "checkbox", "name": "checkbox-equipos", "onChange": handle_select_all})
+                        ),
                         html.th("Nombre Equipo"),
                         html.th("Estado") if has_status_column else None,
                     )
@@ -324,19 +345,21 @@ def DeviceList(
                                 )
                             ),
                             html.td(device["Equipo"]),
-                            html.td(html.span({"className": f"tag {get_estado(device)[1]}"}, get_estado(device)[0]))
+                            html.td(html.span({"class_name": f"tag {get_estado(device)[1]}"}, get_estado(device)[0]))
                             if has_status_column
                             else None,
                         )
                         for device in devices
                     ]
                     if devices
-                    else html.tr(
-                        html.td(
-                            {"colSpan": 3 if has_status_column else 2, "style": {"textAlign": "center"}},
-                            "No hay equipos para mostrar.",
+                    else [
+                        html.tr(
+                            html.td(
+                                {"colSpan": 3 if has_status_column else 2, "style": {"text_align": "center"}},
+                                "No hay equipos para mostrar.",
+                            )
                         )
-                    )
+                    ]
                 ),
             ),
         ),
@@ -447,7 +470,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_s
             ),
             html.div(
                 {
-                    "className": "grid",
+                    "class_name": "grid",
                     "style": {"gridTemplateColumns": "5fr 1fr 5fr", "alignItems": "center", "gap": "1rem"},
                 },
                 DeviceList(
@@ -473,7 +496,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_s
                             "disabled": not selected_in_available,
                             "data-tooltip": "Asignar seleccionados",
                         },
-                        "->",
+                        html.i({"class_name": "fa-solid fa-arrow-right"}),
                     ),
                     html.button(
                         {
@@ -488,7 +511,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_s
                             "disabled": not selected_in_assigned,
                             "data-tooltip": "Desasignar seleccionados",
                         },
-                        "<-",
+                        html.i({"class_name": "fa-solid fa-arrow-left"}),
                     ),
                 ),
                 DeviceList(
@@ -501,7 +524,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_s
                 ),
             ),
             html.footer(
-                html.button({"className": "secondary", "onClick": on_close, "disabled": is_loading}, "Cancelar"),
+                html.button({"class_name": "secondary", "onClick": on_close, "disabled": is_loading}, "Cancelar"),
                 html.button(
                     {"aria-busy": str(is_loading).lower(), "onClick": handle_save, "disabled": is_loading}, "Guardar"
                 ),
@@ -686,10 +709,13 @@ def SchedulesList(
                 html.td(", ".join([device["Equipo"] for device in s.get("Equipos", [])]) or "Ninguno"),
                 html.td(
                     html.div(
-                        {"className": "grid"},
-                        html.button({"className": "outline", "onClick": lambda e, sch=s: on_edit(sch)}, "Editar"),
+                        {"class_name": "grid"},
+                        html.button({"class_name": "outline", "onClick": lambda e, sch=s: on_edit(sch)}, "Editar"),
                         html.button(
-                            {"className": "secondary outline", "onClick": lambda e, sch=s: set_schedule_to_delete(sch)},
+                            {
+                                "class_name": "secondary outline",
+                                "onClick": lambda e, sch=s: set_schedule_to_delete(sch),
+                            },
                             "Eliminar",
                         ),
                     )
@@ -705,7 +731,7 @@ def SchedulesList(
             html.tbody(
                 rows
                 if rows
-                else html.tr(html.td({"colSpan": 3, "style": {"textAlign": "center"}}, "No hay programaciones."))
+                else html.tr(html.td({"colSpan": 3, "style": {"text_align": "center"}}, "No hay programaciones."))
             ),
         ),
         ConfirmationModal(
@@ -753,7 +779,7 @@ def ScheduleForm(
                 ),
             ),
             html.div(
-                {"className": "grid"},
+                {"class_name": "grid"},
                 html.label(
                     "Hora Inicio",
                     html.input(
@@ -784,11 +810,11 @@ def ScheduleForm(
         ),
         html.footer(
             html.div(
-                {"className": "grid"},
+                {"class_name": "grid"},
                 html.button(
                     {
                         "type": "button",
-                        "className": "secondary",
+                        "class_name": "secondary",
                         "onClick": lambda e: on_cancel(),
                         "disabled": is_loading,
                     },
