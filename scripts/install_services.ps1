@@ -1,5 +1,3 @@
-### **6. `scripts/install_services.ps1`**
-
 # Script para instalar servicios SAM con NSSM
 # Ejecutar como Administrador
 
@@ -72,7 +70,7 @@ foreach ($svc in $services) {
     nssm set $svc.Name AppRotateFiles 1
     nssm set $svc.Name AppRotateOnline 1
     nssm set $svc.Name AppRotateBytes 10485760  # 10MB
-    nssm set $svc.Name Start SERVICE_AUTO_START
+    # nssm set $svc.Name Start SERVICE_AUTO_START
     
     Write-Host "  ✓ Instalado correctamente" -ForegroundColor Green
 }
@@ -80,3 +78,5 @@ foreach ($svc in $services) {
 Write-Host "`n✓ Todos los servicios instalados correctamente" -ForegroundColor Green
 Write-Host "`nPara iniciar los servicios, ejecuta:" -ForegroundColor Cyan
 Write-Host "  Start-Service -Name 'SAM-*'" -ForegroundColor White
+Write-Host "Para detener los servicios, ejecuta:" -ForegroundColor Cyan
+Write-Host "  Stop-Service -Name 'SAM-*'" -ForegroundColor White
