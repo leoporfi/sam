@@ -1,17 +1,16 @@
-# /src/web/features/dashboard/dashboard_components.py
+# /src/web/features/robots/robots_components.py
 
 from typing import Callable, Dict, List
 
 from reactpy import component, event, html, use_state
 
-# Corregimos la importación para que sea absoluta desde la raíz 'src'
 from sam.web.backend.schemas import Robot
 
 from ...shared.common_components import LoadingSpinner, Pagination
 
 
 @component
-def DashboardControls(
+def RobotsControls(
     is_syncing: bool,
     on_sync: Callable,
     on_create_robot: Callable,
@@ -46,12 +45,12 @@ def DashboardControls(
         ),
         html.div(
             {"class_name": collapsible_panel_class},
-            # Simplificamos la estructura para el CSS Grid
             html.div(
                 {"class_name": "master-controls-grid"},
                 html.input(
                     {
                         "type": "search",
+                        "name": "search-robot",
                         "placeholder": "Buscar robots por nombre...",
                         "value": search_term,
                         "on_change": lambda event: on_search_change(event["target"]["value"]),
@@ -61,6 +60,7 @@ def DashboardControls(
                 ),
                 html.select(
                     {
+                        "name": "filter-activo",
                         "value": active_filter,
                         "on_change": lambda event: on_active_change(event["target"]["value"]),
                     },
@@ -70,6 +70,7 @@ def DashboardControls(
                 ),
                 html.select(
                     {
+                        "name": "filter-online",
                         "value": online_filter,
                         "on_change": lambda event: on_online_change(event["target"]["value"]),
                     },
@@ -98,7 +99,7 @@ def DashboardControls(
 
 
 @component
-def RobotDashboard(robots: List[Robot], on_action: Callable, robots_state: Dict, set_current_page: Callable):
+def RobotsDashboard(robots: List[Robot], on_action: Callable, robots_state: Dict, set_current_page: Callable):
     """Componente principal que ahora solo renderiza la tabla/tarjetas y la paginación."""
     loading = robots_state["loading"]
     error = robots_state["error"]
@@ -179,13 +180,14 @@ def RobotTable(robots: List[Robot], on_action: Callable, sort_by: str, sort_dir:
             html.tbody(
                 *[RobotRow(robot=robot, on_action=on_action) for robot in robots]
                 if robots
-                else html.tr(
-                    # RFR-17: Mensaje descriptivo cuando no hay datos.
-                    html.td(
-                        {"colSpan": len(table_headers), "style": {"textAlign": "center"}},
-                        "No se encontraron robots.",
+                else [
+                    html.tr(
+                        html.td(
+                            {"colSpan": len(table_headers), "style": {"text_align": "center"}},
+                            "No se encontraron robots.",
+                        )
                     )
-                )
+                ]
             ),
         )
     )
@@ -213,30 +215,28 @@ def RobotRow(robot: Robot, on_action: Callable):
         html.td(robot["Robot"]),
         html.td(robot.get("CantidadEquiposAsignados", 0)),
         html.td(
-            html.fieldset(
-                html.label(
-                    html.input(
-                        {
-                            "type": "checkbox",
-                            "role": "switch",
-                            "checked": robot["Activo"],
-                            "on_change": event(handle_toggle_active),
-                        }
-                    )
+            html.label(
+                html.input(
+                    {
+                        "type": "checkbox",
+                        "name": "checkbox-activo",
+                        "role": "switch",
+                        "checked": robot["Activo"],
+                        "on_change": event(handle_toggle_active),
+                    }
                 )
             )
         ),
         html.td(
-            html.fieldset(
-                html.label(
-                    html.input(
-                        {
-                            "type": "checkbox",
-                            "role": "switch",
-                            "checked": robot["EsOnline"],
-                            "on_change": event(handle_toggle_online),
-                        }
-                    )
+            html.label(
+                html.input(
+                    {
+                        "type": "checkbox",
+                        "name": "checkbox-EsOnline",
+                        "role": "switch",
+                        "checked": robot["EsOnline"],
+                        "on_change": event(handle_toggle_online),
+                    }
                 )
             )
         ),
@@ -268,7 +268,7 @@ def RobotRow(robot: Robot, on_action: Callable):
                     {
                         "href": "#",
                         "on_click": event(handle_schedule, prevent_default=True),
-                        "data-tooltip": "Programar Tareas",
+                        "data-tooltip": "Programar Robots",
                         "data-placement": "left",
                         "class_name": "secondary",
                     },
@@ -310,6 +310,7 @@ def RobotCard(robot: Robot, on_action: Callable):
                     html.input(
                         {
                             "type": "checkbox",
+                            "name": "checkbox-activo",
                             "role": "switch",
                             "checked": robot["Activo"],
                             "on_change": event(handle_toggle_active),
@@ -321,6 +322,7 @@ def RobotCard(robot: Robot, on_action: Callable):
                     html.input(
                         {
                             "type": "checkbox",
+                            "name": "checkbox-Esonline",
                             "role": "switch",
                             "checked": robot["EsOnline"],
                             "on_change": event(handle_toggle_online),

@@ -6,7 +6,7 @@
   --pico-typography-spacing-vertical: 1.5rem;
   --pico-form-element-spacing-vertical: 1rem;
   --pico-form-element-spacing-horizontal: 1.25rem;
-  --pico-font-size: 0.98rem;
+  --pico-font-size: 0.9rem;
 }
 
 h1,
@@ -44,6 +44,19 @@ button {
   padding-top: var(--pico-spacing);
 }
 
+/* --- Mejora del Spinner en Botones --- */
+button[aria-busy="true"] {
+  position: relative;
+  /* Centra el spinner que Pico.css añade */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+button[aria-busy="true"] > :not(progress):not(.pico-loading) {
+  /* Oculta todo el contenido que no sea el spinner */
+  visibility: hidden;
+}
 /* -------------------------------------------------------------------------- */
 /* COMPONENTES COMUNES                            */
 /* -------------------------------------------------------------------------- */

@@ -6,7 +6,7 @@ from typing import Callable, Dict, List
 
 from reactpy import component, event, html, use_context, use_effect, use_memo, use_state
 
-from ...api_client import get_api_client
+from ...api.api_client import get_api_client
 from ...shared.notifications import NotificationContext
 
 DEFAULT_POOL_STATE = {"PoolId": None, "Nombre": "", "Descripcion": ""}
@@ -58,6 +58,7 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
                     html.input(
                         {
                             "type": "text",
+                            "name": "text-pool",
                             "value": form_data.get("Nombre", ""),
                             "onChange": lambda e: handle_change("Nombre", e["target"]["value"]),
                             "required": True,
@@ -76,11 +77,11 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
             ),
             html.footer(
                 html.div(
-                    {"className": "grid"},
+                    {"class_name": "grid"},
                     html.button(
                         {
                             "type": "button",
-                            "className": "secondary",
+                            "class_name": "secondary",
                             "onClick": lambda e: on_close(),
                             "disabled": is_loading,
                         },
@@ -181,8 +182,8 @@ def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callab
             ),
             html.footer(
                 html.div(
-                    {"className": "grid"},
-                    html.button({"className": "secondary", "onClick": lambda e: on_close()}, "Cancelar"),
+                    {"class_name": "grid"},
+                    html.button({"class_name": "secondary", "onClick": lambda e: on_close()}, "Cancelar"),
                     html.button({"onClick": handle_save}, "Guardar Cambios"),
                 )
             ),
@@ -210,7 +211,7 @@ def AssignmentBox(
         set_selected_ids([])
 
     return html.div(
-        {"className": "grid", "style": {"gridTemplateColumns": "5fr 1fr 5fr", "alignItems": "center", "gap": "1rem"}},
+        {"class_name": "grid", "style": {"gridTemplateColumns": "5fr 1fr 5fr", "alignItems": "center", "gap": "1rem"}},
         ResourceListBox("Disponibles", available_items, selected_available_ids, set_selected_available_ids),
         html.div(
             {"style": {"display": "flex", "flexDirection": "column", "gap": "1rem"}},

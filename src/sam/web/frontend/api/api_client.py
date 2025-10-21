@@ -4,9 +4,9 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from ..backend.schemas import Robot
-from .utils.exceptions import APIException, ValidationException
-from .utils.validation import validate_robot_data
+from ...backend.schemas import Robot
+from ..utils.exceptions import APIException, ValidationException
+from ..utils.validation import validate_robot_data
 
 
 # Un cliente simple para comunicarse con nuestra propia API de FastAPI
@@ -99,9 +99,7 @@ class ApiClient:
     async def get_available_devices(self, robot_id: int) -> List[Dict]:
         return await self._request("GET", f"/api/equipos/disponibles/{robot_id}")
 
-    async def update_robot_assignments(
-        self, robot_id: int, assign_ids: List[int], unassign_ids: List[int]
-    ) -> Dict:
+    async def update_robot_assignments(self, robot_id: int, assign_ids: List[int], unassign_ids: List[int]) -> Dict:
         # RFR-34: Se usan los nombres de campo en español que el backend espera.
         data = {"asignar_equipo_ids": assign_ids, "desasignar_equipo_ids": unassign_ids}
         return await self._request("POST", f"/api/robots/{robot_id}/asignaciones", json_data=data)
@@ -143,6 +141,12 @@ class ApiClient:
         payload = {"robot_ids": robot_ids, "equipo_ids": equipo_ids}
         return await self._request("PUT", f"/api/pools/{pool_id}/asignaciones", json_data=payload)
 
+    async def get_equipos(self, params: Optional[Dict] = None) -> Dict:
+        return await self._request("GET", "/api/equipos", params=params)
+
+    async def update_equipo_status(self, equipo_id: int, status_data: Dict[str, Any]) -> Dict:
+        return await self._request("PATCH", f"/api/equipos/{equipo_id}", json_data=status_data)
+
     # MÉTODOS UTILITARIOS
     async def trigger_sync(self) -> Dict:
         return await self._request("POST", "/api/sync")
@@ -161,4 +165,3 @@ def get_api_client() -> ApiClient:
     if _api_client_instance is None:
         _api_client_instance = ApiClient()
     return _api_client_instance
-
