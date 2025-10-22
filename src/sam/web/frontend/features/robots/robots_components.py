@@ -10,7 +10,7 @@ from ...shared.common_components import LoadingSpinner, Pagination
 
 
 @component
-def RobotsControls(
+def RobotsControls_old(
     is_syncing: bool,
     on_sync: Callable,
     on_create_robot: Callable,
@@ -87,6 +87,110 @@ def RobotsControls(
                     },
                     html.i({"class_name": "fa-solid fa-refresh"}) if not is_syncing else None,
                     " Sincronizando..." if is_syncing else " Sincronizar",
+                ),
+                html.button(
+                    {"on_click": on_create_robot},
+                    html.i({"class_name": "fa-solid fa-plus"}),
+                    " Agregar Robot",
+                ),
+            ),
+        ),
+    )
+
+
+@component
+def RobotsControls(
+    is_syncing: bool,
+    on_sync: Callable,
+    on_create_robot: Callable,
+    search_term: str,
+    on_search_change: Callable,
+    active_filter: str,
+    on_active_change: Callable,
+    online_filter: str,
+    on_online_change: Callable,
+    is_searching: bool,
+    # Nuevos parámetros para sincronización de equipos
+    is_syncing_equipos: bool = False,
+    on_sync_equipos: Callable = None,
+):
+    """Controles para el dashboard de Robots (título, botones, filtros)."""
+    is_expanded, set_is_expanded = use_state(False)
+
+    collapsible_panel_class = "collapsible-panel"
+    if is_expanded:
+        collapsible_panel_class += " is-expanded"
+
+    return html.div(
+        {"class_name": "dashboard-controls"},
+        html.div(
+            {"class_name": "controls-header"},
+            html.h2("Gestión de Robots"),
+            html.button(
+                {
+                    "class_name": "mobile-controls-toggle outline secondary",
+                    "on_click": lambda e: set_is_expanded(not is_expanded),
+                },
+                html.i({"class_name": f"fa-solid fa-chevron-{'up' if is_expanded else 'down'}"}),
+                " Controles",
+            ),
+        ),
+        html.div(
+            {"class_name": collapsible_panel_class},
+            html.div(
+                {"class_name": "master-controls-grid"},
+                html.input(
+                    {
+                        "type": "search",
+                        "name": "search-robot",
+                        "placeholder": "Buscar robots por nombre...",
+                        "value": search_term,
+                        "on_change": lambda event: on_search_change(event["target"]["value"]),
+                        "aria-busy": str(is_searching).lower(),
+                        "class_name": "search-input",
+                    }
+                ),
+                html.select(
+                    {
+                        "name": "filter-activo",
+                        "value": active_filter,
+                        "on_change": lambda event: on_active_change(event["target"]["value"]),
+                    },
+                    html.option({"value": "all"}, "Activo: Todos"),
+                    html.option({"value": "true"}, "Solo Activos"),
+                    html.option({"value": "false"}, "Solo Inactivos"),
+                ),
+                html.select(
+                    {
+                        "name": "filter-online",
+                        "value": online_filter,
+                        "on_change": lambda event: on_online_change(event["target"]["value"]),
+                    },
+                    html.option({"value": "all"}, "Online: Todos"),
+                    html.option({"value": "true"}, "Solo Online"),
+                    html.option({"value": "false"}, "Solo No Online"),
+                ),
+                # Botón de Sincronización de Robots (azul)
+                html.button(
+                    {
+                        "on_click": on_sync,
+                        "disabled": is_syncing,
+                        "aria-busy": str(is_syncing).lower(),
+                        "class_name": "pico-background-fuchsia-500",
+                    },
+                    html.i({"class_name": "fa-solid fa-robot"}) if not is_syncing else None,
+                    " Sincronizando..." if is_syncing else " Sync Robots",
+                ),
+                # Botón de Sincronización de Equipos (verde)
+                html.button(
+                    {
+                        "on_click": on_sync_equipos if on_sync_equipos else lambda e: None,
+                        "disabled": is_syncing_equipos or not on_sync_equipos,
+                        "aria-busy": str(is_syncing_equipos).lower(),
+                        "class_name": "pico-background-purple-500",
+                    },
+                    html.i({"class_name": "fa-solid fa-desktop"}) if not is_syncing_equipos else None,
+                    " Sincronizando..." if is_syncing_equipos else " Sync Equipos",
                 ),
                 html.button(
                     {"on_click": on_create_robot},
