@@ -179,7 +179,7 @@ def get_available_devices(robot_id: int, db: DatabaseConnector = Depends(get_db)
     """
     try:
         # La llamada al servicio ya no necesita el robot_id.
-        return db_service.get_available_teams_for_robot(db)
+        return db_service.get_available_devices_for_robot(db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener equipos disponibles: {e}")
 
@@ -196,7 +196,7 @@ def get_all_equipos(
     sort_dir: Optional[str] = Query("asc"),
 ):
     try:
-        return db_service.get_equipos(
+        return db_service.get_devices(
             db=db,
             name=name,
             active=active,
@@ -213,7 +213,7 @@ def get_all_equipos(
 @router.patch("/api/equipos/{equipo_id}", tags=["Equipos"])
 def update_equipo_status(equipo_id: int, update_data: EquipoStatusUpdate, db: DatabaseConnector = Depends(get_db)):
     try:
-        success = db_service.update_equipo_status(db, equipo_id, update_data.field, update_data.value)
+        success = db_service.update_device_status(db, equipo_id, update_data.field, update_data.value)
         if success:
             return {"message": "Estado del equipo actualizado con éxito."}
         # El SP ya lanza un error si no se encuentra, que será capturado por el except.
