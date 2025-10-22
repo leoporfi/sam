@@ -508,8 +508,10 @@ dialog[open] {
   /* RFR-10: Estira los botones para que ocupen toda la altura de la celda */
   .master-controls-grid > button {
     height: 100%;
-    display: grid;
-    place-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
   }
 }
 
