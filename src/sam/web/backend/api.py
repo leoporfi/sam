@@ -39,6 +39,30 @@ async def trigger_sync(db: DatabaseConnector = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error durante la sincronización: {str(e)}")
 
 
+@router.post("/api/sync/robots", tags=["Sincronización"])
+async def trigger_sync_robots(db: DatabaseConnector = Depends(get_db)):
+    """
+    Sincroniza solo robots desde Automation Anywhere A360.
+    """
+    try:
+        summary = await db_service.sync_robots_only(db)
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error durante la sincronización de robots: {str(e)}")
+
+
+@router.post("/api/sync/equipos", tags=["Sincronización"])
+async def trigger_sync_equipos(db: DatabaseConnector = Depends(get_db)):
+    """
+    Sincroniza solo equipos desde Automation Anywhere A360.
+    """
+    try:
+        summary = await db_service.sync_equipos_only(db)
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error durante la sincronización de equipos: {str(e)}")
+
+
 # --- Rutas para Robots ---
 @router.get("/api/robots", tags=["Robots"])
 def get_robots_with_assignments(

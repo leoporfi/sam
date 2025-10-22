@@ -515,3 +515,47 @@ dialog[open] {
   }
 }
 
+/* Fragmento adicional para custom.css */
+
+/* --- Botones con colores de PicoCSS --- */ 
+.pico-background-fuchsia-500 {
+  --pico-background-color: var(--pico-color-fuchsia-500);
+  --pico-border-color: var(--pico-color-fuchsia-500);
+  --pico-color: white;
+  font-weight: 600;
+}
+
+.pico-background-fuchsia-500:hover {
+  --pico-background-color: var(--pico-color-fuchsia-600);
+  --pico-border-color: var(--pico-color-fuchsia-600);
+}
+
+.pico-background-purple-500 {
+  --pico-background-color: var(--pico-color-purple-500);
+  --pico-border-color: var(--pico-color-purple-500);
+  --pico-color: white;
+  font-weight: 600;
+}
+
+.pico-background-purple-500:hover {
+  --pico-background-color: var(--pico-color-purple-600);
+  --pico-border-color: var(--pico-color-purple-600);
+}
+
+/* --- Ajuste del grid para 6 columnas en escritorio --- */
+@media (min-width: 1024px) {
+  .master-controls-grid {
+    /* Define 6 columnas: buscador, 2 filtros, 2 botones de sync y 1 botón agregar */
+    grid-template-columns: 3fr repeat(2, 2fr) repeat(3, 1.5fr);
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .master-controls-grid > button {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+}
