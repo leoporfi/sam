@@ -39,7 +39,7 @@ def EquiposControls(
         html.div(
             {"class_name": collapsible_panel_class},
             html.div(
-                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "3fr 2fr 2fr"}},
+                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr 2fr 2fr"}},
                 html.input(
                     {
                         "type": "search",
@@ -69,6 +69,10 @@ def EquiposControls(
                     html.option({"value": "all"}, "Balanceo: Todos"),
                     html.option({"value": "true"}, "Permite Balanceo"),
                     html.option({"value": "false"}, "No Permite Balanceo"),
+                ),
+                html.button(
+                    html.i({"class_name": "fa-solid fa-plus"}),
+                    " Agregar Equipo",
                 ),
             ),
         ),
