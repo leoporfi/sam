@@ -173,15 +173,15 @@ def update_asignaciones_robot(
         raise
 
 
-def get_available_teams_for_robot(db: DatabaseConnector) -> List[Dict]:
+def get_available_devices_for_robot(db: DatabaseConnector) -> List[Dict]:
     """
     Obtiene todos los equipos que no están asignados a ningún robot y tienen una licencia válida.
     Cumple con las reglas de negocio BR-05 y BR-06.
     """
     query = """
         SELECT EquipoId, Equipo FROM dbo.Equipos
-        WHERE 
-            Activo_SAM = 1 
+        WHERE
+            Activo_SAM = 1
             AND Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')
             AND EquipoId NOT IN (
                 SELECT EquipoId FROM dbo.Asignaciones WHERE EquipoId IS NOT NULL
@@ -191,7 +191,7 @@ def get_available_teams_for_robot(db: DatabaseConnector) -> List[Dict]:
     return db.ejecutar_consulta(query, es_select=True)
 
 
-def get_equipos(
+def get_devices(
     db: DatabaseConnector,
     name: Optional[str] = None,
     active: Optional[bool] = None,
@@ -222,7 +222,7 @@ def get_equipos(
         raise
 
 
-def update_equipo_status(db: DatabaseConnector, equipo_id: int, field: str, value: bool) -> bool:
+def update_device_status(db: DatabaseConnector, equipo_id: int, field: str, value: bool) -> bool:
     query = "{CALL dbo.ActualizarEstadoEquipo(?, ?, ?)}"
     params = (equipo_id, field, value)
     # El SP no devuelve filas, pero sí un recuento de filas afectadas.
@@ -337,7 +337,7 @@ def create_pool(db: DatabaseConnector, nombre: str, descripcion: Optional[str]) 
         new_pool["CantidadRobots"] = 0
         new_pool["CantidadEquipos"] = 0
         return new_pool
-    except Exception as e:
+    except Exception:
         raise
 
 
