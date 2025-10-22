@@ -56,7 +56,7 @@ def use_robots():
 
     # --- NUEVA FUNCIÓN DE SINCRONIZACIÓN ---
     @use_callback
-    async def trigger_sync(event=None):  # RFR-03: Se añade `event=None`.
+    async def trigger_sync_old(event=None):  # RFR-03: Se añade `event=None`.
         # El handler de evento `on_click` de Reactpy pasa un dict del evento.
         # La función original no aceptaba argumentos, causando un TypeError.
         # Añadir un argumento opcional soluciona el problema.
@@ -74,6 +74,27 @@ def use_robots():
         except Exception as e:
             notification_ctx["show_notification"](f"Error en la sincronización: {e}", "error")
             set_error(f"Error en la sincronización: {e}")
+        finally:
+            set_is_syncing(False)
+
+    @use_callback
+    async def trigger_sync(event=None):
+        """Sincroniza solo robots desde A360."""
+        if is_syncing:
+            return
+        set_is_syncing(True)
+        notification_ctx["show_notification"]("Sincronizando robots desde A360...", "info")
+        try:
+            # Usamos el método específico para robots
+            summary = await api_client.trigger_sync_robots()
+            notification_ctx["show_notification"](
+                f"Robots sincronizados: {summary.get('robots_sincronizados', 0)}.",
+                "success",
+            )
+            await load_robots()
+        except Exception as e:
+            notification_ctx["show_notification"](f"Error al sincronizar robots: {e}", "error")
+            set_error(f"Error en sincronización: {e}")
         finally:
             set_is_syncing(False)
 

@@ -21,6 +21,7 @@ def use_equipos():
 
     equipos, set_equipos = use_state([])
     loading, set_loading = use_state(True)
+    is_syncing, set_is_syncing = use_state(False)
     error, set_error = use_state(None)
     total_count, set_total_count = use_state(0)
     filters, set_filters = use_state(INITIAL_FILTERS)
@@ -51,6 +52,27 @@ def use_equipos():
             show_notification(f"Error al cargar equipos: {e}", "error")
         finally:
             set_loading(False)
+
+    @use_callback
+    async def trigger_sync(event=None):
+        """Sincroniza solo equipos desde A360."""
+        if is_syncing:
+            return
+        set_is_syncing(True)
+        show_notification("Sincronizando equipos desde A360...", "info")
+        try:
+            # Usamos el método específico para equipos
+            summary = await api_client.trigger_sync_equipos()
+            show_notification(
+                f"Equipos sincronizados: {summary.get('equipos_sincronizados', 0)}.",
+                "success",
+            )
+            await load_equipos()
+        except Exception as e:
+            show_notification(f"Error al sincronizar equipos: {e}", "error")
+            set_error(f"Error en sincronización: {e}")
+        finally:
+            set_is_syncing(False)
 
     use_effect(load_equipos, [filters, current_page, sort_by, sort_dir])
 
@@ -97,12 +119,14 @@ def use_equipos():
     return {
         "equipos": equipos,
         "loading": loading,
+        "is_syncing": is_syncing,
         "error": error,
         "total_count": total_count,
         "filters": filters,
         "set_filters": handle_set_filters,
         "update_equipo_status": update_equipo_status,
         "refresh": load_equipos,
+        "trigger_sync": trigger_sync,
         "current_page": current_page,
         "set_current_page": set_current_page,
         "total_pages": total_pages,

@@ -417,3 +417,65 @@ async def sync_with_a360(db: DatabaseConnector) -> Dict:
     except Exception as e:
         logger.critical(f"Error fatal durante la sincronización web: {type(e).__name__} - {e}", exc_info=True)
         raise
+
+
+async def sync_robots_only(db: DatabaseConnector) -> Dict:
+    """
+    Sincroniza únicamente la tabla Robots con A360.
+    """
+    logger.info("Iniciando sincronización de robots desde A360...")
+    try:
+        aa_config = ConfigManager.get_aa_config()
+        aa_client = AutomationAnywhereClient(
+            control_room_url=aa_config["url_cr"],
+            username=aa_config["usuario"],
+            password=aa_config.get("pwd"),
+            api_key=aa_config.get("api_key"),
+        )
+
+        robots_api = await aa_client.obtener_robots()
+        logger.info(f"Datos recibidos de A360: {len(robots_api)} robots.")
+
+        db.merge_robots(robots_api)
+        await aa_client.close()
+
+        logger.info(f"Sincronización de robots completada. {len(robots_api)} robots procesados.")
+        return {"robots_sincronizados": len(robots_api)}
+
+    except Exception as e:
+        logger.critical(f"Error durante sincronización de robots: {type(e).__name__} - {e}", exc_info=True)
+        raise
+
+
+async def sync_equipos_only(db: DatabaseConnector) -> Dict:
+    """
+    Sincroniza únicamente la tabla Equipos con A360.
+    """
+    logger.info("Iniciando sincronización de equipos desde A360...")
+    try:
+        aa_config = ConfigManager.get_aa_config()
+        aa_client = AutomationAnywhereClient(
+            control_room_url=aa_config["url_cr"],
+            username=aa_config["usuario"],
+            password=aa_config.get("pwd"),
+            api_key=aa_config.get("api_key"),
+        )
+
+        sincronizador = SincronizadorComun(db_connector=db, aa_client=aa_client)
+
+        devices_task = aa_client.obtener_devices()
+        users_task = aa_client.obtener_usuarios_detallados()
+        devices_api, users_api = await asyncio.gather(devices_task, users_task)
+
+        logger.info(f"Datos recibidos de A360: {len(devices_api)} dispositivos, {len(users_api)} usuarios.")
+
+        equipos_finales = sincronizador._procesar_y_mapear_equipos(devices_api, users_api)
+        db.merge_equipos(equipos_finales)
+        await aa_client.close()
+
+        logger.info(f"Sincronización de equipos completada. {len(equipos_finales)} equipos procesados.")
+        return {"equipos_sincronizados": len(equipos_finales)}
+
+    except Exception as e:
+        logger.critical(f"Error durante sincronización de equipos: {type(e).__name__} - {e}", exc_info=True)
+        raise
