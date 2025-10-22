@@ -1,0 +1,524 @@
+diff --git a/src/sam/balanceador/run_balanceador.py b/src/sam/balanceador/run_balanceador.py
+index 7b0e673..2a42f79 100644
+--- a/src/sam/balanceador/run_balanceador.py
++++ b/src/sam/balanceador/run_balanceador.py
+@@ -72,3 +72,4 @@ def main():
+         if db_rpa360:
+             db_rpa360.cerrar_conexion_hilo_actual()
+         logging.info(f"El servicio {SERVICE_NAME} ha concluido su ejecución.")
++
+diff --git a/src/sam/callback/run_callback.py b/src/sam/callback/run_callback.py
+index 37edc3f..06b617b 100644
+--- a/src/sam/callback/run_callback.py
++++ b/src/sam/callback/run_callback.py
+@@ -1,10 +1,19 @@
+ import logging
++import signal
+ import sys
+ 
+ import uvicorn
+ 
+ # --- Constantes ---
+ SERVICE_NAME = "callback"
++server_instance = None
++
++
++def graceful_shutdown(signum, frame):
++    """Maneja las señales de cierre de forma ordenada."""
++    logging.info(f"Señal de parada recibida (Señal: {signum}). Iniciando cierre ordenado...")
++    if server_instance:
++        server_instance.should_exit = True
+ 
+ 
+ def main():
+@@ -12,6 +21,8 @@ def main():
+     Función principal que lee la configuración del servidor y ejecuta Uvicorn.
+     La creación de la app y sus dependencias ahora es gestionada por el 'lifespan' de FastAPI.
+     """
++    global server_instance
++
+     try:
+         # Es necesario inicializar ConfigLoader aquí para poder leer la configuración de uvicorn del .env
+         from sam.common.config_loader import ConfigLoader
+@@ -20,6 +31,14 @@ def main():
+             ConfigLoader.initialize_service(SERVICE_NAME)
+ 
+         from sam.common.config_manager import ConfigManager
++        from sam.common.logging_setup import setup_logging
++
++        setup_logging(service_name=SERVICE_NAME)
++        logging.info(f"Iniciando el servicio: {SERVICE_NAME.capitalize()}...")
++
++        # Configurar manejadores de señales
++        signal.signal(signal.SIGINT, graceful_shutdown)
++        signal.signal(signal.SIGTERM, graceful_shutdown)
+ 
+         server_config = ConfigManager.get_callback_server_config()
+         log_config = ConfigManager.get_log_config()
+@@ -29,26 +48,28 @@ def main():
+         workers = server_config.get("threads", 1)
+         log_level = log_config.get("level_str", "info").lower()
+ 
+-        # Usamos print() porque el logging para este proceso principal no es necesario.
+-        # El logging real se configura en cada worker a través del lifespan.
+-        print(f"[{SERVICE_NAME.upper()}] Iniciando Uvicorn en http://{host}:{port} con {workers} worker(s)...")
++        logging.info(f"Configuración del servidor: http://{host}:{port} con {workers} worker(s)...")
+ 
+-        # Ejecutar Uvicorn usando el "import string".
+-        # Uvicorn lanzará los workers, y cada worker ejecutará el 'lifespan' definido en main.py
+-        uvicorn.run(
++        # Crear configuración de servidor
++        config = uvicorn.Config(
+             "sam.callback.service.main:app",
+             host=host,
+             port=port,
+             workers=workers,
+             log_level=log_level,
+         )
++        server_instance = uvicorn.Server(config)
+ 
+-    except Exception as e:
+-        # Este bloque captura errores críticos durante el arranque (ej. .env no encontrado)
+-        print(f"CRÍTICO: Error no controlado al iniciar el servicio {SERVICE_NAME}: {e}", file=sys.stderr)
+-        import traceback
++        logging.info("Servidor Uvicorn iniciado correctamente.")
++        server_instance.run()
+ 
+-        traceback.print_exc()
++    except KeyboardInterrupt:
++        logging.info("Interrupción de teclado detectada (Ctrl+C).")
++    except Exception as e:
++        logging.critical(f"Error crítico no controlado al iniciar el servicio {SERVICE_NAME}: {e}", exc_info=True)
++        sys.exit(1)
++    finally:
++        logging.info(f"El servicio {SERVICE_NAME} ha concluido su ejecución.")
+         sys.exit(1)
+ 
+ 
+diff --git a/src/sam/common/a360_client.py b/src/sam/common/a360_client.py
+index d71e423..4eab31f 100644
+--- a/src/sam/common/a360_client.py
++++ b/src/sam/common/a360_client.py
+@@ -151,6 +151,21 @@ class AutomationAnywhereClient:
+     # --- Métodos Públicos Asíncronos ---
+ 
+     async def obtener_devices(self) -> List[Dict]:
++        logger.info("Obteniendo devices de A360...")
++        payload = {"filter": {"operator": "eq", "field": "status", "value": "CONNECTED"}}
++        # RFR-27: Se elimina el mapeo. El cliente devuelve los datos en bruto de la API.
++        devices_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_DEVICES_LIST_V2, payload)
++        logger.info(f"Se encontraron {len(devices_api)} devices conectados.")
++        return devices_api
++
++    async def obtener_usuarios_detallados(self) -> List[Dict]:
++        logger.info("Obteniendo usuarios detallados de A360...")
++        # RFR-27: Se elimina el mapeo. El cliente devuelve los datos en bruto de la API.
++        usuarios_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_USERS_LIST_V2, {})
++        logger.info(f"Se encontraron {len(usuarios_api)} usuarios.")
++        return usuarios_api
++
++    async def obtener_devices_old(self) -> List[Dict]:
+         logger.info("Obteniendo devices de A360...")
+         payload = {"filter": {"operator": "eq", "field": "status", "value": "CONNECTED"}}
+         devices_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_DEVICES_LIST_V2, payload)
+@@ -169,7 +184,7 @@ class AutomationAnywhereClient:
+         logger.info(f"Se encontraron {len(devices_mapeados)} devices conectados.")
+         return devices_mapeados
+ 
+-    async def obtener_usuarios_detallados(self) -> List[Dict]:
++    async def obtener_usuarios_detallados_old(self) -> List[Dict]:
+         logger.info("Obteniendo usuarios detallados de A360...")
+         usuarios_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_USERS_LIST_V2, {})
+ 
+diff --git a/src/sam/common/logging_setup.py b/src/sam/common/logging_setup.py
+index be6f7e4..a0e2115 100644
+--- a/src/sam/common/logging_setup.py
++++ b/src/sam/common/logging_setup.py
+@@ -1,106 +1,72 @@
+-# SAM/src/common/logging_setup.py
++# sam/src/common/logging_setup.py
+ import logging
+-import sys
+-from logging.handlers import TimedRotatingFileHandler
++import logging.handlers
++import os
+ from pathlib import Path
+-from typing import Dict
+ 
+-# Importar ConfigManager para obtener la configuración
++from .config_loader import ConfigLoader
+ from .config_manager import ConfigManager
+ 
+-# Variable para asegurar que la configuración se aplique solo una vez
+-_is_configured = False
+-
+ 
+ class RelativePathFormatter(logging.Formatter):
+     """
+-    Un formateador de logs que acorta el path del módulo para mayor legibilidad.
+-    Transforma 'src.balanceador.service.main' en 'service.main'.
++    Un formateador de logs que convierte las rutas absolutas de los archivos
++    en rutas relativas a la raíz del proyecto, haciendo los logs más limpios.
+     """
+ 
+-    def __init__(self, *args, service_name: str, **kwargs):
++    def __init__(self, *args, **kwargs):
+         super().__init__(*args, **kwargs)
+-        self.service_name = service_name
+-        self.common_prefix = "src.common."
+-        self.service_prefix = f"src.{service_name}."
++        self.project_root = str(ConfigLoader.get_project_root())
+ 
+     def format(self, record):
+-        # Hacemos una copia para no modificar el registro original
+-        original_name = record.name
+-
+-        if original_name.startswith(self.service_prefix):
+-            record.name = original_name[len(self.service_prefix) :]
+-        elif original_name.startswith(self.common_prefix):
+-            record.name = original_name[len(self.common_prefix) :]
+-
+-        # Llamamos al formateador original con el nombre modificado
+-        result = super().format(record)
+-
+-        # Restauramos el nombre original por si el registro se usa en otro lugar
+-        record.name = original_name
+-        return result
+-
+-
+-class RobustTimedRotatingFileHandler(TimedRotatingFileHandler):
+-    """
+-    Una versión más robusta de TimedRotatingFileHandler que maneja errores de permisos
+-    en entornos Windows, reintentando la rotación del archivo de log.
+-    """
+-
+-    def doRollover(self):
+-        """Sobrescribe el método doRollover para manejar errores de permisos."""
+-        try:
+-            super().doRollover()
+-        except (OSError, PermissionError) as e:
+-            # En Windows, si el archivo está en uso, puede lanzar PermissionError.
+-            # Se registra el error en stderr y se continúa sin rotar.
+-            sys.stderr.write(f"LOGGING_SETUP: No se pudo rotar el archivo de log. Error: {e}\n")
+-        except Exception as e:
+-            sys.stderr.write(f"LOGGING_SETUP: Error inesperado al rotar el archivo de log: {e}\n")
++        if hasattr(record, "pathname") and record.pathname.startswith(self.project_root):
++            record.pathname = os.path.relpath(record.pathname, self.project_root)
++        return super().format(record)
+ 
+ 
+ def setup_logging(service_name: str):
+     """
+-    Configura el logger raíz para un servicio específico.
++    Configura el sistema de logging para un servicio específico.
++    Utiliza TimedRotatingFileHandler para rotar los logs diariamente.
+     """
+-    global _is_configured
+-    if _is_configured:
+-        return
+-
+     log_config = ConfigManager.get_log_config()
+-    log_filename = log_config.get(f"app_log_filename_{service_name}", f"sam_{service_name}_app.log")
+-    log_directory = Path(log_config.get("directory", "C:/RPA/Logs/SAM"))
+-    log_file_path = log_directory / log_filename
++    log_directory = Path(log_config["directory"])
+     log_directory.mkdir(parents=True, exist_ok=True)
+ 
+-    # CORREGIDO: Usamos nuestro nuevo formateador personalizado
+-    log_formatter = RelativePathFormatter(
+-        fmt=log_config.get("format"),
+-        datefmt=log_config.get("datefmt"),
+-        service_name=service_name,  # Le pasamos el nombre del servicio
+-    )
++    # Determinar el nombre del archivo de log para el servicio actual
++    log_filename_key = f"app_log_filename_{service_name}"
++    log_filename = log_config.get(log_filename_key, f"sam_{service_name}_app.log")
++    log_file_path = log_directory / log_filename
++
++    # Configurar el nivel de logging
++    log_level_str = log_config.get("level_str", "INFO").upper()
++    log_level = getattr(logging, log_level_str, logging.INFO)
+ 
+-    file_handler = RobustTimedRotatingFileHandler(
+-        filename=log_file_path,
+-        when=log_config.get("when", "midnight"),
+-        interval=log_config.get("interval", 1),
+-        backupCount=log_config.get("backupCount", 7),
+-        encoding=log_config.get("encoding", "utf-8"),
++    # Crear el formateador con la ruta relativa
++    formatter = RelativePathFormatter(log_config["format"], datefmt=log_config["datefmt"])
++
++    # Configurar el handler de rotación de archivos
++    file_handler = logging.handlers.TimedRotatingFileHandler(
++        log_file_path,
++        when=log_config["when"],
++        interval=log_config["interval"],
++        backupCount=log_config["backupCount"],
++        encoding=log_config["encoding"],
+     )
+-    file_handler.setFormatter(log_formatter)
++    file_handler.setFormatter(formatter)
+ 
+-    console_handler = logging.StreamHandler(sys.stdout)
+-    console_handler.setFormatter(log_formatter)
++    # Configurar el handler de la consola (para ver los logs en la terminal)
++    console_handler = logging.StreamHandler()
++    console_handler.setFormatter(formatter)
+ 
++    # Configurar el logger raíz para que envíe los logs a ambos handlers
+     root_logger = logging.getLogger()
+-    root_logger.setLevel(log_config.get("level_str", "INFO").upper())
+-
+-    if root_logger.hasHandlers():
+-        root_logger.handlers.clear()
++    root_logger.setLevel(log_level)
++    root_logger.handlers = [file_handler, console_handler]
+ 
+-    root_logger.addHandler(file_handler)
+-    root_logger.addHandler(console_handler)
++    # RFR-33: Se añade esta línea para silenciar los logs de INFO de httpx.
++    # Esto limpia la consola de mensajes de peticiones HTTP exitosas,
++    # pero seguirá mostrando WARNINGS y ERRORS de la librería.
++    logging.getLogger("httpx").setLevel(logging.WARNING)
+ 
+-    _is_configured = True
+-    # Usamos print para este mensaje inicial, ya que el logger acaba de ser configurado.
+-    print(f"Logging configurado para el servicio '{service_name}'. Los logs se guardarán en: {log_file_path}")
++    logging.info(f"Logging configurado para el servicio '{service_name}'. Los logs se guardarán en: {log_file_path}")
+diff --git a/src/sam/common/sincronizador_comun.py b/src/sam/common/sincronizador_comun.py
+new file mode 100644
+index 0000000..2150d80
+--- /dev/null
++++ b/src/sam/common/sincronizador_comun.py
+@@ -0,0 +1,97 @@
++# sam/common/sincronizador_comun.py
++import asyncio
++import logging
++from typing import Dict, List
++
++from .a360_client import AutomationAnywhereClient
++from .database import DatabaseConnector
++
++logger = logging.getLogger(__name__)
++
++
++class SincronizadorComun:
++    """
++    Componente 'cerebro' centralizado y reutilizable, responsable de la lógica
++    de sincronización de entidades entre SAM y Automation Anywhere.
++    """
++
++    def __init__(self, db_connector: DatabaseConnector, aa_client: AutomationAnywhereClient):
++        """
++        Inicializa el Sincronizador con sus dependencias.
++
++        Args:
++            db_connector: Conector a la base de datos de SAM.
++            aa_client: Cliente para la API de Automation Anywhere.
++        """
++        self._db_connector = db_connector
++        self._aa_client = aa_client
++
++    async def sincronizar_entidades(self) -> Dict[str, int]:
++        """
++        Orquesta un ciclo completo de sincronización. Obtiene los datos de A360,
++        los procesa y los persiste en la base de datos de SAM.
++        """
++        logger.info("Iniciando obtención de entidades desde A360 en paralelo...")
++        try:
++            robots_task = self._aa_client.obtener_robots()
++            devices_task = self._aa_client.obtener_devices()
++            users_task = self._aa_client.obtener_usuarios_detallados()
++
++            robots_api, devices_api, users_api = await asyncio.gather(robots_task, devices_task, users_task)
++            logger.info(f"Datos recibidos de A360: {len(robots_api)} robots, {len(devices_api)} dispositivos, {len(users_api)} usuarios.")
++
++            equipos_finales = self._procesar_y_mapear_equipos(devices_api, users_api)
++
++            logger.info("Actualizando base de datos de SAM...")
++            self._db_connector.merge_robots(robots_api)
++            self._db_connector.merge_equipos(equipos_finales)
++
++            logger.info(f"Sincronización completada. {len(robots_api)} robots y {len(equipos_finales)} equipos procesados.")
++            return {"robots_sincronizados": len(robots_api), "equipos_sincronizados": len(equipos_finales)}
++
++        except Exception as e:
++            logger.error(f"Error grave durante el ciclo de sincronización centralizado: {e}", exc_info=True)
++            raise
++
++    def _procesar_y_mapear_equipos(self, devices_list: List[Dict], users_list: List[Dict]) -> List[Dict]:
++        """
++        Toma los datos en bruto de las APIs y los transforma al formato que
++        el Stored Procedure MergeEquipos espera.
++        """
++        if not devices_list:
++            logger.warning("La lista de dispositivos de la API está vacía.")
++            return []
++
++        users_by_id = {user["id"]: user for user in users_list if isinstance(user, dict) and "id" in user}
++
++        equipos_procesados = []
++        for device in devices_list:
++            # RFR-32: Corrección para extraer el user_id de la estructura anidada.
++            # La API de Devices devuelve el usuario dentro de 'defaultUsers'.
++            user_id = None
++            if device.get("defaultUsers") and isinstance(device["defaultUsers"], list) and len(device["defaultUsers"]) > 0:
++                user_id = device["defaultUsers"][0].get("id")
++
++            user_info = users_by_id.get(user_id, {})
++
++            equipo_mapeado = {
++                "EquipoId": device.get("id"),
++                "Equipo": device.get("hostName"),
++                "UserId": user_id,
++                "UserName": user_info.get("username"),
++                "Licencia": ", ".join(user_info.get("licenseFeatures", [])),
++                "Activo_SAM": device.get("status") == "CONNECTED",
++            }
++            equipos_procesados.append(equipo_mapeado)
++
++        equipos_unicos = {}
++        for equipo in equipos_procesados:
++            equipo_id = equipo.get("EquipoId")
++            if equipo_id:
++                if equipo_id not in equipos_unicos:
++                    equipos_unicos[equipo_id] = equipo
++                else:
++                    logger.warning(f"Se encontró un EquipoId duplicado de A360 y se ha omitido: ID = {equipo_id}")
++
++        return list(equipos_unicos.values())
++
+diff --git a/src/sam/lanzador/run_lanzador.py b/src/sam/lanzador/run_lanzador.py
+index 0e70aae..f8a92dd 100644
+--- a/src/sam/lanzador/run_lanzador.py
++++ b/src/sam/lanzador/run_lanzador.py
+@@ -25,6 +25,7 @@ service_instance: Optional[LanzadorService] = None
+ 
+ # --- Manejo de Cierre Ordenado (Graceful Shutdown) ---
+ def graceful_shutdown(signum, frame):
++    """Maneja las señales de cierre de forma ordenada."""
+     logging.info(f"Señal de parada recibida (Señal: {signum}). Iniciando cierre ordenado...")
+     if service_instance:
+         service_instance.stop()
+@@ -43,6 +44,9 @@ async def main_async():
+     gateway_client = None
+ 
+     try:
++        signal.signal(signal.SIGINT, graceful_shutdown)
++        signal.signal(signal.SIGTERM, graceful_shutdown)
++
+         logging.info("Creando todas las dependencias del servicio...")
+         # Configuración
+         lanzador_cfg = ConfigManager.get_lanzador_config()
+@@ -59,7 +63,6 @@ async def main_async():
+             contrasena=cfg_sql_sam["contrasena"],
+         )
+ 
+-        # --- CORRECCIÓN AQUÍ ---
+         # Se pasan los argumentos de forma explícita y correcta.
+         # 'password' es opcional y 'api_key' se pasa como keyword argument.
+         aa_client = AutomationAnywhereClient(
+@@ -103,6 +106,10 @@ async def main_async():
+         logging.info("Iniciando el ciclo principal del orquestador...")
+         await service_instance.run()
+ 
++    except KeyboardInterrupt:
++        logging.info("Interrupción de teclado detectada (Ctrl+C).")
++        if service_instance:
++            service_instance.stop()
+     except Exception as e:
+         logging.critical(f"Error crítico no controlado en el servicio {SERVICE_NAME}: {e}", exc_info=True)
+     finally:
+diff --git a/src/sam/lanzador/service/sincronizador.py b/src/sam/lanzador/service/sincronizador.py
+index d90cd58..f6fd0a7 100644
+--- a/src/sam/lanzador/service/sincronizador.py
++++ b/src/sam/lanzador/service/sincronizador.py
+@@ -1,74 +1,37 @@
+ # sam/lanzador/service/sincronizador.py
+-import asyncio
+ import logging
+ 
+ from sam.common.a360_client import AutomationAnywhereClient
+ from sam.common.database import DatabaseConnector
++# RFR-29: Se importa el nuevo sincronizador común
++from sam.common.sincronizador_comun import SincronizadorComun
+ 
+ logger = logging.getLogger(__name__)
+ 
+ 
+ class Sincronizador:
+     """
+-    Componente 'cerebro' responsable de la lógica de sincronización de
+-    entidades (robots y equipos) entre SAM y Automation Anywhere.
++    Componente 'cerebro' del servicio Lanzador. Su única responsabilidad
++    es invocar al componente de sincronización común.
+     """
+ 
+     def __init__(self, db_connector: DatabaseConnector, aa_client: AutomationAnywhereClient):
+         """
+         Inicializa el Sincronizador con sus dependencias.
+-
+-        Args:
+-            db_connector: Conector a la base de datos de SAM.
+-            aa_client: Cliente para la API de Automation Anywhere.
+         """
+-        self._db_connector = db_connector
+-        self._aa_client = aa_client
++        # RFR-29: Se instancia el sincronizador común aquí
++        self._sincronizador_comun = SincronizadorComun(db_connector=db_connector, aa_client=aa_client)
+ 
+     async def sincronizar_entidades(self):
+         """
+-        Orquesta un ciclo completo de sincronización de entidades.
+-        Obtiene los datos de A360 y los persiste en la base de datos de SAM.
++        Orquesta un ciclo completo de sincronización de entidades llamando
++        a la lógica centralizada.
+         """
+-        logger.info("Iniciando obtención de entidades desde A360 en paralelo...")
++        logger.info("Iniciando ciclo de sincronización desde el servicio Lanzador...")
+         try:
+-            robots_task = self._aa_client.obtener_robots()
+-            devices_task = self._aa_client.obtener_devices()
+-            users_task = self._aa_client.obtener_usuarios_detallados()
+-
+-            robots, devices, users = await asyncio.gather(robots_task, devices_task, users_task)
+-
+-            logger.info("Datos obtenidos de A360. Procesando y enriqueciendo información de equipos...")
+-            devices_procesados = self._procesar_y_enriquecer_devices(devices, users)
+-
+-            logger.info("Actualizando base de datos de SAM...")
+-            self._db_connector.merge_robots(robots)
+-            self._db_connector.merge_equipos(devices_procesados)
+-
+-            logger.info(f"Sincronización completada. {len(robots)} robots y {len(devices_procesados)} equipos procesados.")
+-
++            # RFR-29: Se delega toda la lógica al componente común
++            await self._sincronizador_comun.sincronizar_entidades()
+         except Exception as e:
+-            logger.error(f"Error grave durante el ciclo de sincronización: {e}", exc_info=True)
+-
+-    def _procesar_y_enriquecer_devices(self, devices: list, users: list) -> list:
+-        """
+-        Combina la información de usuarios y dispositivos para añadir la licencia
+-        a cada dispositivo.
+-        """
+-        if not devices or not users:
+-            logger.warning("La lista de dispositivos o usuarios está vacía. No se puede enriquecer la información.")
+-            return devices
+-
+-        users_by_id = {user["UserId"]: user for user in users if isinstance(user, dict) and "UserId" in user}
+-        devices_enriquecidos = []
+-
+-        for device in devices:
+-            if isinstance(device, dict):
+-                user_id = device.get("UserId")
+-                if user_id in users_by_id:
+-                    device["Licencia"] = users_by_id[user_id].get("Licencia", "SIN_LICENCIA")
+-                else:
+-                    device["Licencia"] = "USUARIO_NO_ENCONTRADO"
+-                devices_enriquecidos.append(device)
+-
+-        return devices_enriquecidos
++            logger.error(f"Error grave durante el ciclo de sincronización del lanzador: {e}", exc_info=True)
++            # La gestión de errores y notificaciones se maneja en el orquestador principal
++            raise

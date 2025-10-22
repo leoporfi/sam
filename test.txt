@@ -1,0 +1,1034 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.11, pytest-8.4.2, pluggy-1.6.0 -- C:\Users\lporfiri\RPA\rpa_sam\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\lporfiri\RPA\rpa_sam
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.9.0, asyncio-1.2.0, cov-7.0.0, mock-3.15.1
+asyncio: mode=auto, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 15 items
+
+tests/test_balanceador.py::TestAlgoritmoBalanceo::test_asignar_equipos_minimos_necesarios ERROR [  6%]
+tests/test_balanceador.py::TestAlgoritmoBalanceo::test_desasignar_equipos_excedentes ERROR [ 13%]
+tests/test_callback.py::TestCallbackEndpoints::test_health_check_endpoint ERROR [ 20%]
+tests/test_callback.py::TestCallbackEndpoints::test_callback_fails_without_auth_header ERROR [ 26%]
+tests/test_callback.py::TestCallbackEndpoints::test_callback_fails_with_invalid_auth_header ERROR [ 33%]
+tests/test_callback.py::TestCallbackEndpoints::test_callback_succeeds_and_updates_db ERROR [ 40%]
+tests/test_common.py::TestConfigLoading::test_config_loader_initialized ERROR [ 46%]
+tests/test_common.py::TestConfigLoading::test_config_manager_reads_mock_env ERROR [ 53%]
+tests/test_common.py::TestAutomationAnywhereClient::test_token_refresh_on_401 ERROR [ 60%]
+tests/test_lanzador.py::test_desplegador_deploys_pending_robot ERROR     [ 66%]
+tests/test_lanzador.py::test_desplegador_handles_no_robots_to_deploy ERROR [ 73%]
+tests/test_lanzador.py::test_sincronizador_updates_running_deployment ERROR [ 80%]
+tests/test_web.py::TestWebAPIEndpoints::test_get_robots_endpoint ERROR   [ 86%]
+tests/test_web.py::TestWebAPIEndpoints::test_update_robot_status_endpoint ERROR [ 93%]
+tests/test_web.py::TestWebAPIEndpoints::test_update_robot_status_not_found ERROR [100%]
+
+=================================== ERRORS ====================================
+_ ERROR at setup of TestAlgoritmoBalanceo.test_asignar_equipos_minimos_necesarios _
+
+fixturedef = <FixtureDef argname='setup_and_mock_config' scope='session' baseid='tests'>
+request = <SubRequest 'setup_and_mock_config' for <Function test_asignar_equipos_minimos_necesarios>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+                return (yield)
+            if not _is_coroutine_or_asyncgen(fixturedef.func):
+>               return (yield)
+
+.venv\lib\site-packages\pytest_asyncio\plugin.py:735: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\conftest.py:37: in setup_and_mock_config
+    patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+---------------------------- Captured stderr setup ----------------------------
+CONFIG_LOADER: Cargando .env general desde C:\Users\lporfiri\RPA\rpa_sam\.env
+CONFIG_LOADER: Servicio 'sam_test_session' inicializado
+CONFIG_LOADER: Proyecto root: C:\Users\lporfiri\RPA\rpa_sam
+_ ERROR at setup of TestAlgoritmoBalanceo.test_desasignar_equipos_excedentes __
+
+pytestconfig = <_pytest.config.Config object at 0x000001886585E050>
+
+    @pytest.fixture(scope="session", autouse=True)
+    def setup_and_mock_config(pytestconfig):
+        """
+        Se ejecuta una sola vez por sesión para asegurar que la configuración
+        esté 'mockeada' antes de que cualquier prueba se ejecute.
+        Esto previene que los tests intenten leer archivos .env.
+        """
+        # Inicializa el cargador para asegurar que sys.path sea correcto.
+        ConfigLoader.initialize_service("sam_test_session")
+    
+        # Usamos patch para interceptar las llamadas al ConfigManager.
+        # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
+        mock_settings = {
+            "CALLBACK_AUTH_TOKEN": "test-token",
+            "A360_CONTROL_ROOM_URL": "https://test.a360.com",
+            "A360_API_KEY": "test-key",
+            "A360_USER": "test-user",
+            "SQL_SAM_SERVER": "test-server",
+            "SQL_SAM_DATABASE": "test-db",
+            "SQL_SAM_USER": "test-user",
+            "SQL_SAM_PASSWORD": "test-password",
+        }
+    
+        # Creamos un 'side effect' para simular la obtención de valores.
+        def mock_get(key, default=None):
+            return mock_settings.get(key, default)
+    
+        # Aplicamos el patch a los métodos de ConfigManager
+>       patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+
+tests\conftest.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+_____ ERROR at setup of TestCallbackEndpoints.test_health_check_endpoint ______
+
+pytestconfig = <_pytest.config.Config object at 0x000001886585E050>
+
+    @pytest.fixture(scope="session", autouse=True)
+    def setup_and_mock_config(pytestconfig):
+        """
+        Se ejecuta una sola vez por sesión para asegurar que la configuración
+        esté 'mockeada' antes de que cualquier prueba se ejecute.
+        Esto previene que los tests intenten leer archivos .env.
+        """
+        # Inicializa el cargador para asegurar que sys.path sea correcto.
+        ConfigLoader.initialize_service("sam_test_session")
+    
+        # Usamos patch para interceptar las llamadas al ConfigManager.
+        # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
+        mock_settings = {
+            "CALLBACK_AUTH_TOKEN": "test-token",
+            "A360_CONTROL_ROOM_URL": "https://test.a360.com",
+            "A360_API_KEY": "test-key",
+            "A360_USER": "test-user",
+            "SQL_SAM_SERVER": "test-server",
+            "SQL_SAM_DATABASE": "test-db",
+            "SQL_SAM_USER": "test-user",
+            "SQL_SAM_PASSWORD": "test-password",
+        }
+    
+        # Creamos un 'side effect' para simular la obtención de valores.
+        def mock_get(key, default=None):
+            return mock_settings.get(key, default)
+    
+        # Aplicamos el patch a los métodos de ConfigManager
+>       patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+
+tests\conftest.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+_ ERROR at setup of TestCallbackEndpoints.test_callback_fails_without_auth_header _
+
+pytestconfig = <_pytest.config.Config object at 0x000001886585E050>
+
+    @pytest.fixture(scope="session", autouse=True)
+    def setup_and_mock_config(pytestconfig):
+        """
+        Se ejecuta una sola vez por sesión para asegurar que la configuración
+        esté 'mockeada' antes de que cualquier prueba se ejecute.
+        Esto previene que los tests intenten leer archivos .env.
+        """
+        # Inicializa el cargador para asegurar que sys.path sea correcto.
+        ConfigLoader.initialize_service("sam_test_session")
+    
+        # Usamos patch para interceptar las llamadas al ConfigManager.
+        # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
+        mock_settings = {
+            "CALLBACK_AUTH_TOKEN": "test-token",
+            "A360_CONTROL_ROOM_URL": "https://test.a360.com",
+            "A360_API_KEY": "test-key",
+            "A360_USER": "test-user",
+            "SQL_SAM_SERVER": "test-server",
+            "SQL_SAM_DATABASE": "test-db",
+            "SQL_SAM_USER": "test-user",
+            "SQL_SAM_PASSWORD": "test-password",
+        }
+    
+        # Creamos un 'side effect' para simular la obtención de valores.
+        def mock_get(key, default=None):
+            return mock_settings.get(key, default)
+    
+        # Aplicamos el patch a los métodos de ConfigManager
+>       patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+
+tests\conftest.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+_ ERROR at setup of TestCallbackEndpoints.test_callback_fails_with_invalid_auth_header _
+
+pytestconfig = <_pytest.config.Config object at 0x000001886585E050>
+
+    @pytest.fixture(scope="session", autouse=True)
+    def setup_and_mock_config(pytestconfig):
+        """
+        Se ejecuta una sola vez por sesión para asegurar que la configuración
+        esté 'mockeada' antes de que cualquier prueba se ejecute.
+        Esto previene que los tests intenten leer archivos .env.
+        """
+        # Inicializa el cargador para asegurar que sys.path sea correcto.
+        ConfigLoader.initialize_service("sam_test_session")
+    
+        # Usamos patch para interceptar las llamadas al ConfigManager.
+        # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
+        mock_settings = {
+            "CALLBACK_AUTH_TOKEN": "test-token",
+            "A360_CONTROL_ROOM_URL": "https://test.a360.com",
+            "A360_API_KEY": "test-key",
+            "A360_USER": "test-user",
+            "SQL_SAM_SERVER": "test-server",
+            "SQL_SAM_DATABASE": "test-db",
+            "SQL_SAM_USER": "test-user",
+            "SQL_SAM_PASSWORD": "test-password",
+        }
+    
+        # Creamos un 'side effect' para simular la obtención de valores.
+        def mock_get(key, default=None):
+            return mock_settings.get(key, default)
+    
+        # Aplicamos el patch a los métodos de ConfigManager
+>       patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+
+tests\conftest.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+_ ERROR at setup of TestCallbackEndpoints.test_callback_succeeds_and_updates_db _
+
+pytestconfig = <_pytest.config.Config object at 0x000001886585E050>
+
+    @pytest.fixture(scope="session", autouse=True)
+    def setup_and_mock_config(pytestconfig):
+        """
+        Se ejecuta una sola vez por sesión para asegurar que la configuración
+        esté 'mockeada' antes de que cualquier prueba se ejecute.
+        Esto previene que los tests intenten leer archivos .env.
+        """
+        # Inicializa el cargador para asegurar que sys.path sea correcto.
+        ConfigLoader.initialize_service("sam_test_session")
+    
+        # Usamos patch para interceptar las llamadas al ConfigManager.
+        # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
+        mock_settings = {
+            "CALLBACK_AUTH_TOKEN": "test-token",
+            "A360_CONTROL_ROOM_URL": "https://test.a360.com",
+            "A360_API_KEY": "test-key",
+            "A360_USER": "test-user",
+            "SQL_SAM_SERVER": "test-server",
+            "SQL_SAM_DATABASE": "test-db",
+            "SQL_SAM_USER": "test-user",
+            "SQL_SAM_PASSWORD": "test-password",
+        }
+    
+        # Creamos un 'side effect' para simular la obtención de valores.
+        def mock_get(key, default=None):
+            return mock_settings.get(key, default)
+    
+        # Aplicamos el patch a los métodos de ConfigManager
+>       patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+
+tests\conftest.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+_____ ERROR at setup of TestConfigLoading.test_config_loader_initialized ______
+
+pytestconfig = <_pytest.config.Config object at 0x000001886585E050>
+
+    @pytest.fixture(scope="session", autouse=True)
+    def setup_and_mock_config(pytestconfig):
+        """
+        Se ejecuta una sola vez por sesión para asegurar que la configuración
+        esté 'mockeada' antes de que cualquier prueba se ejecute.
+        Esto previene que los tests intenten leer archivos .env.
+        """
+        # Inicializa el cargador para asegurar que sys.path sea correcto.
+        ConfigLoader.initialize_service("sam_test_session")
+    
+        # Usamos patch para interceptar las llamadas al ConfigManager.
+        # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
+        mock_settings = {
+            "CALLBACK_AUTH_TOKEN": "test-token",
+            "A360_CONTROL_ROOM_URL": "https://test.a360.com",
+            "A360_API_KEY": "test-key",
+            "A360_USER": "test-user",
+            "SQL_SAM_SERVER": "test-server",
+            "SQL_SAM_DATABASE": "test-db",
+            "SQL_SAM_USER": "test-user",
+            "SQL_SAM_PASSWORD": "test-password",
+        }
+    
+        # Creamos un 'side effect' para simular la obtención de valores.
+        def mock_get(key, default=None):
+            return mock_settings.get(key, default)
+    
+        # Aplicamos el patch a los métodos de ConfigManager
+>       patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+
+tests\conftest.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+___ ERROR at setup of TestConfigLoading.test_config_manager_reads_mock_env ____
+
+pytestconfig = <_pytest.config.Config object at 0x000001886585E050>
+
+    @pytest.fixture(scope="session", autouse=True)
+    def setup_and_mock_config(pytestconfig):
+        """
+        Se ejecuta una sola vez por sesión para asegurar que la configuración
+        esté 'mockeada' antes de que cualquier prueba se ejecute.
+        Esto previene que los tests intenten leer archivos .env.
+        """
+        # Inicializa el cargador para asegurar que sys.path sea correcto.
+        ConfigLoader.initialize_service("sam_test_session")
+    
+        # Usamos patch para interceptar las llamadas al ConfigManager.
+        # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
+        mock_settings = {
+            "CALLBACK_AUTH_TOKEN": "test-token",
+            "A360_CONTROL_ROOM_URL": "https://test.a360.com",
+            "A360_API_KEY": "test-key",
+            "A360_USER": "test-user",
+            "SQL_SAM_SERVER": "test-server",
+            "SQL_SAM_DATABASE": "test-db",
+            "SQL_SAM_USER": "test-user",
+            "SQL_SAM_PASSWORD": "test-password",
+        }
+    
+        # Creamos un 'side effect' para simular la obtención de valores.
+        def mock_get(key, default=None):
+            return mock_settings.get(key, default)
+    
+        # Aplicamos el patch a los métodos de ConfigManager
+>       patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+
+tests\conftest.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+__ ERROR at setup of TestAutomationAnywhereClient.test_token_refresh_on_401 ___
+
+self = <Coroutine test_token_refresh_on_401>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+>       return super().setup()
+
+.venv\lib\site-packages\pytest_asyncio\plugin.py:463: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\conftest.py:37: in setup_and_mock_config
+    patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+__________ ERROR at setup of test_desplegador_deploys_pending_robot ___________
+
+self = <Coroutine test_desplegador_deploys_pending_robot>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+>       return super().setup()
+
+.venv\lib\site-packages\pytest_asyncio\plugin.py:463: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\conftest.py:37: in setup_and_mock_config
+    patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+_______ ERROR at setup of test_desplegador_handles_no_robots_to_deploy ________
+
+self = <Coroutine test_desplegador_handles_no_robots_to_deploy>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+>       return super().setup()
+
+.venv\lib\site-packages\pytest_asyncio\plugin.py:463: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\conftest.py:37: in setup_and_mock_config
+    patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+_______ ERROR at setup of test_sincronizador_updates_running_deployment _______
+
+self = <Coroutine test_sincronizador_updates_running_deployment>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+>       return super().setup()
+
+.venv\lib\site-packages\pytest_asyncio\plugin.py:463: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\conftest.py:37: in setup_and_mock_config
+    patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+_______ ERROR at setup of TestWebAPIEndpoints.test_get_robots_endpoint ________
+
+pytestconfig = <_pytest.config.Config object at 0x000001886585E050>
+
+    @pytest.fixture(scope="session", autouse=True)
+    def setup_and_mock_config(pytestconfig):
+        """
+        Se ejecuta una sola vez por sesión para asegurar que la configuración
+        esté 'mockeada' antes de que cualquier prueba se ejecute.
+        Esto previene que los tests intenten leer archivos .env.
+        """
+        # Inicializa el cargador para asegurar que sys.path sea correcto.
+        ConfigLoader.initialize_service("sam_test_session")
+    
+        # Usamos patch para interceptar las llamadas al ConfigManager.
+        # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
+        mock_settings = {
+            "CALLBACK_AUTH_TOKEN": "test-token",
+            "A360_CONTROL_ROOM_URL": "https://test.a360.com",
+            "A360_API_KEY": "test-key",
+            "A360_USER": "test-user",
+            "SQL_SAM_SERVER": "test-server",
+            "SQL_SAM_DATABASE": "test-db",
+            "SQL_SAM_USER": "test-user",
+            "SQL_SAM_PASSWORD": "test-password",
+        }
+    
+        # Creamos un 'side effect' para simular la obtención de valores.
+        def mock_get(key, default=None):
+            return mock_settings.get(key, default)
+    
+        # Aplicamos el patch a los métodos de ConfigManager
+>       patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+
+tests\conftest.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+___ ERROR at setup of TestWebAPIEndpoints.test_update_robot_status_endpoint ___
+
+pytestconfig = <_pytest.config.Config object at 0x000001886585E050>
+
+    @pytest.fixture(scope="session", autouse=True)
+    def setup_and_mock_config(pytestconfig):
+        """
+        Se ejecuta una sola vez por sesión para asegurar que la configuración
+        esté 'mockeada' antes de que cualquier prueba se ejecute.
+        Esto previene que los tests intenten leer archivos .env.
+        """
+        # Inicializa el cargador para asegurar que sys.path sea correcto.
+        ConfigLoader.initialize_service("sam_test_session")
+    
+        # Usamos patch para interceptar las llamadas al ConfigManager.
+        # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
+        mock_settings = {
+            "CALLBACK_AUTH_TOKEN": "test-token",
+            "A360_CONTROL_ROOM_URL": "https://test.a360.com",
+            "A360_API_KEY": "test-key",
+            "A360_USER": "test-user",
+            "SQL_SAM_SERVER": "test-server",
+            "SQL_SAM_DATABASE": "test-db",
+            "SQL_SAM_USER": "test-user",
+            "SQL_SAM_PASSWORD": "test-password",
+        }
+    
+        # Creamos un 'side effect' para simular la obtención de valores.
+        def mock_get(key, default=None):
+            return mock_settings.get(key, default)
+    
+        # Aplicamos el patch a los métodos de ConfigManager
+>       patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+
+tests\conftest.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+__ ERROR at setup of TestWebAPIEndpoints.test_update_robot_status_not_found ___
+
+pytestconfig = <_pytest.config.Config object at 0x000001886585E050>
+
+    @pytest.fixture(scope="session", autouse=True)
+    def setup_and_mock_config(pytestconfig):
+        """
+        Se ejecuta una sola vez por sesión para asegurar que la configuración
+        esté 'mockeada' antes de que cualquier prueba se ejecute.
+        Esto previene que los tests intenten leer archivos .env.
+        """
+        # Inicializa el cargador para asegurar que sys.path sea correcto.
+        ConfigLoader.initialize_service("sam_test_session")
+    
+        # Usamos patch para interceptar las llamadas al ConfigManager.
+        # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
+        mock_settings = {
+            "CALLBACK_AUTH_TOKEN": "test-token",
+            "A360_CONTROL_ROOM_URL": "https://test.a360.com",
+            "A360_API_KEY": "test-key",
+            "A360_USER": "test-user",
+            "SQL_SAM_SERVER": "test-server",
+            "SQL_SAM_DATABASE": "test-db",
+            "SQL_SAM_USER": "test-user",
+            "SQL_SAM_PASSWORD": "test-password",
+        }
+    
+        # Creamos un 'side effect' para simular la obtención de valores.
+        def mock_get(key, default=None):
+            return mock_settings.get(key, default)
+    
+        # Aplicamos el patch a los métodos de ConfigManager
+>       patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
+
+tests\conftest.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1595: in start
+    result = self.__enter__()
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1447: in __enter__
+    original, local = self.get_original()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <unittest.mock._patch object at 0x000001886788E6E0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <class 'sam.common.config_manager.ConfigManager'> does not have the attribute 'get_str'
+
+..\..\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:1420: AttributeError
+=============================== tests coverage ================================
+______________ coverage: platform win32, python 3.10.11-final-0 _______________
+
+Name                                                                 Stmts   Miss  Cover   Missing
+--------------------------------------------------------------------------------------------------
+src\sam\__init__.py                                                      1      0   100%
+src\sam\balanceador\__init__.py                                          1      0   100%
+src\sam\balanceador\__main__.py                                          5      5     0%   2-8
+src\sam\balanceador\run_balanceador.py                                  41     41     0%   3-74
+src\sam\balanceador\service\__init__.py                                  0      0   100%
+src\sam\balanceador\service\algoritmo_balanceo.py                      176    156    11%   29-38, 46-57, 63-107, 113-127, 133-184, 190-228, 231-238, 241-246, 251-265, 270-290
+src\sam\balanceador\service\clouders_client.py                          41     41     0%   2-78
+src\sam\balanceador\service\cooling_manager.py                          41     30    27%   26-36, 39-45, 51-65, 75-77, 87-89
+src\sam\balanceador\service\historico_client.py                         24     16    33%   20, 37-54, 65-77
+src\sam\balanceador\service\main.py                                     85     85     0%   3-138
+src\sam\balanceador\service\proveedores.py                             104    104     0%   2-183
+src\sam\callback\__init__.py                                             0      0   100%
+src\sam\callback\__main__.py                                             5      5     0%   3-9
+src\sam\callback\run_callback.py                                        23     23     0%   1-52
+src\sam\callback\service\__init__.py                                     0      0   100%
+src\sam\callback\service\main.py                                        62     32    48%   38-57, 69-72, 76-78, 89-106, 112
+src\sam\common\__init__.py                                               0      0   100%
+src\sam\common\a360_client.py                                          185    155    16%   26-37, 43-75, 79-82, 89-115, 121-139, 143, 154-170, 173-189, 192-215, 219-249, 258-280, 289-314, 318-320
+src\sam\common\apigw_client.py                                          63     49    22%   19-39, 46-73, 77, 84-93, 99-106, 110-112
+src\sam\common\config_loader.py                                         52     15    71%   25, 35, 38-41, 69-71, 79-81, 86, 91-94
+src\sam\common\config_manager.py                                       105     71    32%   14-19, 36-42, 49, 71, 84, 101-113, 126, 136, 149, 164-173, 178, 187, 200, 215-264
+src\sam\common\database.py                                             169    136    20%   34-51, 54-58, 61-62, 66-85, 88-93, 96-102, 105-112, 115-138, 142-160, 163, 168-173, 176, 187-213, 216-228, 231-252
+src\sam\common\logging_setup.py                                         51     38    25%   22-25, 29-41, 52-59, 67-106
+src\sam\common\mail_client.py                                           61     49    20%   21-39, 43-105
+src\sam\lanzador\__init__.py                                             0      0   100%
+src\sam\lanzador\__main__.py                                             6      6     0%   3-11
+src\sam\lanzador\run_lanzador.py                                        67     67     0%   1-135
+src\sam\lanzador\service\__init__.py                                     0      0   100%
+src\sam\lanzador\service\conciliador.py                                 79     79     0%   2-144
+src\sam\lanzador\service\desplegador.py                                 96     80    17%   42-46, 52-79, 86-132, 136-153, 157-172
+src\sam\lanzador\service\main.py                                        58     58     0%   2-109
+src\sam\lanzador\service\sincronizador.py                               38     29    24%   25-26, 33-51, 58-74
+src\sam\web\__init__.py                                                  0      0   100%
+src\sam\web\__main__.py                                                  5      5     0%   3-9
+src\sam\web\backend\__init__.py                                          0      0   100%
+src\sam\web\backend\api.py                                             168    123    27%   37-42, 58-63, 68-77, 82-89, 94-102, 109-112, 117-121, 126-132, 137-143, 153-156, 162-165, 172-180, 189-198, 206-212, 220-245, 253-262, 270-274, 282-290
+src\sam\web\backend\database.py                                        220    193    12%   26-75, 79-82, 86-101, 105-127, 132-137, 143-147, 154-162, 167-194, 198-199, 209-242, 246-293, 297-323, 331-336, 343-356, 364-369, 376-380, 388-412, 420-429, 437-508
+src\sam\web\backend\dependencies.py                                     14      4    71%   21, 25-30
+src\sam\web\backend\schemas.py                                          59      0   100%
+src\sam\web\frontend\__init__.py                                         0      0   100%
+src\sam\web\frontend\api_client.py                                     153    117    24%   15-17, 21-24, 28-29, 33-37, 50-82, 91-108, 112-115, 120-128, 133-140, 144-147, 151-154, 160-163, 167-170, 176-180, 186-189, 193-196, 200-203, 207-210, 217, 221, 225, 229, 233, 237-238, 244-247, 251-254, 258-260, 269-271
+src\sam\web\frontend\app.py                                            104     88    15%   27-198
+src\sam\web\frontend\features\__init__.py                                0      0   100%
+src\sam\web\frontend\features\dashboard\__init__.py                      0      0   100%
+src\sam\web\frontend\features\dashboard\dashboard_components.py         45     31    31%   27-33, 103-113, 134-162, 180-183, 258-261
+src\sam\web\frontend\features\modals\__init__.py                         0      0   100%
+src\sam\web\frontend\features\modals\dashboard_modal_components.py     251    225    10%   43-93, 254-278, 329-407, 481-569, 602-636, 644-662, 667-678, 725-756, 761-777
+src\sam\web\frontend\features\modals\pool_modals.py                     91     77    15%   21-48, 95-148, 203-209, 241-249
+src\sam\web\frontend\features\pools\__init__.py                          0      0   100%
+src\sam\web\frontend\features\pools\pool_components.py                  22      9    59%   13, 32-37, 52, 75, 95
+src\sam\web\frontend\features\pools\pool_hooks.py                       19     19     0%   2-28
+src\sam\web\frontend\features\pools\pool_modals.py                      91     91     0%   7-249
+src\sam\web\frontend\hooks\use_debounced_value_hook.py                  12      9    25%   11-26
+src\sam\web\frontend\hooks\use_pools_hook.py                            31     28    10%   17-56
+src\sam\web\frontend\hooks\use_robots_hook.py                           81     72    11%   20-123
+src\sam\web\frontend\shared\__init__.py                                  0      0   100%
+src\sam\web\frontend\shared\common_components.py                        31     19    39%   11-22, 49, 63, 84-87, 106-112
+src\sam\web\frontend\shared\layout.py                                   13      6    54%   14, 38-44
+src\sam\web\frontend\shared\notifications.py                            39     30    23%   17-55, 73-77, 83-90
+src\sam\web\frontend\utils\exceptions.py                                17     10    41%   9-11, 14-16, 23-25, 28
+src\sam\web\frontend\utils\validation.py                                16     11    31%   15-31
+src\sam\web\main.py                                                     17      7    59%   27-39
+src\sam\web\run_dashboard.py                                            33     33     0%   2-67
+--------------------------------------------------------------------------------------------------
+TOTAL                                                                 3171   2577    19%
+=========================== short test summary info ===========================
+ERROR tests/test_balanceador.py::TestAlgoritmoBalanceo::test_asignar_equipos_minimos_necesarios
+ERROR tests/test_balanceador.py::TestAlgoritmoBalanceo::test_desasignar_equipos_excedentes
+ERROR tests/test_callback.py::TestCallbackEndpoints::test_health_check_endpoint
+ERROR tests/test_callback.py::TestCallbackEndpoints::test_callback_fails_without_auth_header
+ERROR tests/test_callback.py::TestCallbackEndpoints::test_callback_fails_with_invalid_auth_header
+ERROR tests/test_callback.py::TestCallbackEndpoints::test_callback_succeeds_and_updates_db
+ERROR tests/test_common.py::TestConfigLoading::test_config_loader_initialized
+ERROR tests/test_common.py::TestConfigLoading::test_config_manager_reads_mock_env
+ERROR tests/test_common.py::TestAutomationAnywhereClient::test_token_refresh_on_401
+ERROR tests/test_lanzador.py::test_desplegador_deploys_pending_robot - Attrib...
+ERROR tests/test_lanzador.py::test_desplegador_handles_no_robots_to_deploy - ...
+ERROR tests/test_lanzador.py::test_sincronizador_updates_running_deployment
+ERROR tests/test_web.py::TestWebAPIEndpoints::test_get_robots_endpoint - Attr...
+ERROR tests/test_web.py::TestWebAPIEndpoints::test_update_robot_status_endpoint
+ERROR tests/test_web.py::TestWebAPIEndpoints::test_update_robot_status_not_found
+============================= 15 errors in 4.34s ==============================
