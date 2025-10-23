@@ -3,8 +3,9 @@
 
 from sam.common.config_loader import ConfigLoader
 
-ConfigLoader.initialize_service("interfaz_web")
 from .run_web import main
+
+ConfigLoader.initialize_service("interfaz_web")
 
 if __name__ == "__main__":
     main()

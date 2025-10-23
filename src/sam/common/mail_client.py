@@ -2,7 +2,6 @@
 import datetime
 import logging
 import smtplib
-import sys  # Para sys.stderr y sys.path
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Dict, Optional
@@ -41,7 +40,9 @@ class EmailAlertClient:
     def send_alert(self, subject: str, message: str, is_critical: bool = True):
         # Verificar si la configuración esencial está presente antes de intentar enviar
         if not all([self.smtp_server, self.from_email, self.recipients]):
-            logger.error(f"No se puede enviar alerta (Asunto: {subject}) porque la configuración de email está incompleta.")
+            logger.error(
+                f"No se puede enviar alerta (Asunto: {subject}) porque la configuración de email está incompleta."
+            )
             return False
 
         try:
