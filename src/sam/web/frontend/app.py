@@ -406,7 +406,7 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
 
 @component
 def NotFoundPage(theme_is_dark: bool, on_theme_toggle):
-    """Página para rutas no encontradas."""
+    """Página para rutas no encontradas"""
     robots_state = use_robots()
     equipos_state = use_equipos()
 
