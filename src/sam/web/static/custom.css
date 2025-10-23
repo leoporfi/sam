@@ -31,7 +31,7 @@ button {
   background-color: var(--pico-background-color);
   z-index: 100; /* Suficientemente alto para estar sobre el contenido */
   padding-top: var(--pico-spacing);
-  /* padding-bottom: var(--pico-spacing); */
+  padding-bottom: var(--pico-spacing);
   border-bottom: 1px solid var(--pico-card-border-color);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
