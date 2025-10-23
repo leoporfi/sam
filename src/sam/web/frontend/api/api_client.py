@@ -148,7 +148,16 @@ class ApiClient:
         return await self._request("PATCH", f"/api/equipos/{equipo_id}", json_data=status_data)
 
     # MÉTODOS UTILITARIOS
+    async def trigger_sync_robots(self) -> Dict:
+        """Sincroniza solo robots desde A360."""
+        return await self._request("POST", "/api/sync/robots")
+
+    async def trigger_sync_equipos(self) -> Dict:
+        """Sincroniza solo equipos desde A360."""
+        return await self._request("POST", "/api/sync/equipos")
+
     async def trigger_sync(self) -> Dict:
+        """Sincroniza robots y equipos desde A360 (legacy)."""
         return await self._request("POST", "/api/sync")
 
     async def close(self):

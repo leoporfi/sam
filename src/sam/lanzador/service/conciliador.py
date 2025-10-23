@@ -1,6 +1,6 @@
 # sam/lanzador/service/conciliador.py
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Optional
 
 import pytz
@@ -18,7 +18,9 @@ class Conciliador:
     de ejecuciones entre SAM y Automation Anywhere.
     """
 
-    def __init__(self, db_connector: DatabaseConnector, aa_client: AutomationAnywhereClient, max_intentos_fallidos: int):
+    def __init__(
+        self, db_connector: DatabaseConnector, aa_client: AutomationAnywhereClient, max_intentos_fallidos: int
+    ):
         """
         Inicializa el Conciliador con sus dependencias.
 
@@ -57,7 +59,9 @@ class Conciliador:
                 return
 
             mapa_deploy_a_ejecucion = {
-                imp["DeploymentId"]: imp["EjecucionId"] for imp in ejecuciones_en_curso if imp.get("DeploymentId") and imp.get("EjecucionId")
+                imp["DeploymentId"]: imp["EjecucionId"]
+                for imp in ejecuciones_en_curso
+                if imp.get("DeploymentId") and imp.get("EjecucionId")
             }
             deployment_ids = list(mapa_deploy_a_ejecucion.keys())
 
@@ -105,7 +109,9 @@ class Conciliador:
             affected_count = self._db_connector.ejecutar_consulta_multiple(query, updates_params)
             logger.info(f"Se actualizaron {affected_count} registros de ejecuciones desde la API.")
 
-    def _gestionar_deployments_perdidos(self, deployment_ids_en_db: list, detalles_api: list, mapa_deploy_a_ejecucion: dict):
+    def _gestionar_deployments_perdidos(
+        self, deployment_ids_en_db: list, detalles_api: list, mapa_deploy_a_ejecucion: dict
+    ):
         """Gestiona los deployments que no fueron devueltos por la API de A360."""
         ids_encontrados_api = {item.get("deploymentId") for item in detalles_api}
         ids_perdidos = [dep_id for dep_id in deployment_ids_en_db if dep_id not in ids_encontrados_api]
@@ -113,14 +119,18 @@ class Conciliador:
         if not ids_perdidos:
             return
 
-        ejecucion_ids_perdidos = [mapa_deploy_a_ejecucion[dep_id] for dep_id in ids_perdidos if dep_id in mapa_deploy_a_ejecucion]
+        ejecucion_ids_perdidos = [
+            mapa_deploy_a_ejecucion[dep_id] for dep_id in ids_perdidos if dep_id in mapa_deploy_a_ejecucion
+        ]
         if not ejecucion_ids_perdidos:
             return
 
         placeholders = ",".join("?" * len(ejecucion_ids_perdidos))
         query_increment = f"UPDATE dbo.Ejecuciones SET IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1, FechaActualizacion = GETDATE() WHERE EjecucionId IN ({placeholders}) AND CallbackInfo IS NULL;"
         self._db_connector.ejecutar_consulta(query_increment, tuple(ejecucion_ids_perdidos), es_select=False)
-        logger.info(f"Incrementado contador de intentos para {len(ejecucion_ids_perdidos)} deployment(s) no encontrados en la API.")
+        logger.info(
+            f"Incrementado contador de intentos para {len(ejecucion_ids_perdidos)} deployment(s) no encontrados en la API."
+        )
 
         query_unknown = f"UPDATE dbo.Ejecuciones SET Estado = 'UNKNOWN', FechaFin = GETDATE(), FechaActualizacion = GETDATE() WHERE EjecucionId IN ({placeholders}) AND IntentosConciliadorFallidos >= ?;"
         params_unknown = tuple(ejecucion_ids_perdidos) + (self._max_intentos_fallidos,)

@@ -3,7 +3,6 @@ import logging
 
 from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.database import DatabaseConnector
-# RFR-29: Se importa el nuevo sincronizador común
 from sam.common.sincronizador_comun import SincronizadorComun
 
 logger = logging.getLogger(__name__)

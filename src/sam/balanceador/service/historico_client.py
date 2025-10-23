@@ -37,8 +37,8 @@ class HistoricoBalanceoClient:
         try:
             # La query ahora incluye la nueva columna PoolId
             query = """
-            INSERT INTO dbo.HistoricoBalanceo 
-            (RobotId, PoolId, TicketsPendientes, EquiposAsignadosAntes, EquiposAsignadosDespues, AccionTomada, Justificacion)
+            INSERT INTO dbo.HistoricoBalanceo
+             (RobotId, PoolId, TicketsPendientes, EquiposAsignadosAntes, EquiposAsignadosDespues, AccionTomada, Justificacion)
             VALUES (?, ?, ?, ?, ?, ?, ?);
             """
 
@@ -47,7 +47,9 @@ class HistoricoBalanceoClient:
 
             self.db.ejecutar_consulta(query, params, es_select=False)
 
-            logger.info(f"Registrada decisión de balanceo para RobotId {robot_id} en PoolId {pool_id or 'General'}: {accion}")
+            logger.info(
+                f"Registrada decisión de balanceo para RobotId {robot_id} en PoolId {pool_id or 'General'}: {accion}"
+            )
             return True
         except Exception as e:
             logger.error(f"Error al registrar decisión de balanceo: {e}", exc_info=True)

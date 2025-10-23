@@ -5,10 +5,8 @@ import logging
 import threading
 import time
 from contextlib import contextmanager
-from datetime import datetime
-from datetime import time as time_obj
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List
 
 import pyodbc
 

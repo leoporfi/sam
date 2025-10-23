@@ -2,23 +2,56 @@
 
 from typing import Callable, Dict, List
 
-from reactpy import component, event, html
+from reactpy import component, event, html, use_state
 
 from ...shared.common_components import LoadingSpinner
 
 
 @component
-def PoolsControls(on_create_pool: Callable):
-    """Controles para el dashboard de Pools."""
+def PoolsControls(
+    search_term: str,
+    on_search_change: Callable,
+    is_searching: bool,
+    on_create_pool: Callable,
+):
+    """Controles para el dashboard de Pools (título, buscador, botón)."""
+    is_expanded, set_is_expanded = use_state(False)
+    collapsible_panel_class = f"collapsible-panel {'is-expanded' if is_expanded else ''}"
+
     return html.div(
-        {"class_name": "grid"},
-        html.h2("Gestión de Pools de Recursos"),
+        {"class_name": "dashboard-controls"},
         html.div(
-            {"style": {"text_align": "right"}},
+            {"class_name": "controls-header"},
+            html.h2("Gestión de Pools de Recursos"),
             html.button(
-                {"on_click": on_create_pool},
-                html.i({"class_name": "fa-solid fa-plus", "aria-hidden": "true"}),
-                " Crear Nuevo Pool",
+                {
+                    "class_name": "mobile-controls-toggle outline secondary",
+                    "on_click": lambda e: set_is_expanded(not is_expanded),
+                },
+                html.i({"class_name": f"fa-solid fa-chevron-{'up' if is_expanded else 'down'}"}),
+                " Controles",
+            ),
+        ),
+        html.div(
+            {"class_name": collapsible_panel_class},
+            html.div(
+                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr"}},
+                html.input(
+                    {
+                        "type": "search",
+                        "name": "search-pool",
+                        "placeholder": "Buscar pools por nombre...",
+                        "value": search_term,
+                        "on_change": lambda event: on_search_change(event["target"]["value"]),
+                        "aria-busy": str(is_searching).lower(),
+                        "class_name": "search-input",
+                    }
+                ),
+                html.button(
+                    {"on_click": on_create_pool},
+                    html.i({"class_name": "fa-solid fa-plus"}),
+                    " Agregar Pool",
+                ),
             ),
         ),
     )

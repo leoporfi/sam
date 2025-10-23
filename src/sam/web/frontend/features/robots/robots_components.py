@@ -21,6 +21,9 @@ def RobotsControls(
     online_filter: str,
     on_online_change: Callable,
     is_searching: bool,
+    # Nuevos parámetros para sincronización de equipos
+    is_syncing_equipos: bool = False,
+    on_sync_equipos: Callable = None,
 ):
     """Controles para el dashboard de Robots (título, botones, filtros)."""
     is_expanded, set_is_expanded = use_state(False)
@@ -46,7 +49,7 @@ def RobotsControls(
         html.div(
             {"class_name": collapsible_panel_class},
             html.div(
-                {"class_name": "master-controls-grid"},
+                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr 2fr 2fr"}},
                 html.input(
                     {
                         "type": "search",
@@ -55,7 +58,7 @@ def RobotsControls(
                         "value": search_term,
                         "on_change": lambda event: on_search_change(event["target"]["value"]),
                         "aria-busy": str(is_searching).lower(),
-                        "class_name": "search-input",  # Clase específica para el buscador
+                        "class_name": "search-input",
                     }
                 ),
                 html.select(
@@ -78,16 +81,28 @@ def RobotsControls(
                     html.option({"value": "true"}, "Solo Online"),
                     html.option({"value": "false"}, "Solo No Online"),
                 ),
-                html.button(
-                    {
-                        "on_click": on_sync,
-                        "disabled": is_syncing,
-                        "aria-busy": str(is_syncing).lower(),
-                        "class_name": "secondary-ghost",
-                    },
-                    html.i({"class_name": "fa-solid fa-refresh"}) if not is_syncing else None,
-                    " Sincronizando..." if is_syncing else " Sincronizar",
-                ),
+                # Botón de Sincronización de Robots (fucsia)
+                # html.button(
+                #     {
+                #         "on_click": on_sync,
+                #         "disabled": is_syncing,
+                #         "aria-busy": str(is_syncing).lower(),
+                #         "class_name": "pico-background-fuchsia-500",
+                #     },
+                #     html.i({"class_name": "fa-solid fa-robot"}) if not is_syncing else None,
+                #     " Sincronizando..." if is_syncing else " Sync Robots",
+                # ),
+                # # Botón de Sincronización de Equipos (purpura)
+                # html.button(
+                #     {
+                #         "on_click": on_sync_equipos if on_sync_equipos else lambda e: None,
+                #         "disabled": is_syncing_equipos or not on_sync_equipos,
+                #         "aria-busy": str(is_syncing_equipos).lower(),
+                #         "class_name": "pico-background-purple-500",
+                #     },
+                #     html.i({"class_name": "fa-solid fa-desktop"}) if not is_syncing_equipos else None,
+                #     " Sincronizando..." if is_syncing_equipos else " Sync Equipos",
+                # ),
                 html.button(
                     {"on_click": on_create_robot},
                     html.i({"class_name": "fa-solid fa-plus"}),
