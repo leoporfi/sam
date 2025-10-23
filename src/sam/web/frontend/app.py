@@ -179,7 +179,7 @@ def DashboardPage(theme_is_dark: bool, on_theme_toggle):
     robots_state = use_robots()
     equipos_state = use_equipos()
 
-    search_input, set_search_input = use_state(robots_state["filters"].get("name") or "")
+    search_input, set_search_input = use_state("")
     debounced_search = use_debounced_value(search_input, 300)
 
     @use_effect(dependencies=[debounced_search])
@@ -368,7 +368,7 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
     """Lógica y UI para la nueva página de Equipos."""
     robots_state = use_robots()
     equipos_state = use_equipos()
-    search_input, set_search_input = use_state(equipos_state["filters"].get("name") or "")
+    search_input, set_search_input = use_state("")
     debounced_search = use_debounced_value(search_input, 300)
 
     @use_effect(dependencies=[debounced_search])
