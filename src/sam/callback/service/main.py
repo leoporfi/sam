@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from sam.common.config_loader import ConfigLoader
@@ -71,9 +71,10 @@ def get_db() -> DatabaseConnector:
         raise HTTPException(status_code=503, detail="La conexión a la base de datos no está disponible.")
     return db
 
+
 async def verify_api_key(x_authorization: str = Header(...)):
     server_api_key = ConfigManager.get_callback_server_config().get("token")
-    
+
     if not server_api_key:
         logger.critical("El token de seguridad (CALLBACK_TOKEN) no está configurado en el servidor.")
         raise HTTPException(status_code=500, detail="Error de configuración interna del servidor.")

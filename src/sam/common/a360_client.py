@@ -2,7 +2,7 @@
 import asyncio
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import httpx
 import urllib3
@@ -57,9 +57,7 @@ class AutomationAnywhereClient:
             logger.info("Intentando autenticación con contraseña.")
         else:
             # Si no hay ni apiKey ni contraseña, es un error de configuración
-            error_msg = (
-                "No se proporcionó ni AA_CR_API_KEY ni AA_CR_PWD para la autenticación en A360."
-            )
+            error_msg = "No se proporcionó ni AA_CR_API_KEY ni AA_CR_PWD para la autenticación en A360."
             logger.error(error_msg)
             raise ValueError(error_msg)
 
@@ -252,14 +250,12 @@ class AutomationAnywhereClient:
             try:
                 response_json = await self._realizar_peticion_api("POST", self._ENDPOINT_ACTIVITY_LIST_V3, json=payload)
                 all_details.extend(response_json.get("list", []))
-            except httpx.ReadTimeout as e:
+            except httpx.ReadTimeout:
                 logger.error(
                     f"Timeout ({self.api_timeout}s) al procesar un lote de {len(batch_ids)} deployment IDs. Lote omitido. IDs: {batch_ids}."
                 )
             except Exception as e:
-                logger.error(
-                    f"Error al procesar un lote de deployment IDs. Lote omitido. Error: {e}", exc_info=True
-                )
+                logger.error(f"Error al procesar un lote de deployment IDs. Lote omitido. Error: {e}", exc_info=True)
         logger.info(f"Se obtuvieron detalles para {len(all_details)} de {len(deployment_ids)} deployments solicitados.")
         return all_details
 
