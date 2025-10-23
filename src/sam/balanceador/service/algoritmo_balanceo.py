@@ -4,7 +4,7 @@
 import logging
 import math
 import threading
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
 from sam.common.database import DatabaseConnector
 from sam.common.mail_client import EmailAlertClient

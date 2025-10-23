@@ -243,7 +243,7 @@ def DashboardPage(theme_is_dark: bool, on_theme_toggle):
             RobotsDashboard(
                 robots=robots_state["robots"],
                 on_action=handle_robot_action,
-                robots_state=robots_state,  # ← FIX: argumento faltante
+                robots_state=robots_state,
                 set_current_page=robots_state["set_current_page"],
             ),
             RobotEditModal(
@@ -260,86 +260,6 @@ def DashboardPage(theme_is_dark: bool, on_theme_toggle):
                 robot=selected_robot if modal_view == "schedule" else None,
                 on_close=handle_modal_close,
                 on_save_success=handle_save_and_refresh,
-            ),
-        ),
-    )
-
-
-@component
-def PoolsPage_old(theme_is_dark: bool, on_theme_toggle):
-    """Lógica y UI para la página de Pools."""
-    robots_state = use_robots()
-    equipos_state = use_equipos()
-    pools_state = use_pools_management()
-    modal_pool, set_modal_pool = use_state(None)
-    modal_view, set_modal_view = use_state(None)
-    pool_to_delete, set_pool_to_delete = use_state(None)
-
-    def handle_modal_close(event=None):
-        set_modal_pool(None)
-        set_modal_view(None)
-        set_pool_to_delete(None)
-
-    def handle_create_click(event=None):
-        set_modal_pool({})
-        set_modal_view("edit")
-
-    def handle_edit_click(pool):
-        set_modal_pool(pool)
-        set_modal_view("edit")
-
-    def handle_assign_click(pool):
-        set_modal_pool(pool)
-        set_modal_view("assign")
-
-    def handle_delete_click(pool):
-        set_pool_to_delete(pool)
-
-    async def handle_confirm_delete():
-        if pool_to_delete:
-            await pools_state["remove_pool"](pool_to_delete["PoolId"])
-            handle_modal_close()
-
-    async def handle_save_pool(pool_data):
-        if pool_data.get("PoolId"):
-            await pools_state["edit_pool"](pool_data["PoolId"], pool_data)
-        else:
-            await pools_state["add_pool"](pool_data)
-        handle_modal_close()
-
-    page_controls = PoolsControls(on_create_pool=handle_create_click)
-
-    return PageWithLayout(
-        theme_is_dark=theme_is_dark,
-        on_theme_toggle=on_theme_toggle,
-        robots_state=robots_state,
-        equipos_state=equipos_state,
-        children=html._(
-            page_controls,
-            PoolsDashboard(
-                pools=pools_state["pools"],
-                on_edit=handle_edit_click,
-                on_assign=handle_assign_click,
-                on_delete=handle_delete_click,
-                loading=pools_state["loading"],
-                error=pools_state["error"],
-            ),
-            PoolEditModal(
-                pool=modal_pool if modal_view == "edit" else None,
-                on_close=handle_modal_close,
-                on_save=handle_save_pool,
-            ),
-            PoolAssignmentsModal(
-                pool=modal_pool if modal_view == "assign" else None,
-                on_close=handle_modal_close,
-                on_save_success=pools_state["refresh"],
-            ),
-            ConfirmationModal(
-                is_open=bool(pool_to_delete),
-                title="Confirmar Eliminación",
-                message=f"¿Estás seguro de que quieres eliminar el pool '{pool_to_delete['Nombre'] if pool_to_delete else ''}'?",
-                on_confirm=handle_confirm_delete,
-                on_cancel=handle_modal_close,
             ),
         ),
     )
