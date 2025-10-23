@@ -89,9 +89,10 @@ def DashboardPage(theme_is_dark: bool, on_theme_toggle):
     search_input, set_search_input = use_state("")
     debounced_search = use_debounced_value(search_input, 300)
 
-    @use_effect(dependencies=[debounced_search])
     def sync_search_with_filters():
         robots_state["set_filters"](lambda prev_filters: {**prev_filters, "name": debounced_search or None})
+
+    use_effect(sync_search_with_filters, [debounced_search])
 
     is_searching = debounced_search != search_input
     selected_robot, set_selected_robot = use_state(None)
@@ -278,9 +279,10 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
     search_input, set_search_input = use_state("")
     debounced_search = use_debounced_value(search_input, 300)
 
-    @use_effect(dependencies=[debounced_search])
     def sync_search_with_filters():
         equipos_state["set_filters"](lambda prev_filters: {**prev_filters, "name": debounced_search or None})
+
+    use_effect(sync_search_with_filters, [debounced_search])
 
     is_searching = debounced_search != search_input
 
