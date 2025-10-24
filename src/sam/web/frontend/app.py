@@ -39,7 +39,7 @@ def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state)
                                 "on_click": robots_state.get("trigger_sync"),
                                 "disabled": robots_state.get("is_syncing", False),
                                 "aria-busy": str(robots_state.get("is_syncing", False)).lower(),
-                                "class_name": "pico-background-fuchsia-500",  # "secondary outline",
+                                "class_name": "pico-background-fuchsia-500",
                                 "data-tooltip": "Sincronizar Robots",
                             },
                             html.i({"class_name": "fa-solid fa-robot"}),
@@ -51,7 +51,7 @@ def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state)
                                 "on_click": equipos_state.get("trigger_sync"),
                                 "disabled": equipos_state.get("is_syncing", False),
                                 "aria-busy": str(equipos_state.get("is_syncing", False)).lower(),
-                                "class_name": "pico-background-purple-500",  # "secondary outline",
+                                "class_name": "pico-background-purple-500",
                                 "data-tooltip": "Sincronizar Equipos",
                             },
                             html.i({"class_name": "fa-solid fa-desktop"}),
@@ -86,13 +86,12 @@ def DashboardPage(theme_is_dark: bool, on_theme_toggle):
     robots_state = use_robots()
     equipos_state = use_equipos()
 
-    search_input, set_search_input = use_state("")
+    search_input, set_search_input = use_state(robots_state["filters"].get("name") or "")
     debounced_search = use_debounced_value(search_input, 300)
 
+    @use_effect(dependencies=[debounced_search])
     def sync_search_with_filters():
         robots_state["set_filters"](lambda prev_filters: {**prev_filters, "name": debounced_search or None})
-
-    use_effect(sync_search_with_filters, [debounced_search])
 
     is_searching = debounced_search != search_input
     selected_robot, set_selected_robot = use_state(None)
@@ -141,6 +140,7 @@ def DashboardPage(theme_is_dark: bool, on_theme_toggle):
         on_sync_equipos=equipos_state.get("trigger_sync"),
     )
 
+    # FIX: Eliminamos la duplicación de robots_state
     return PageWithLayout(
         theme_is_dark=theme_is_dark,
         on_theme_toggle=on_theme_toggle,
@@ -276,13 +276,12 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
     """Lógica y UI para la nueva página de Equipos."""
     robots_state = use_robots()
     equipos_state = use_equipos()
-    search_input, set_search_input = use_state("")
+    search_input, set_search_input = use_state(equipos_state["filters"].get("name") or "")
     debounced_search = use_debounced_value(search_input, 300)
 
+    @use_effect(dependencies=[debounced_search])
     def sync_search_with_filters():
         equipos_state["set_filters"](lambda prev_filters: {**prev_filters, "name": debounced_search or None})
-
-    use_effect(sync_search_with_filters, [debounced_search])
 
     is_searching = debounced_search != search_input
 
@@ -315,7 +314,7 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
 
 @component
 def NotFoundPage(theme_is_dark: bool, on_theme_toggle):
-    """Página para rutas no encontradas"""
+    """Página para rutas no encontradas."""
     robots_state = use_robots()
     equipos_state = use_equipos()
 
@@ -359,8 +358,6 @@ def App():
         "dismiss_notification": dismiss_notification,
     }
 
-    # browser_router recibe solo objetos route()
-    # Los componentes de página deben recibir directamente las instancias
     return NotificationContext(
         html._(
             script_to_run,
