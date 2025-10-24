@@ -40,11 +40,14 @@ DEFAULT_FORM_STATE = {
 
 @component
 def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_success: Callable):
+    """Modal para crear o editar un robot. Incluye validación."""
+
     form_data, set_form_data = use_state(DEFAULT_ROBOT_STATE)
     is_loading, set_is_loading = use_state(False)
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
     api_service = get_api_client()
+
     is_edit_mode = bool(robot and robot.get("RobotId") is not None)
 
     @use_effect(dependencies=[robot])
@@ -55,10 +58,10 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
             return
 
         if is_edit_mode:
-            # Modo ediciÃ³n: rellenamos con los datos del robot
+            # Modo edición: rellenamos con los datos del robot
             set_form_data(robot)
         else:
-            # Modo creaciÃ³n: reseteamos explÃ­citamente al estado por defecto
+            # Modo creación: reseteamos explicitamente al estado por defecto
             set_form_data(DEFAULT_ROBOT_STATE)
 
     if robot is None:
@@ -556,6 +559,7 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
     view_mode, set_view_mode = use_state("list")
     schedules, set_schedules = use_state([])
     available_devices, set_available_devices = use_state([])
+    all_robot_devices, set_all_robot_devices = use_state([])
     form_data, set_form_data = use_state(DEFAULT_FORM_STATE)
     is_loading, set_is_loading = use_state(False)
 
@@ -569,11 +573,15 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
     async def fetch_schedule_data():
         set_is_loading(True)
         try:
-            schedules_res, devices_res = await asyncio.gather(
-                api_service.get_robot_schedules(robot["RobotId"]), api_service.get_available_devices(robot["RobotId"])
+            schedules_res, devices_res, assigned_res = await asyncio.gather(
+                api_service.get_robot_schedules(robot["RobotId"]),
+                api_service.get_available_devices(robot["RobotId"]),
+                api_service.get_robot_assignments(robot["RobotId"]),
             )
             set_schedules(schedules_res)
             set_available_devices(devices_res)
+            # Combinamos ambas listas en el nuevo estado
+            set_all_robot_devices(devices_res + assigned_res)
         except Exception as e:
             show_notification(str(e), "error")
         finally:
@@ -609,7 +617,8 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
     handle_form_submit = use_callback(submit_form, [form_data, robot, on_save_success])
 
     def handle_edit_click(schedule_to_edit):
-        equipos_ids = [device["EquipoId"] for device in schedule_to_edit.get("Equipos", [])]
+        assigned_device_names = {device["Equipo"] for device in schedule_to_edit.get("Equipos", [])}
+        equipos_ids = [device["EquipoId"] for device in all_robot_devices if device["Equipo"] in assigned_device_names]
         form_state = {
             "ProgramacionId": schedule_to_edit.get("ProgramacionId"),
             "TipoProgramacion": schedule_to_edit.get("TipoProgramacion", "Diaria"),
@@ -647,22 +656,27 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                 html.p(f"{robot.get('Robot', '')}"),
             ),
             html._(
-                SchedulesList(
-                    api_service=api_service,
-                    robot_id=robot["RobotId"],
-                    robot_nombre=robot["Robot"],
-                    schedules=schedules,
-                    on_edit=handle_edit_click,
-                    on_delete_success=handle_successful_change,
-                )
-                if view_mode == "list"
-                else ScheduleForm(
-                    form_data=form_data,
-                    available_devices=available_devices,
-                    is_loading=is_loading,
-                    on_submit=handle_form_submit,
-                    on_cancel=handle_cancel,
-                    on_change=handle_form_change,
+                html.div(
+                    {"style": {"display": "block" if view_mode == "list" else "none"}},
+                    SchedulesList(
+                        api_service=api_service,
+                        robot_id=robot["RobotId"],
+                        robot_nombre=robot["Robot"],
+                        schedules=schedules,
+                        on_edit=handle_edit_click,
+                        on_delete_success=handle_successful_change,
+                    ),
+                ),
+                html.div(
+                    {"style": {"display": "block" if view_mode == "form" else "none"}},
+                    ScheduleForm(
+                        form_data=form_data,
+                        available_devices=available_devices,
+                        is_loading=is_loading,
+                        on_submit=handle_form_submit,
+                        on_cancel=handle_cancel,
+                        on_change=handle_form_change,
+                    ),
                 ),
             ),
             html.footer(html.button({"on_click": lambda e: handle_new_click()}, "Crear nueva programación"))
