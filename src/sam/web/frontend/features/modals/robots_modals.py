@@ -679,7 +679,13 @@ def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
                     ),
                 ),
             ),
-            html.footer(html.button({"on_click": lambda e: handle_new_click()}, "Crear nueva programación"))
+            html.footer(
+                html.button(
+                    {"type": "button", "class_name": "secondary", "on_click": on_close, "disabled": is_loading},
+                    "Cancelar",
+                ),
+                html.button({"type": "button", "on_click": lambda e: handle_new_click()}, "Nueva programación"),
+            )
             if view_mode == "list"
             else None,
         ),
