@@ -243,6 +243,18 @@ dialog[open] {
   color: white;
 }
 
+/* --- Tags de Tipo de Ejecución de Robot --- */
+.tag-ejecucion-programado {
+  background-color: var(--pico-color-pink-550); /* Verde para Programado  var(--pico-color-azure-600)*/
+  color: white;
+}
+
+.tag-ejecucion-demanda {
+  background-color: var(--pico-color-azure-550); /* Azul para A Demanda */
+  color: white;
+}
+  
+
 /* --- Listas de Equipos en Modales --- */
 .device-list-section {
   display: flex;

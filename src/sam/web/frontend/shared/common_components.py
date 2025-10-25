@@ -1,6 +1,6 @@
-from typing import Callable, Dict, List
+from typing import Callable, List
 
-from reactpy import component, event, html
+from reactpy import component, hooks, html
 
 
 @component
@@ -12,130 +12,122 @@ def Pagination(
     on_page_change: Callable,
     max_visible_pages: int = 5,
 ):
-    """
-    Componente de paginación avanzado, inspirado en templates modernos.
-    Muestra botones de primero/último, anterior/siguiente y un rango de páginas.
-    """
+    """Componente de paginación con resumen y controles."""
+
+    # --- Lógica para generar los números de página visibles ---
+    page_numbers: List[int | str] = []
+    if total_pages <= max_visible_pages:
+        page_numbers = list(range(1, total_pages + 1))
+    else:
+        half_visible = max_visible_pages // 2
+        start_page = max(1, current_page - half_visible)
+        end_page = min(total_pages, start_page + max_visible_pages - 1)
+
+        # Ajustar si estamos cerca del final
+        if end_page == total_pages:
+            start_page = max(1, total_pages - max_visible_pages + 1)
+        # Ajustar si estamos cerca del principio
+        if start_page == 1 and end_page < total_pages:
+            end_page = min(total_pages, max_visible_pages)
+
+        if start_page > 1:
+            page_numbers.append(1)
+            if start_page > 2:
+                page_numbers.append("...")  # Ellipsis
+
+        for i in range(start_page, end_page + 1):
+            page_numbers.append(i)
+
+        if end_page < total_pages:
+            if end_page < total_pages - 1:
+                page_numbers.append("...")  # Ellipsis
+            page_numbers.append(total_pages)
+
+    # --- Resumen de paginación ---
+    start_item = ((current_page - 1) * items_per_page) + 1
+    end_item = min(current_page * items_per_page, total_items)
+    summary = f"Mostrando {start_item}-{end_item} de {total_items} resultados"
 
     def handle_page_click(page_number):
-        if 1 <= page_number <= total_pages:
+        if isinstance(page_number, int) and page_number != current_page:
             on_page_change(page_number)
 
-    def render_page_numbers():
-        if total_pages <= max_visible_pages:
-            start_page, end_page = 1, total_pages
-        else:
-            offset = max_visible_pages // 2
-            start_page = max(1, current_page - offset)
-            end_page = min(total_pages, start_page + max_visible_pages - 1)
-            if end_page - start_page < max_visible_pages - 1:
-                start_page = max(1, end_page - max_visible_pages + 1)
-
-        pages = []
-        for i in range(start_page, end_page + 1):
-            is_current = i == current_page
-            pages.append(
-                html.li(
-                    html.a(
-                        {
-                            "href": "#",
-                            "role": "button" if not is_current else None,
-                            "class_name": "" if is_current else "secondary",
-                            "aria-current": "page" if is_current else None,
-                            "on_click": event((lambda p: lambda e: handle_page_click(p))(i), prevent_default=True),
-                        },
-                        str(i),
-                    )
-                )
-            )
-        return pages
-
-    start_item = (current_page - 1) * items_per_page + 1
-    end_item = min(current_page * items_per_page, total_items)
-    is_first_page = current_page == 1
-    is_last_page = current_page == total_pages
-
     return html.nav(
-        {"aria-label": "Pagination", "class_name": "pagination-container"},
-        html.div(
-            {"class_name": "pagination-summary"},
-            f"Mostrando {start_item}-{end_item} de {total_items} robots",
-        ),
+        {"class_name": "pagination-container", "aria-label": "Paginación"},
+        html.span({"class_name": "pagination-summary"}, summary),
         html.ul(
             {"class_name": "pagination-controls"},
+            # Botón Anterior
             html.li(
                 html.a(
                     {
                         "href": "#",
-                        "class_name": "secondary",
-                        "on_click": event(lambda e: handle_page_click(1), prevent_default=True),
-                        "aria-label": "Primera página",
-                        "data-tooltip": "Primera página",
-                        "disabled": is_first_page,
-                    },
-                    "«",
-                )
-            ),
-            html.li(
-                html.a(
-                    {
-                        "href": "#",
-                        "class_name": "secondary",
-                        "on_click": event(lambda e: handle_page_click(current_page - 1), prevent_default=True),
+                        "on_click": lambda e: handle_page_click(current_page - 1),
+                        "aria-disabled": str(current_page == 1).lower(),
                         "aria-label": "Página anterior",
-                        "data-tooltip": "Página anterior",
-                        "disabled": is_first_page,
+                        "class_name": "secondary" if current_page == 1 else "",
                     },
                     "‹",
                 )
             ),
-            *render_page_numbers(),
+            # Números de Página
+            *[
+                html.li(
+                    html.a(
+                        {
+                            "href": "#",
+                            "on_click": (lambda p: lambda e: handle_page_click(p))(page)
+                            if isinstance(page, int)
+                            else None,
+                            "aria-current": "page" if page == current_page else None,
+                            "style": {"cursor": "default", "pointerEvents": "none"}
+                            if not isinstance(page, int)
+                            else {},
+                            "aria-label": f"Ir a página {page}" if isinstance(page, int) else None,
+                            "class_name": "primary"
+                            if page == current_page
+                            else "secondary outline"
+                            if isinstance(page, int)
+                            else "",
+                        },
+                        str(page),
+                    )
+                    if isinstance(page, int)
+                    else html.span("...", {"aria-hidden": "true", "style": {"padding": "0.5rem 0.75rem"}})
+                )
+                for page in page_numbers
+            ],
+            # Botón Siguiente
             html.li(
                 html.a(
                     {
                         "href": "#",
-                        "class_name": "secondary",
-                        "on_click": event(lambda e: handle_page_click(current_page + 1), prevent_default=True),
+                        "on_click": lambda e: handle_page_click(current_page + 1),
+                        "aria-disabled": str(current_page == total_pages).lower(),
                         "aria-label": "Página siguiente",
-                        "data-tooltip": "Página siguiente",
-                        "disabled": is_last_page,
+                        "class_name": "secondary" if current_page == total_pages else "",
                     },
                     "›",
                 )
             ),
-            html.li(
-                html.a(
-                    {
-                        "href": "#",
-                        "class_name": "secondary",
-                        "on_click": event(lambda e: handle_page_click(total_pages), prevent_default=True),
-                        "aria-label": "Última página",
-                        "data-tooltip": "Última página",
-                        "disabled": is_last_page,
-                    },
-                    "»",
-                )
-            ),
         ),
     )
 
 
 @component
-def LoadingSpinner():
-    """
-    Un spinner de carga estilizado usando el atributo aria-busy de Pico.css.
-    """
-    return html.div(
-        {"class_name": "container", "style": {"text_align": "center", "padding": "2rem"}},
-        html.article(
-            {"aria-busy": "true"},
-            "Cargando datos...",
-        ),
-    )
+def LoadingSpinner(size: str = "medium"):
+    """Muestra un spinner de carga."""
+    style = {}
+    if size == "small":
+        style = {"width": "1.5rem", "height": "1.5rem"}
+    elif size == "large":
+        style = {"width": "3rem", "height": "3rem"}
+    # PicoCSS usa aria-busy="true" para mostrar el spinner
+    return html.span({"aria-busy": "true", "style": style})
 
 
 @component
-def ActionMenu(actions: List[Dict[str, any]]):
+def ActionMenu(actions: List[dict]):
     """
     Menú desplegable de acciones que usa la estructura <details> de Pico.css.
     """
@@ -149,7 +141,7 @@ def ActionMenu(actions: List[Dict[str, any]]):
             *[
                 html.li(
                     html.a(
-                        {"href": "#", "on_click": event(action["on_click"], prevent_default=True)},
+                        {"href": "#", "on_click": lambda e, action=action: action["on_click"](e)},
                         html.small(action["label"]),
                     )
                 )
@@ -190,9 +182,6 @@ def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Calla
     if not is_open:
         return None
 
-    async def handle_confirm_click(event):
-        await on_confirm()
-
     return html.dialog(
         {"open": True},
         html.article(
@@ -207,7 +196,7 @@ def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Calla
                     html.button({"class_name": "secondary", "on_click": lambda e: on_cancel()}, "Cancelar"),
                     html.button(
                         {
-                            "on_click": handle_confirm_click,
+                            "on_click": lambda e: on_confirm(),
                             "style": {
                                 "backgroundColor": "var(--pico-color-pink-550)",
                                 "borderColor": "var(--pico-color-pink-550)",
