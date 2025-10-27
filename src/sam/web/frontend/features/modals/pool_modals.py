@@ -13,20 +13,20 @@ DEFAULT_POOL_STATE = {"PoolId": None, "Nombre": "", "Descripcion": ""}
 
 
 @component
-def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
+def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callable):
     """Modal para crear o editar un Pool."""
     form_data, set_form_data = use_state(DEFAULT_POOL_STATE)
     is_loading, set_is_loading = use_state(False)
     notification_ctx = use_context(NotificationContext)
     is_edit_mode = pool and pool.get("PoolId") is not None
 
+    if pool is None:
+        return None
+
     @use_effect(dependencies=[pool])
     def _populate_form():
         if pool is not None:
             set_form_data(pool if is_edit_mode else DEFAULT_POOL_STATE)
-
-    if pool is None:
-        return None
 
     def handle_change(field, value):
         set_form_data(lambda old: {**old, field: value})
@@ -44,6 +44,8 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
         finally:
             set_is_loading(False)
 
+    if not is_open:
+        return None
     return html.dialog(
         {"open": True},
         html.article(
@@ -95,7 +97,7 @@ def PoolEditModal(pool: Dict, on_close: Callable, on_save: Callable):
 
 
 @component
-def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callable):
+def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_success: Callable):
     """Modal para asignar recursos (Robots y Equipos) a un pool."""
     api_client = get_api_client()
     notification_ctx = use_context(NotificationContext)
@@ -112,6 +114,9 @@ def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callab
     selected_asgn_robots, set_selected_asgn_robots = use_state([])
     selected_avail_equipos, set_selected_avail_equipos = use_state([])
     selected_asgn_equipos, set_selected_asgn_equipos = use_state([])
+
+    if not pool:
+        return None
 
     @use_effect(dependencies=[pool])
     def _load_data():
@@ -133,9 +138,6 @@ def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callab
 
         asyncio.create_task(_fetch())
 
-    if not pool:
-        return None
-
     async def handle_save(e):
         set_is_loading(True)
         try:
@@ -149,6 +151,9 @@ def PoolAssignmentsModal(pool: Dict, on_close: Callable, on_save_success: Callab
             notification_ctx["show_notification"](f"Error al guardar asignaciones: {e}", "error")
         finally:
             set_is_loading(False)
+
+    if not is_open:
+        return None
 
     return html.dialog(
         {"open": True, "style": {"maxWidth": "90vw", "width": "1200px"}},
