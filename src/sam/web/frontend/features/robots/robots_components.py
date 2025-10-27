@@ -81,30 +81,8 @@ def RobotsControls(
                     html.option({"value": "true"}, "Solo Online"),
                     html.option({"value": "false"}, "Solo No Online"),
                 ),
-                # Botón de Sincronización de Robots (fucsia)
-                # html.button(
-                #     {
-                #         "on_click": on_sync,
-                #         "disabled": is_syncing,
-                #         "aria-busy": str(is_syncing).lower(),
-                #         "class_name": "pico-background-fuchsia-500",
-                #     },
-                #     html.i({"class_name": "fa-solid fa-robot"}) if not is_syncing else None,
-                #     " Sincronizando..." if is_syncing else " Sync Robots",
-                # ),
-                # # Botón de Sincronización de Equipos (purpura)
-                # html.button(
-                #     {
-                #         "on_click": on_sync_equipos if on_sync_equipos else lambda e: None,
-                #         "disabled": is_syncing_equipos or not on_sync_equipos,
-                #         "aria-busy": str(is_syncing_equipos).lower(),
-                #         "class_name": "pico-background-purple-500",
-                #     },
-                #     html.i({"class_name": "fa-solid fa-desktop"}) if not is_syncing_equipos else None,
-                #     " Sincronizando..." if is_syncing_equipos else " Sync Equipos",
-                # ),
                 html.button(
-                    {"on_click": on_create_robot},
+                    {"on_click": on_create_robot, "type": "button", "class_name": "primary"},
                     html.i({"class_name": "fa-solid fa-plus"}),
                     " Agregar Robot",
                 ),
@@ -214,7 +192,10 @@ def RobotRow(robot: Robot, on_action: Callable):
         await on_action("toggle_active", robot)
 
     async def handle_toggle_online(event):
-        await on_action("toggle_online", robot)
+        try:
+            await on_action("toggle_online", robot)
+        except Exception as e:
+            print(f"Error toggling online status: {e}")
 
     async def handle_edit(event):
         await on_action("edit", robot)
@@ -224,6 +205,10 @@ def RobotRow(robot: Robot, on_action: Callable):
 
     async def handle_schedule(event):
         await on_action("schedule", robot)
+
+    is_programado = robot.get("TieneProgramacion", False)
+    tipo_ejecucion_text = "Programado" if is_programado else "A Demanda"
+    tipo_ejecucion_class = f"tag {'tag-ejecucion-programado' if is_programado else 'tag-ejecucion-demanda'}"
 
     return html.tr(
         {"key": robot["RobotId"]},
@@ -251,11 +236,16 @@ def RobotRow(robot: Robot, on_action: Callable):
                         "role": "switch",
                         "checked": robot["EsOnline"],
                         "on_change": event(handle_toggle_online),
+                        "disabled": is_programado,  # Deshabilitar si está programado
+                        "title": "No se puede marcar como Online si tiene programaciones"
+                        if is_programado
+                        else "Marcar como Online/Offline",
+                        "aria-label": f"Marcar Online/Offline robot {robot['Robot']}",
                     }
                 )
             )
         ),
-        html.td("Programado" if robot.get("TieneProgramacion") else "A Demanda"),
+        html.td(html.span({"class_name": tipo_ejecucion_class}, tipo_ejecucion_text)),
         html.td(str(robot["PrioridadBalanceo"])),
         html.td(str(robot.get("TicketsPorEquipoAdicional", "N/A"))),
         html.td(
@@ -300,7 +290,10 @@ def RobotCard(robot: Robot, on_action: Callable):
         await on_action("toggle_active", robot)
 
     async def handle_toggle_online(event):
-        await on_action("toggle_online", robot)
+        try:
+            await on_action("toggle_online", robot)
+        except Exception as e:
+            print(f"Error toggling online status: {e}")
 
     async def handle_edit(event):
         await on_action("edit", robot)
@@ -310,6 +303,10 @@ def RobotCard(robot: Robot, on_action: Callable):
 
     async def handle_schedule(event):
         await on_action("schedule", robot)
+
+    is_programado = robot.get("TieneProgramacion", False)
+    tipo_ejecucion_text = "Programado" if is_programado else "A Demanda"
+    tipo_ejecucion_class = f"tag {'tag-ejecucion-programado' if is_programado else 'tag-ejecucion-demanda'}"
 
     return html.article(
         {"key": robot["RobotId"], "class_name": "robot-card"},
@@ -347,7 +344,7 @@ def RobotCard(robot: Robot, on_action: Callable):
                 ),
             ),
             html.p(f"Equipos: {robot.get('CantidadEquiposAsignados', 0)}"),
-            html.p(f"Ejecución: {'Programado' if robot.get('TieneProgramacion') else 'A Demanda'}"),
+            html.p("Ejecución: ", html.span({"class_name": tipo_ejecucion_class}, tipo_ejecucion_text)),
         ),
         html.footer(
             {"class_name": "robot-card-footer"},

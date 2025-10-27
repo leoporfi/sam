@@ -79,6 +79,18 @@ def get_robots(
 
 
 def update_robot_status(db: DatabaseConnector, robot_id: int, field: str, value: bool) -> bool:
+    if field == "EsOnline" and value is True:
+        # Verificar si el robot tiene programaciones activas
+        check_query = """
+            SELECT COUNT(*) AS ProgramCount
+            FROM dbo.Programaciones
+            WHERE RobotId = ? AND Activo = 1
+        """
+        result = db.ejecutar_consulta(check_query, (robot_id,), es_select=True)
+        if result and result[0]["ProgramCount"] > 0:
+            # Si tiene programaciones, lanzar un error en lugar de actualizar
+            raise ValueError("No se puede marcar como 'Online' un robot que tiene programaciones activas.")
+
     query = f"UPDATE dbo.Robots SET {field} = ? WHERE RobotId = ?"
     params = (value, robot_id)
     rows_affected = db.ejecutar_consulta(query, params, es_select=False)
@@ -173,22 +185,46 @@ def update_asignaciones_robot(
         raise
 
 
-def get_available_devices_for_robot(db: DatabaseConnector) -> List[Dict]:
+# RFR-34: No eliminar esta función, se usa en la API.
+# Se actualiza para implementar la Regla 3 Corregida.
+def get_available_devices_for_robot(db: DatabaseConnector, robot_id: int) -> List[Dict]:
     """
-    Obtiene todos los equipos que no están asignados a ningún robot y tienen una licencia válida.
-    Cumple con las reglas de negocio BR-05 y BR-06.
+    Obtiene equipos disponibles para programar para un robot específico (Regla 3 Corregida).
+    Un equipo está disponible si:
+    1. Está Activo_SAM = 1.
+    2. Tiene licencia 'ATTENDEDRUNTIME' o 'RUNTIME' (BR-05).
+    3. NO está 'Reservado = 1' manualmente (BR-03).
+    4. NO está asignado dinámicamente (EsProgramado = 0 Y Reservado = 0).
+    5. NO está ya asignado (de cualquier forma) A ESTE MISMO robot.
+    6. SÍ PUEDE estar asignado programáticamente (EsProgramado = 1) a OTRO robot.
     """
     query = """
-        SELECT EquipoId, Equipo FROM dbo.Equipos
+        SELECT E.EquipoId, E.Equipo
+        FROM dbo.Equipos E
         WHERE
-            Activo_SAM = 1
-            AND Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')
-            AND EquipoId NOT IN (
-                SELECT EquipoId FROM dbo.Asignaciones WHERE EquipoId IS NOT NULL
+            E.Activo_SAM = 1
+            AND E.Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')
+            AND NOT EXISTS (
+                -- Excluir si está Reservado manualmente por CUALQUIER robot
+                SELECT 1 FROM dbo.Asignaciones A
+                WHERE A.EquipoId = E.EquipoId AND A.Reservado = 1
             )
-        ORDER BY Equipo
+            AND NOT EXISTS (
+                -- Excluir si está asignado dinámicamente por CUALQUIER robot
+                SELECT 1 FROM dbo.Asignaciones A
+                WHERE A.EquipoId = E.EquipoId
+                  AND A.EsProgramado = 0
+                  AND A.Reservado = 0 -- Modificado para ser más explícito
+            )
+            AND NOT EXISTS (
+                -- Excluir si ya está asignado (de cualquier forma) A ESTE robot
+                SELECT 1 FROM dbo.Asignaciones A
+                WHERE A.EquipoId = E.EquipoId AND A.RobotId = ?
+            )
+        ORDER BY E.Equipo
     """
-    return db.ejecutar_consulta(query, es_select=True)
+    # El robot_id se pasa solo para la última subconsulta
+    return db.ejecutar_consulta(query, (robot_id,), es_select=True)
 
 
 def get_devices(

@@ -179,7 +179,7 @@ def get_available_devices(robot_id: int, db: DatabaseConnector = Depends(get_db)
     """
     try:
         # La llamada al servicio ya no necesita el robot_id.
-        return db_service.get_available_devices_for_robot(db)
+        return db_service.get_available_devices_for_robot(db, robot_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener equipos disponibles: {e}")
 
