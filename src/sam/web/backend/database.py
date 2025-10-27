@@ -185,45 +185,60 @@ def update_asignaciones_robot(
         raise
 
 
-# RFR-34: No eliminar esta función, se usa en la API.
 # Se actualiza para implementar la Regla 3 Corregida.
 def get_available_devices_for_robot(db: DatabaseConnector, robot_id: int) -> List[Dict]:
     """
-    Obtiene equipos disponibles para programar para un robot específico (Regla 3 Corregida).
+    Obtiene equipos disponibles para programar para un robot específico.
+
+    MEJORA: En lugar de múltiples NOT EXISTS, delegamos la lógica compleja
+    a un Stored Procedure que encapsula las reglas de negocio.
+
     Un equipo está disponible si:
-    1. Está Activo_SAM = 1.
-    2. Tiene licencia 'ATTENDEDRUNTIME' o 'RUNTIME' (BR-05).
-    3. NO está 'Reservado = 1' manualmente (BR-03).
-    4. NO está asignado dinámicamente (EsProgramado = 0 Y Reservado = 0).
-    5. NO está ya asignado (de cualquier forma) A ESTE MISMO robot.
-    6. SÍ PUEDE estar asignado programáticamente (EsProgramado = 1) a OTRO robot.
+    1. Está Activo_SAM = 1
+    2. Tiene licencia 'ATTENDEDRUNTIME' o 'RUNTIME' (BR-05)
+    3. NO está 'Reservado = 1' manualmente (BR-03)
+    4. NO está asignado dinámicamente (EsProgramado = 0 Y Reservado = 0)
+    5. NO está ya asignado (de cualquier forma) A ESTE MISMO robot
+    6. SÍ PUEDE estar asignado programáticamente (EsProgramado = 1) a OTRO robot
+    """
+    try:
+        # OPCIÓN 1: Usar Stored Procedure (RECOMENDADO)
+        query = "EXEC dbo.ObtenerEquiposDisponiblesParaRobot @RobotId = ?"
+        return db.ejecutar_consulta(query, (robot_id,), es_select=True)
+
+    except Exception as e:
+        logger.error(f"Error al obtener equipos disponibles para robot {robot_id}: {e}", exc_info=True)
+        # OPCIÓN 2: Fallback a query inline si el SP no existe aún
+        return get_available_devices_for_robot_inline(db, robot_id)
+
+
+def get_available_devices_for_robot_inline(db: DatabaseConnector, robot_id: int) -> List[Dict]:
+    """
+    Implementación inline como fallback o para desarrollo.
+    Esta query es equivalente pero más legible que la versión con NOT EXISTS anidados.
     """
     query = """
+        WITH EquiposReservados AS (
+            -- Equipos reservados manualmente o asignados dinámicamente por CUALQUIER robot
+            SELECT DISTINCT EquipoId
+            FROM dbo.Asignaciones
+            WHERE Reservado = 1 
+               OR (EsProgramado = 0 AND Reservado = 0)
+        ),
+        EquiposYaAsignados AS (
+            -- Equipos ya asignados (de cualquier forma) A ESTE robot específico
+            SELECT DISTINCT EquipoId
+            FROM dbo.Asignaciones
+            WHERE RobotId = ?
+        )
         SELECT E.EquipoId, E.Equipo
         FROM dbo.Equipos E
-        WHERE
-            E.Activo_SAM = 1
-            AND E.Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')
-            AND NOT EXISTS (
-                -- Excluir si está Reservado manualmente por CUALQUIER robot
-                SELECT 1 FROM dbo.Asignaciones A
-                WHERE A.EquipoId = E.EquipoId AND A.Reservado = 1
-            )
-            AND NOT EXISTS (
-                -- Excluir si está asignado dinámicamente por CUALQUIER robot
-                SELECT 1 FROM dbo.Asignaciones A
-                WHERE A.EquipoId = E.EquipoId
-                  AND A.EsProgramado = 0
-                  AND A.Reservado = 0 -- Modificado para ser más explícito
-            )
-            AND NOT EXISTS (
-                -- Excluir si ya está asignado (de cualquier forma) A ESTE robot
-                SELECT 1 FROM dbo.Asignaciones A
-                WHERE A.EquipoId = E.EquipoId AND A.RobotId = ?
-            )
+        WHERE E.Activo_SAM = 1
+          AND E.Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')
+          AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservados)
+          AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposYaAsignados)
         ORDER BY E.Equipo
     """
-    # El robot_id se pasa solo para la última subconsulta
     return db.ejecutar_consulta(query, (robot_id,), es_select=True)
 
 
@@ -413,15 +428,18 @@ def get_pool_assignments_and_available_resources(db: DatabaseConnector, pool_id:
         raise e
 
 
-def assign_resources_to_pool(db: DatabaseConnector, pool_id: int, robot_ids: List[int], equipo_ids: List[int]):
-    robots_tvp = [(robot_id,) for robot_id in robot_ids]
-    equipos_tvp = [(equipo_id,) for equipo_id in equipo_ids]
-    sql = "EXEC dbo.AsignarRecursosAPool @PoolId = ?, @RobotIds = ?, @EquipoIds = ?"
-    params = (pool_id, robots_tvp, equipos_tvp)
-    try:
-        db.ejecutar_consulta(sql, params, es_select=False, es_tvp=True)
-    except Exception as e:
-        raise e
+def assign_resources_to_pool(db: DatabaseConnector, pool_id: int, robot_ids: List[int], equipo_ids: List[int]) -> None:
+    robots_tvp = [(r,) for r in robot_ids]
+    equipos_tvp = [(e,) for e in equipo_ids]
+
+    db.ejecutar_sp_con_tvp(
+        "dbo.AsignarRecursosAPool",
+        {
+            "PoolId": pool_id,
+            "RobotIds": robots_tvp,
+            "EquipoIds": equipos_tvp,
+        },
+    )
 
 
 # Sincronización con A360

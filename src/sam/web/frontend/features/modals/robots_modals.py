@@ -36,10 +36,8 @@ DEFAULT_FORM_STATE = {
 
 
 # --- Componentes de Modal ---
-
-
 @component
-def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_success: Callable):
+def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callable, on_save_success: Callable):
     """Modal para crear o editar un robot. Incluye validación."""
 
     form_data, set_form_data = use_state(DEFAULT_ROBOT_STATE)
@@ -47,8 +45,10 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
     api_service = get_api_client()
-
     is_edit_mode = bool(robot and robot.get("RobotId") is not None)
+
+    if robot is None:
+        return None
 
     @use_effect(dependencies=[robot])
     def populate_form_data():
@@ -63,9 +63,6 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
         else:
             # Modo creación: reseteamos explicitamente al estado por defecto
             set_form_data(DEFAULT_ROBOT_STATE)
-
-    if robot is None:
-        return None
 
     def handle_form_change(field_name, field_value):
         if field_name in ["RobotId", "MinEquipos", "MaxEquipos", "PrioridadBalanceo", "TicketsPorEquipoAdicional"]:
@@ -104,6 +101,9 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
             show_notification(str(e), "error")
         finally:
             set_is_loading(False)
+
+    if not is_open:
+        return None
 
     return html.dialog(
         {"open": True if robot is not None else False},
@@ -273,6 +273,323 @@ def RobotEditModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_suc
 
 
 @component
+def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callable, on_save_success: Callable):
+    api_service = get_api_client()
+    assigned_devices, set_assigned_devices = use_state([])
+    available_devices, set_available_devices = use_state([])
+    is_loading, set_is_loading = use_state(False)
+    selected_in_available, set_selected_in_available = use_state([])
+    selected_in_assigned, set_selected_in_assigned = use_state([])
+    confirmation_data, set_confirmation_data = use_state(None)
+    notification_ctx = use_context(NotificationContext)
+    show_notification = notification_ctx["show_notification"]
+    search_assigned, set_search_assigned = use_state("")
+    search_available, set_search_available = use_state("")
+
+    if not robot:
+        return None
+
+    @use_effect(dependencies=[robot])
+    def fetch_data():
+        async def get_data():
+            if not robot:
+                return
+            set_is_loading(True)
+            set_selected_in_available([])
+            set_selected_in_assigned([])
+            set_search_assigned("")
+            set_search_available("")
+            try:
+                assigned_res, available_res = await asyncio.gather(
+                    api_service.get_robot_assignments(robot["RobotId"]),
+                    api_service.get_available_devices(robot["RobotId"]),
+                )
+                set_assigned_devices(assigned_res)
+                set_available_devices(available_res)
+            except Exception as e:
+                show_notification(f"Error al cargar datos: {e}", "error")
+            finally:
+                set_is_loading(False)
+
+        asyncio.create_task(get_data())
+
+    filtered_assigned = use_memo(
+        lambda: [device for device in assigned_devices if search_assigned.lower() in device.get("Equipo", "").lower()],
+        [assigned_devices, search_assigned],
+    )
+    filtered_available = use_memo(
+        lambda: [
+            device for device in available_devices if search_available.lower() in device.get("Equipo", "").lower()
+        ],
+        [available_devices, search_available],
+    )
+
+    def move_items(source_list, set_source, dest_list, set_dest, selected_ids, clear_selection):
+        items_to_move = {item["EquipoId"]: item for item in source_list if item["EquipoId"] in selected_ids}
+        set_dest(sorted(dest_list + list(items_to_move.values()), key=lambda x: x["Equipo"]))
+        set_source([item for item in source_list if item["EquipoId"] not in items_to_move])
+        clear_selection([])
+
+    async def execute_save():
+        """Función que ejecuta el guardado después de la confirmación."""
+        if not confirmation_data:
+            return
+        set_is_loading(True)
+        try:
+            ids_to_assign, ids_to_unassign = confirmation_data["assign"], confirmation_data["unassign"]
+            await api_service.update_robot_assignments(robot["RobotId"], ids_to_assign, ids_to_unassign)
+            await on_save_success()
+            show_notification("Se actualizó la asignación correctamente", "success")
+            on_close()
+        except Exception as e:
+            show_notification(f"Error al guardar: {e}", "error")
+        finally:
+            set_is_loading(False)
+            set_confirmation_data(None)
+
+    async def handle_save(event_data):
+        original_assigned_ids_set = {t["EquipoId"] for t in (await api_service.get_robot_assignments(robot["RobotId"]))}
+        current_assigned_ids_set = {t["EquipoId"] for t in assigned_devices}
+
+        ids_to_assign = list(current_assigned_ids_set - original_assigned_ids_set)
+        ids_to_unassign = list(original_assigned_ids_set - current_assigned_ids_set)
+
+        if not ids_to_assign and not ids_to_unassign:
+            on_close()
+            return
+
+        # Abre el modal de confirmación si hay cambios que guardar.
+        set_confirmation_data({"assign": ids_to_assign, "unassign": ids_to_unassign})
+
+    if not is_open:
+        return None
+
+    return html.dialog(
+        {"open": True, "style": {"width": "90vw", "maxWidth": "1000px"}},
+        html.article(
+            html.header(
+                html.button({"aria-label": "Close", "rel": "prev", "on_click": event(on_close, prevent_default=True)}),
+                html.h2("Asignación de Equipos"),
+                html.p(f"Robot: {robot.get('Robot', '')}"),
+            ),
+            html.div(
+                {
+                    "class_name": "grid",
+                    "style": {"gridTemplateColumns": "5fr 1fr 5fr", "alignItems": "center", "gap": "1rem"},
+                },
+                DeviceList(
+                    title="Equipos Disponibles",
+                    devices=filtered_available,
+                    selected_ids=selected_in_available,
+                    on_selection_change=set_selected_in_available,
+                    search_term=search_available,
+                    on_search_change=set_search_available,
+                ),
+                html.div(
+                    {"style": {"display": "flex", "flexDirection": "column", "gap": "1rem"}},
+                    html.button(
+                        {
+                            "on_click": lambda e: move_items(
+                                available_devices,
+                                set_available_devices,
+                                assigned_devices,
+                                set_assigned_devices,
+                                selected_in_available,
+                                set_selected_in_available,
+                            ),
+                            "disabled": not selected_in_available,
+                            "data-tooltip": "Asignar seleccionados",
+                        },
+                        html.i({"class_name": "fa-solid fa-arrow-right"}),
+                    ),
+                    html.button(
+                        {
+                            "on_click": lambda e: move_items(
+                                assigned_devices,
+                                set_assigned_devices,
+                                available_devices,
+                                set_available_devices,
+                                selected_in_assigned,
+                                set_selected_in_assigned,
+                            ),
+                            "disabled": not selected_in_assigned,
+                            "data-tooltip": "Desasignar seleccionados",
+                        },
+                        html.i({"class_name": "fa-solid fa-arrow-left"}),
+                    ),
+                ),
+                DeviceList(
+                    title="Equipos Asignados",
+                    devices=filtered_assigned,
+                    selected_ids=selected_in_assigned,
+                    on_selection_change=set_selected_in_assigned,
+                    search_term=search_assigned,
+                    on_search_change=set_search_assigned,
+                ),
+            ),
+            html.footer(
+                html.button({"class_name": "secondary", "on_click": on_close, "disabled": is_loading}, "Cancelar"),
+                html.button(
+                    {"aria-busy": str(is_loading).lower(), "on_click": handle_save, "disabled": is_loading}, "Guardar"
+                ),
+            ),
+        ),
+        # Añadir el modal de confirmación
+        ConfirmationModal(
+            is_open=bool(confirmation_data),
+            title="Confirmar Cambios",
+            message="¿Estás seguro de que quieres modificar las asignaciones de equipos para este robot?",
+            on_confirm=lambda: execute_save(),
+            on_cancel=lambda: set_confirmation_data(None),
+        ),
+    )
+
+
+@component
+def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callable, on_save_success: Callable):
+    api_service = get_api_client()
+    notification_ctx = use_context(NotificationContext)
+    show_notification = notification_ctx["show_notification"]
+    view_mode, set_view_mode = use_state("list")
+    schedules, set_schedules = use_state([])
+    available_devices, set_available_devices = use_state([])
+    all_robot_devices, set_all_robot_devices = use_state([])
+    form_data, set_form_data = use_state(DEFAULT_FORM_STATE)
+    is_loading, set_is_loading = use_state(False)
+
+    if robot is None:
+        return None
+
+    @use_effect(dependencies=[robot])
+    def load_data():
+        if not robot:
+            return
+        task = asyncio.create_task(fetch_schedule_data())
+        return lambda: task.cancel()
+
+    async def fetch_schedule_data():
+        set_is_loading(True)
+        try:
+            schedules_res, devices_res, assigned_res = await asyncio.gather(
+                api_service.get_robot_schedules(robot["RobotId"]),
+                api_service.get_available_devices(robot["RobotId"]),
+                api_service.get_robot_assignments(robot["RobotId"]),
+            )
+            set_schedules(schedules_res)
+            set_available_devices(devices_res)
+            # Combinamos ambas listas en el nuevo estado
+            set_all_robot_devices(devices_res + assigned_res)
+        except Exception as e:
+            show_notification(str(e), "error")
+        finally:
+            set_is_loading(False)
+
+    async def handle_successful_change():
+        await on_save_success()
+        if robot:
+            await fetch_schedule_data()
+
+    async def submit_form(event):
+        set_is_loading(True)
+        if not form_data.get("Equipos"):
+            show_notification("Debe seleccionar al menos un equipo.", "error")
+            set_is_loading(False)
+            return
+        payload = {**form_data, "RobotId": robot["RobotId"]}
+        try:
+            if payload.get("ProgramacionId"):
+                await api_service.update_schedule(payload["ProgramacionId"], payload)
+                message = "Programación actualizada con éxito."
+            else:
+                await api_service.create_schedule(payload)
+                message = "Programación creada con éxito."
+            show_notification(message, "success")
+            set_view_mode("list")
+            await handle_successful_change()
+        except Exception as e:
+            show_notification(str(e), "error")
+        finally:
+            set_is_loading(False)
+
+    handle_form_submit = use_callback(submit_form, [form_data, robot, on_save_success])
+
+    def handle_edit_click(schedule_to_edit):
+        assigned_device_names = {device["Equipo"] for device in schedule_to_edit.get("Equipos", [])}
+        equipos_ids = [device["EquipoId"] for device in all_robot_devices if device["Equipo"] in assigned_device_names]
+        form_state = {
+            "ProgramacionId": schedule_to_edit.get("ProgramacionId"),
+            "TipoProgramacion": schedule_to_edit.get("TipoProgramacion", "Diaria"),
+            "HoraInicio": (schedule_to_edit.get("HoraInicio") or "09:00")[:5],
+            "Tolerancia": schedule_to_edit.get("Tolerancia", 60),
+            "DiasSemana": schedule_to_edit.get("DiasSemana", ""),
+            "DiaDelMes": schedule_to_edit.get("DiaDelMes", 1),
+            "FechaEspecifica": (schedule_to_edit.get("FechaEspecifica") or "")[:10],
+            "Equipos": equipos_ids,
+        }
+        set_form_data(form_state)
+        set_view_mode("form")
+
+    def handle_form_change(field, value):
+        if field == "Equipos":
+            value = list(value) if value else []
+        set_form_data(lambda old: {**old, field: value})
+
+    def handle_new_click():
+        set_form_data(DEFAULT_FORM_STATE.copy())
+        set_view_mode("form")
+
+    def handle_cancel():
+        set_view_mode("list")
+
+    if not is_open:
+        return None
+
+    return html.dialog(
+        {"open": True},
+        html.article(
+            html.header(
+                html.button({"aria-label": "Close", "rel": "prev", "on_click": event(on_close, prevent_default=True)}),
+                html.h2("Programación de Robots"),
+                html.p(f"{robot.get('Robot', '')}"),
+            ),
+            html._(
+                html.div(
+                    {"style": {"display": "block" if view_mode == "list" else "none"}},
+                    SchedulesList(
+                        api_service=api_service,
+                        robot_id=robot["RobotId"],
+                        robot_nombre=robot["Robot"],
+                        schedules=schedules,
+                        on_edit=handle_edit_click,
+                        on_delete_success=handle_successful_change,
+                    ),
+                ),
+                html.div(
+                    {"style": {"display": "block" if view_mode == "form" else "none"}},
+                    ScheduleForm(
+                        form_data=form_data,
+                        available_devices=available_devices,
+                        is_loading=is_loading,
+                        on_submit=handle_form_submit,
+                        on_cancel=handle_cancel,
+                        on_change=handle_form_change,
+                    ),
+                ),
+            ),
+            html.footer(
+                html.button(
+                    {"type": "button", "class_name": "secondary", "on_click": on_close, "disabled": is_loading},
+                    "Cancelar",
+                ),
+                html.button({"type": "button", "on_click": lambda e: handle_new_click()}, "Nueva programación"),
+            )
+            if view_mode == "list"
+            else None,
+        ),
+    )
+
+
+@component
 def DeviceList(
     title: str,
     devices: List[Dict],
@@ -372,322 +689,6 @@ def DeviceList(
                     ]
                 ),
             ),
-        ),
-    )
-
-
-@component
-def AssignmentsModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_success: Callable):
-    assigned_devices, set_assigned_devices = use_state([])
-    available_devices, set_available_devices = use_state([])
-    is_loading, set_is_loading = use_state(False)
-
-    selected_in_available, set_selected_in_available = use_state([])
-    selected_in_assigned, set_selected_in_assigned = use_state([])
-
-    # Nuevo estado para el modal de confirmación
-    confirmation_data, set_confirmation_data = use_state(None)
-
-    notification_ctx = use_context(NotificationContext)
-    show_notification = notification_ctx["show_notification"]
-    api_service = get_api_client()
-
-    search_assigned, set_search_assigned = use_state("")
-    search_available, set_search_available = use_state("")
-
-    @use_effect(dependencies=[robot])
-    def fetch_data():
-        async def get_data():
-            if not robot:
-                return
-            set_is_loading(True)
-            set_selected_in_available([])
-            set_selected_in_assigned([])
-            set_search_assigned("")
-            set_search_available("")
-            try:
-                assigned_res, available_res = await asyncio.gather(
-                    api_service.get_robot_assignments(robot["RobotId"]),
-                    api_service.get_available_devices(robot["RobotId"]),
-                )
-                set_assigned_devices(assigned_res)
-                set_available_devices(available_res)
-            except Exception as e:
-                show_notification(f"Error al cargar datos: {e}", "error")
-            finally:
-                set_is_loading(False)
-
-        asyncio.create_task(get_data())
-
-    filtered_assigned = use_memo(
-        lambda: [device for device in assigned_devices if search_assigned.lower() in device.get("Equipo", "").lower()],
-        [assigned_devices, search_assigned],
-    )
-    filtered_available = use_memo(
-        lambda: [
-            device for device in available_devices if search_available.lower() in device.get("Equipo", "").lower()
-        ],
-        [available_devices, search_available],
-    )
-
-    def move_items(source_list, set_source, dest_list, set_dest, selected_ids, clear_selection):
-        items_to_move = {item["EquipoId"]: item for item in source_list if item["EquipoId"] in selected_ids}
-        set_dest(sorted(dest_list + list(items_to_move.values()), key=lambda x: x["Equipo"]))
-        set_source([item for item in source_list if item["EquipoId"] not in items_to_move])
-        clear_selection([])
-
-    async def execute_save():
-        """Función que ejecuta el guardado después de la confirmación."""
-        if not confirmation_data:
-            return
-        set_is_loading(True)
-        try:
-            ids_to_assign, ids_to_unassign = confirmation_data["assign"], confirmation_data["unassign"]
-            await api_service.update_robot_assignments(robot["RobotId"], ids_to_assign, ids_to_unassign)
-            await on_save_success()
-            show_notification("Se actualizó la asignación correctamente", "success")
-            on_close()
-        except Exception as e:
-            show_notification(f"Error al guardar: {e}", "error")
-        finally:
-            set_is_loading(False)
-            set_confirmation_data(None)
-
-    async def handle_save(event_data):
-        original_assigned_ids_set = {t["EquipoId"] for t in (await api_service.get_robot_assignments(robot["RobotId"]))}
-        current_assigned_ids_set = {t["EquipoId"] for t in assigned_devices}
-
-        ids_to_assign = list(current_assigned_ids_set - original_assigned_ids_set)
-        ids_to_unassign = list(original_assigned_ids_set - current_assigned_ids_set)
-
-        if not ids_to_assign and not ids_to_unassign:
-            on_close()
-            return
-
-        # Abre el modal de confirmación si hay cambios que guardar.
-        set_confirmation_data({"assign": ids_to_assign, "unassign": ids_to_unassign})
-
-    if not robot:
-        return None
-
-    return html.dialog(
-        {"open": True, "style": {"width": "90vw", "maxWidth": "1000px"}},
-        html.article(
-            html.header(
-                html.button({"aria-label": "Close", "rel": "prev", "on_click": event(on_close, prevent_default=True)}),
-                html.h2("Asignación de Equipos"),
-                html.p(f"Robot: {robot.get('Robot', '')}"),
-            ),
-            html.div(
-                {
-                    "class_name": "grid",
-                    "style": {"gridTemplateColumns": "5fr 1fr 5fr", "alignItems": "center", "gap": "1rem"},
-                },
-                DeviceList(
-                    title="Equipos Disponibles",
-                    devices=filtered_available,
-                    selected_ids=selected_in_available,
-                    on_selection_change=set_selected_in_available,
-                    search_term=search_available,
-                    on_search_change=set_search_available,
-                ),
-                html.div(
-                    {"style": {"display": "flex", "flexDirection": "column", "gap": "1rem"}},
-                    html.button(
-                        {
-                            "on_click": lambda e: move_items(
-                                available_devices,
-                                set_available_devices,
-                                assigned_devices,
-                                set_assigned_devices,
-                                selected_in_available,
-                                set_selected_in_available,
-                            ),
-                            "disabled": not selected_in_available,
-                            "data-tooltip": "Asignar seleccionados",
-                        },
-                        html.i({"class_name": "fa-solid fa-arrow-right"}),
-                    ),
-                    html.button(
-                        {
-                            "on_click": lambda e: move_items(
-                                assigned_devices,
-                                set_assigned_devices,
-                                available_devices,
-                                set_available_devices,
-                                selected_in_assigned,
-                                set_selected_in_assigned,
-                            ),
-                            "disabled": not selected_in_assigned,
-                            "data-tooltip": "Desasignar seleccionados",
-                        },
-                        html.i({"class_name": "fa-solid fa-arrow-left"}),
-                    ),
-                ),
-                DeviceList(
-                    title="Equipos Asignados",
-                    devices=filtered_assigned,
-                    selected_ids=selected_in_assigned,
-                    on_selection_change=set_selected_in_assigned,
-                    search_term=search_assigned,
-                    on_search_change=set_search_assigned,
-                ),
-            ),
-            html.footer(
-                html.button({"class_name": "secondary", "on_click": on_close, "disabled": is_loading}, "Cancelar"),
-                html.button(
-                    {"aria-busy": str(is_loading).lower(), "on_click": handle_save, "disabled": is_loading}, "Guardar"
-                ),
-            ),
-        ),
-        # Añadir el modal de confirmación
-        ConfirmationModal(
-            is_open=bool(confirmation_data),
-            title="Confirmar Cambios",
-            message="¿Estás seguro de que quieres modificar las asignaciones de equipos para este robot?",
-            on_confirm=execute_save,
-            on_cancel=lambda: set_confirmation_data(None),
-        ),
-    )
-
-
-@component
-def SchedulesModal(robot: Dict[str, Any] | None, on_close: Callable, on_save_success: Callable):
-    api_service = get_api_client()
-    notification_ctx = use_context(NotificationContext)
-    show_notification = notification_ctx["show_notification"]
-    view_mode, set_view_mode = use_state("list")
-    schedules, set_schedules = use_state([])
-    available_devices, set_available_devices = use_state([])
-    all_robot_devices, set_all_robot_devices = use_state([])
-    form_data, set_form_data = use_state(DEFAULT_FORM_STATE)
-    is_loading, set_is_loading = use_state(False)
-
-    @use_effect(dependencies=[robot])
-    def load_data():
-        if not robot:
-            return
-        task = asyncio.create_task(fetch_schedule_data())
-        return lambda: task.cancel()
-
-    async def fetch_schedule_data():
-        set_is_loading(True)
-        try:
-            schedules_res, devices_res, assigned_res = await asyncio.gather(
-                api_service.get_robot_schedules(robot["RobotId"]),
-                api_service.get_available_devices(robot["RobotId"]),
-                api_service.get_robot_assignments(robot["RobotId"]),
-            )
-            set_schedules(schedules_res)
-            set_available_devices(devices_res)
-            # Combinamos ambas listas en el nuevo estado
-            set_all_robot_devices(devices_res + assigned_res)
-        except Exception as e:
-            show_notification(str(e), "error")
-        finally:
-            set_is_loading(False)
-
-    async def handle_successful_change():
-        await on_save_success()
-        if robot:
-            await fetch_schedule_data()
-
-    async def submit_form(event):
-        set_is_loading(True)
-        if not form_data.get("Equipos"):
-            show_notification("Debe seleccionar al menos un equipo.", "error")
-            set_is_loading(False)
-            return
-        payload = {**form_data, "RobotId": robot["RobotId"]}
-        try:
-            if payload.get("ProgramacionId"):
-                await api_service.update_schedule(payload["ProgramacionId"], payload)
-                message = "Programación actualizada con éxito."
-            else:
-                await api_service.create_schedule(payload)
-                message = "Programación creada con éxito."
-            show_notification(message, "success")
-            set_view_mode("list")
-            await handle_successful_change()
-        except Exception as e:
-            show_notification(str(e), "error")
-        finally:
-            set_is_loading(False)
-
-    handle_form_submit = use_callback(submit_form, [form_data, robot, on_save_success])
-
-    def handle_edit_click(schedule_to_edit):
-        assigned_device_names = {device["Equipo"] for device in schedule_to_edit.get("Equipos", [])}
-        equipos_ids = [device["EquipoId"] for device in all_robot_devices if device["Equipo"] in assigned_device_names]
-        form_state = {
-            "ProgramacionId": schedule_to_edit.get("ProgramacionId"),
-            "TipoProgramacion": schedule_to_edit.get("TipoProgramacion", "Diaria"),
-            "HoraInicio": (schedule_to_edit.get("HoraInicio") or "09:00")[:5],
-            "Tolerancia": schedule_to_edit.get("Tolerancia", 60),
-            "DiasSemana": schedule_to_edit.get("DiasSemana", ""),
-            "DiaDelMes": schedule_to_edit.get("DiaDelMes", 1),
-            "FechaEspecifica": (schedule_to_edit.get("FechaEspecifica") or "")[:10],
-            "Equipos": equipos_ids,
-        }
-        set_form_data(form_state)
-        set_view_mode("form")
-
-    def handle_form_change(field, value):
-        if field == "Equipos":
-            value = list(value) if value else []
-        set_form_data(lambda old: {**old, field: value})
-
-    def handle_new_click():
-        set_form_data(DEFAULT_FORM_STATE.copy())
-        set_view_mode("form")
-
-    def handle_cancel():
-        set_view_mode("list")
-
-    if not robot:
-        return None
-
-    return html.dialog(
-        {"open": True},
-        html.article(
-            html.header(
-                html.button({"aria-label": "Close", "rel": "prev", "on_click": event(on_close, prevent_default=True)}),
-                html.h2("Programación de Robots"),
-                html.p(f"{robot.get('Robot', '')}"),
-            ),
-            html._(
-                html.div(
-                    {"style": {"display": "block" if view_mode == "list" else "none"}},
-                    SchedulesList(
-                        api_service=api_service,
-                        robot_id=robot["RobotId"],
-                        robot_nombre=robot["Robot"],
-                        schedules=schedules,
-                        on_edit=handle_edit_click,
-                        on_delete_success=handle_successful_change,
-                    ),
-                ),
-                html.div(
-                    {"style": {"display": "block" if view_mode == "form" else "none"}},
-                    ScheduleForm(
-                        form_data=form_data,
-                        available_devices=available_devices,
-                        is_loading=is_loading,
-                        on_submit=handle_form_submit,
-                        on_cancel=handle_cancel,
-                        on_change=handle_form_change,
-                    ),
-                ),
-            ),
-            html.footer(
-                html.button(
-                    {"type": "button", "class_name": "secondary", "on_click": on_close, "disabled": is_loading},
-                    "Cancelar",
-                ),
-                html.button({"type": "button", "on_click": lambda e: handle_new_click()}, "Nueva programación"),
-            )
-            if view_mode == "list"
-            else None,
         ),
     )
 
