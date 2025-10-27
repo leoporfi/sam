@@ -176,6 +176,33 @@ class DatabaseConnector:
                     logger.error(f"Error en query individual (fallback): {inner_e} con params {params}")
             return total_affected
 
+    def ejecutar_sp_con_tvp(
+        self,
+        sp_name: str,
+        params: Dict[str, Any],
+    ) -> None:
+        """
+        Ejecuta un Stored Procedure que recibe Table-Valued Parameters (TVP).
+        `params` es un dict: {"nombre_param": valor | list[tuple] }
+        Las listas de tuplas se convierten automáticamente a TVP.
+        """
+        try:
+            with self.obtener_cursor() as cursor:
+                # Construye la lista de parámetros en el orden correcto
+                execute_params = []
+                for k, v in params.items():
+                    if isinstance(v, list) and v and isinstance(v[0], tuple):
+                        # Es un TVP
+                        execute_params.append(v)
+                    else:
+                        execute_params.append(v)
+
+                cursor.execute(f"{{CALL {sp_name} ({','.join('?' * len(execute_params))})}}", *execute_params)
+                # commit ya se hace en el contexto obtener_cursor
+        except Exception as e:
+            logger.error(f"Error ejecutando SP con TVP '{sp_name}': {e}", exc_info=True)
+            raise
+
     def obtener_robots_ejecutables(self) -> List[Dict]:
         return self.ejecutar_consulta("{CALL dbo.ObtenerRobotsEjecutables}", es_select=True) or []
 

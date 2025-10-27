@@ -67,7 +67,6 @@ class SincronizadorComun:
             logger.warning("La lista de dispositivos de la API está vacía.")
             return []
 
-        # users_by_id = {user["id"]: user for user in users_list if isinstance(user, dict) and "id" in user}
         # 1. Filtrar usuarios que tengan al menos una de las licencias válidas.
         users_by_id = {
             user["id"]: user

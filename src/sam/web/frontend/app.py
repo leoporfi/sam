@@ -81,7 +81,7 @@ def PageWithLayout(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_s
 
 # --- Componentes de Página (Lógica de cada ruta) ---
 @component
-def DashboardPage(theme_is_dark: bool, on_theme_toggle):
+def RobotsPage(theme_is_dark: bool, on_theme_toggle):
     """Lógica y UI para la página principal de Robots."""
     robots_state = use_robots()
     equipos_state = use_equipos()
@@ -140,7 +140,8 @@ def DashboardPage(theme_is_dark: bool, on_theme_toggle):
         on_sync_equipos=equipos_state.get("trigger_sync"),
     )
 
-    # FIX: Eliminamos la duplicación de robots_state
+    base_key = str(selected_robot["RobotId"]) if selected_robot else str(uuid.uuid4())
+
     return PageWithLayout(
         theme_is_dark=theme_is_dark,
         on_theme_toggle=on_theme_toggle,
@@ -155,19 +156,25 @@ def DashboardPage(theme_is_dark: bool, on_theme_toggle):
                 set_current_page=robots_state["set_current_page"],
             ),
             RobotEditModal(
-                robot=selected_robot if modal_view == "edit" else None,
+                robot=selected_robot or {},
+                is_open=modal_view == "edit",
                 on_close=handle_modal_close,
                 on_save_success=handle_save_and_refresh,
+                key=f"{base_key}-edit",
             ),
             AssignmentsModal(
-                robot=selected_robot if modal_view == "assign" else None,
+                robot=selected_robot or {},
+                is_open=modal_view == "assign",
                 on_close=handle_modal_close,
                 on_save_success=handle_save_and_refresh,
+                key=f"{base_key}-assign",
             ),
             SchedulesModal(
-                robot=selected_robot if modal_view == "schedule" else None,
+                robot=selected_robot or {},
+                is_open=modal_view == "schedule",
                 on_close=handle_modal_close,
                 on_save_success=handle_save_and_refresh,
+                key=f"{base_key}-schedule",
             ),
         ),
     )
@@ -235,6 +242,7 @@ def PoolsPage(theme_is_dark: bool, on_theme_toggle):
         on_create_pool=handle_create_click,
     )
 
+    base_key = str(modal_pool["PoolId"]) if modal_pool else str(uuid.uuid4())
     return PageWithLayout(
         theme_is_dark=theme_is_dark,
         on_theme_toggle=on_theme_toggle,
@@ -251,14 +259,18 @@ def PoolsPage(theme_is_dark: bool, on_theme_toggle):
                 error=pools_state["error"],
             ),
             PoolEditModal(
-                pool=modal_pool if modal_view == "edit" else None,
+                pool=modal_pool or {},
+                is_open=modal_view == "edit",
                 on_close=handle_modal_close,
                 on_save=handle_save_pool,
+                key=f"{base_key}-edit",
             ),
             PoolAssignmentsModal(
-                pool=modal_pool if modal_view == "assign" else None,
+                pool=modal_pool or {},
+                is_open=modal_view == "assign",
                 on_close=handle_modal_close,
                 on_save_success=pools_state["refresh"],
+                key=f"{base_key}-assign",
             ),
             ConfirmationModal(
                 is_open=bool(pool_to_delete),
@@ -362,7 +374,7 @@ def App():
         html._(
             script_to_run,
             browser_router(
-                route("/", DashboardPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                route("/", RobotsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                 route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                 route("/equipos", EquiposPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                 route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),

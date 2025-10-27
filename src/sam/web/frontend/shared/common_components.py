@@ -84,16 +84,16 @@ def Pagination(
                             if not isinstance(page, int)
                             else {},
                             "aria-label": f"Ir a página {page}" if isinstance(page, int) else None,
-                            "class_name": "primary"
-                            if page == current_page
-                            else "secondary outline"
-                            if isinstance(page, int)
-                            else "",
+                            "class_name": (
+                                "primary"
+                                if page == current_page
+                                else "secondary outline"
+                                if isinstance(page, int)
+                                else ""
+                            ),
                         },
-                        str(page),
+                        "…" if page == "..." else str(page),  # text inside <a>
                     )
-                    if isinstance(page, int)
-                    else html.span("...", {"aria-hidden": "true", "style": {"padding": "0.5rem 0.75rem"}})
                 )
                 for page in page_numbers
             ],
@@ -182,6 +182,9 @@ def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Calla
     if not is_open:
         return None
 
+    async def handle_confirm(_event):  # ← async
+        await on_confirm()
+
     return html.dialog(
         {"open": True},
         html.article(
@@ -196,11 +199,11 @@ def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Calla
                     html.button({"class_name": "secondary", "on_click": lambda e: on_cancel()}, "Cancelar"),
                     html.button(
                         {
-                            "on_click": lambda e: on_confirm(),
                             "style": {
                                 "backgroundColor": "var(--pico-color-pink-550)",
                                 "borderColor": "var(--pico-color-pink-550)",
                             },
+                            "on_click": handle_confirm,
                         },
                         "Confirmar",
                     ),
