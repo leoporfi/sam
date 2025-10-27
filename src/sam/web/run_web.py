@@ -72,7 +72,11 @@ def main():
 
         logger.info(f"Configuración del servidor: http://{host}:{port} (Reload: {reload})")
 
+        # Uvicorn debe recibir la instancia directamente, no un string
         config = uvicorn.Config(app, host=host, port=port, reload=reload)
+        # O si necesitas reload en desarrollo:
+        # config = uvicorn.Config("sam.web.run_web:app", host=host, port=port, reload=reload)
+        # pero entonces necesitas app global en este módulo
         server_instance = uvicorn.Server(config)
 
         logger.info("Servidor Uvicorn iniciado correctamente.")
