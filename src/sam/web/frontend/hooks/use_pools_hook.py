@@ -4,6 +4,8 @@
 # NOTA: He consolidado la lógica de los dos archivos de hooks que me pasaste
 # en este único hook más completo, siguiendo el patrón de `use_robots_hook.py`.
 # ---------------------------------------------------------------------------
+import asyncio
+
 from reactpy import use_callback, use_effect, use_state
 
 from ..api.api_client import get_api_client
@@ -32,8 +34,10 @@ def use_pools_management():
         finally:
             set_loading(False)
 
-    # Efecto para cargar los datos iniciales cuando el componente se monta
-    use_effect(load_pools, [])
+    @use_effect(dependencies=[])  # solo al montar
+    def setup_load():
+        task = asyncio.create_task(load_pools())
+        return lambda: task.cancel()
 
     @use_callback
     async def add_pool(pool_data):

@@ -228,50 +228,45 @@ def get_all_equipos(
 def update_equipo_status(equipo_id: int, update_data: EquipoStatusUpdate, db: DatabaseConnector = Depends(get_db)):
     """
     Actualiza el estado de un equipo (Activo_SAM o PermiteBalanceoDinamico).
-
-    El Stored Procedure valida las reglas de negocio y lanza RAISERROR si hay conflictos.
+    El SP valida: existe el equipo y que el valor sea distinto.
     """
     try:
-        success = db_service.update_device_status(db, equipo_id, update_data.field, update_data.value)
-        if success:
-            return {"message": "Estado del equipo actualizado con éxito."}
-        # Si el SP no lanzó error pero tampoco actualizó, es un caso extraño
-        raise HTTPException(status_code=404, detail="Equipo no encontrado o sin cambios.")
+        db_service.update_device_status(db, equipo_id, update_data.field, update_data.value)
+        # Si llegó aquí → SP no lanzó error → sí hubo cambios
+        return {"message": "Estado del equipo actualizado con éxito."}
 
     except pyodbc.Error as db_error:
-        # Capturamos errores de SQL Server
         error_msg = str(db_error)
 
-        # Los RAISERROR del SP vienen con códigos específicos
-        # Ejemplo: "('42000', '[42000] [Microsoft][ODBC Driver 17 for SQL Server]...)"
+        # 1. Equipo inexistente
+        if "Equipo no encontrado" in error_msg:
+            logger.warning(f"Equipo {equipo_id} no existe: {error_msg}")
+            raise HTTPException(status_code=404, detail="Equipo no encontrado.")
 
-        # Mapeo de mensajes de error a códigos HTTP apropiados
-        if "no encontró" in error_msg.lower() or "does not exist" in error_msg.lower():
-            logger.warning(f"Equipo {equipo_id} no encontrado: {error_msg}")
-            raise HTTPException(status_code=404, detail=f"Equipo {equipo_id} no encontrado.")
+        # 2. Valor ya era el mismo
+        if "Sin cambios" in error_msg:
+            return {"message": "El equipo ya tenía ese valor. Sin cambios."}
 
-        elif "no se puede desactivar" in error_msg.lower() or "cannot be deactivated" in error_msg.lower():
-            logger.warning(f"Conflicto al desactivar equipo {equipo_id}: {error_msg}")
+        # 3. Reglas de negocio (activar/desactivar)
+        if "no se puede desactivar" in error_msg.lower():
             raise HTTPException(
-                status_code=409, detail="No se puede desactivar el equipo porque tiene asignaciones activas."
+                status_code=409,
+                detail="No se puede desactivar el equipo porque tiene asignaciones activas.",
+            )
+        if "no se puede activar" in error_msg.lower():
+            raise HTTPException(
+                status_code=409,
+                detail="No se puede activar el equipo. Verifique las restricciones de negocio.",
             )
 
-        elif "no se puede activar" in error_msg.lower() or "cannot be activated" in error_msg.lower():
-            logger.warning(f"Conflicto al activar equipo {equipo_id}: {error_msg}")
-            raise HTTPException(
-                status_code=409, detail="No se puede activar el equipo. Verifique las restricciones de negocio."
-            )
-
-        else:
-            # Error genérico de base de datos
-            logger.error(f"Error de BD al actualizar equipo {equipo_id}: {error_msg}", exc_info=True)
-            raise HTTPException(status_code=500, detail="Error interno al actualizar el equipo.")
+        # 4. Cualquier otro error de BD
+        logger.error(f"Error de BD al actualizar equipo {equipo_id}: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error interno al actualizar el equipo.")
 
     except Exception as e:
-        # Cualquier otro error no anticipado
+        # Errores no esperados
         logger.error(f"Error inesperado al actualizar equipo {equipo_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Error interno del servidor.")
-
 
 # --- Rutas para Asignaciones ---
 @router.get("/api/robots/{robot_id}/asignaciones", tags=["Asignaciones"])
