@@ -62,6 +62,8 @@ def PoolsDashboard(
     pools: List[Dict], on_edit: Callable, on_assign: Callable, on_delete: Callable, loading: bool, error: str
 ):
     """Componente principal que ahora solo renderiza la tabla/tarjetas."""
+    pools_data = pools.get("pools", []) if isinstance(pools, dict) else pools
+
     if error:
         return html.article({"aria_invalid": "true"}, f"Error: {error}")
     if loading and not pools:
@@ -70,7 +72,7 @@ def PoolsDashboard(
     return html._(
         html.div(
             {"class_name": "cards-container pool-cards"},
-            *[PoolCard(pool=p, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete) for p in pools],
+            *[PoolCard(pool=p, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete) for p in pools_data],
         ),
         html.div(
             {"class_name": "table-container"},

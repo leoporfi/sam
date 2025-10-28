@@ -9,7 +9,7 @@ from ..shared.notifications import NotificationContext
 # --- Constantes de configuración ---
 PAGE_SIZE = 20
 INITIAL_FILTERS = {"name": None, "active": True, "online": None}
-POLLING_INTERVAL_SECONDS = 30
+POLLING_INTERVAL_SECONDS = 120
 
 
 def use_robots():
@@ -19,6 +19,7 @@ def use_robots():
     """
     api_client = get_api_client()
     notification_ctx = use_context(NotificationContext)
+    show_notification = notification_ctx["show_notification"]
 
     # --- Estados del hook ---
     robots, set_robots = use_state([])
@@ -51,7 +52,7 @@ def use_robots():
             set_total_count(data.get("total_count", 0))
         except Exception as e:
             set_error(str(e))
-            notification_ctx["show_notification"](f"Error al cargar robots: {e}", "error")
+            show_notification(f"Error al cargar robots: {e}", "error")
         finally:
             set_loading(False)
 
@@ -77,6 +78,8 @@ def use_robots():
     async def polling_loop():
         while True:
             await asyncio.sleep(POLLING_INTERVAL_SECONDS)
+            if is_syncing:
+                return
             try:
                 await load_robots()
             except asyncio.CancelledError:
@@ -102,17 +105,16 @@ def use_robots():
         if is_syncing:
             return
         set_is_syncing(True)
-        notification_ctx["show_notification"]("Sincronizando robots desde A360...", "info")
+        show_notification("Sincronizando robots desde A360...", "info")
         try:
             # Usamos el método específico para robots
+            # await asyncio.sleep(1)
             summary = await api_client.trigger_sync_robots()
-            notification_ctx["show_notification"](
-                f"Robots sincronizados: {summary.get('robots_sincronizados', 0)}.",
-                "success",
-            )
+            equipos_sync = summary.get("summary", {}).get("robots_sincronizados", 0)
+            show_notification(f"Robots sincronizados: {equipos_sync}.", "success")
             await load_robots()
         except Exception as e:
-            notification_ctx["show_notification"](f"Error al sincronizar robots: {e}", "error")
+            show_notification(f"Error al sincronizar robots: {e}", "error")
             set_error(f"Error en sincronización: {e}")
         finally:
             set_is_syncing(False)

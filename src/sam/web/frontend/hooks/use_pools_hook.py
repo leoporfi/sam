@@ -28,7 +28,7 @@ def use_pools_management():
         set_error(None)
         try:
             data = await api_client.get_pools()
-            set_pools(data)
+            set_pools(data.get("pools", []))
         except Exception as e:
             set_error(str(e))
         finally:
