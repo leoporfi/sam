@@ -92,6 +92,8 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
 
     @use_effect(dependencies=[debounced_search])
     def sync_search_with_filters():
+        if debounced_search == robots_state["filters"].get("name"):
+            return
         robots_state["set_filters"](lambda prev_filters: {**prev_filters, "name": debounced_search or None})
 
     is_searching = debounced_search != search_input
@@ -294,13 +296,10 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
 
     @use_effect(dependencies=[debounced_search])
     def sync_search_with_filters():
-        # La llamada es síncrona, pero igual puede tardar si hay muchos filtros
-        # Usamos un pequeño timeout para no bloquear el render
-        from asyncio import sleep
-
         async def do_sync():
-            # Pequeño debounce adicional (opcional)
-            await sleep(0.05)
+            await asyncio.sleep(0.05)
+            if debounced_search == robots_state["filters"].get("name"):
+                return
             equipos_state["set_filters"](lambda prev: {**prev, "name": debounced_search or None})
 
         task = asyncio.create_task(do_sync())
