@@ -26,7 +26,8 @@ class ApiClient:
             await self._client.aclose()
 
     def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None:
+        if self._client is None or self._client.is_closed:
+            # if self._client is None:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url, timeout=30.0, headers={"Content-Type": "application/json"}
             )
@@ -59,6 +60,9 @@ class ApiClient:
             except httpx.RequestError as e:
                 if attempt == retries - 1:
                     raise APIException(f"Error de conexión: {str(e)}")
+                # if self._client:
+                #     await self._client.aclose()
+                #     self._client = None
                 await asyncio.sleep(2**attempt)
             except APIException:
                 raise
@@ -148,6 +152,10 @@ class ApiClient:
         return await self._request("PATCH", f"/api/equipos/{equipo_id}", json_data=status_data)
 
     # MÉTODOS UTILITARIOS
+    async def get_sync_status(self) -> Dict:
+        """Consulta el estado de las tareas de sincronización del backend."""
+        return await self._request("GET", "/api/sync/status")
+
     async def trigger_sync_robots(self) -> Dict:
         """Sincroniza solo robots desde A360."""
         return await self._request("POST", "/api/sync/robots")
@@ -170,6 +178,13 @@ _api_client_instance = None
 
 
 def get_api_client() -> ApiClient:
+    """
+    Crea una NUEVA instancia de ApiClient.
+
+    IMPORTANTE: Ya no es un singleton. Cada llamada devuelve una instancia nueva.
+    Esto evita que diferentes hooks compartan el mismo cliente HTTP y causen
+    errores de "client has been closed".
+    """
     global _api_client_instance
     if _api_client_instance is None:
         _api_client_instance = ApiClient()

@@ -10,6 +10,7 @@ from ..shared.notifications import NotificationContext
 PAGE_SIZE = 20
 INITIAL_FILTERS = {"name": None, "active": True, "online": None}
 POLLING_INTERVAL_SECONDS = 120
+SYNC_POLLING_INTERVAL_SECONDS = 3
 
 
 def use_robots():
@@ -68,9 +69,11 @@ def use_robots():
     @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
     def setup_polling():
         async def polling_loop():
+            await asyncio.sleep(POLLING_INTERVAL_SECONDS)
             while True:
                 await asyncio.sleep(POLLING_INTERVAL_SECONDS)
-                await load_robots()
+                if not is_syncing:
+                    await load_robots()
 
         task = asyncio.create_task(polling_loop())
         return lambda: task.cancel()
@@ -107,16 +110,30 @@ def use_robots():
         set_is_syncing(True)
         show_notification("Sincronizando robots desde A360...", "info")
         try:
-            # Usamos el método específico para robots
-            # await asyncio.sleep(1)
-            summary = await api_client.trigger_sync_robots()
-            equipos_sync = summary.get("summary", {}).get("robots_sincronizados", 0)
-            show_notification(f"Robots sincronizados: {equipos_sync}.", "success")
+            # 1. Iniciar la tarea en el backend
+            # Esto ahora puede devolver un error 409 si ya está corriendo
+            await api_client.trigger_sync_robots()
+            show_notification("Sincronización iniciada. Esperando finalización...", "info")
+            # 2. Iniciar bucle de polling para el estado
+            while True:
+                # Esperamos ANTES de preguntar
+                await asyncio.sleep(SYNC_POLLING_INTERVAL_SECONDS)
+                try:
+                    status_data = await api_client.get_sync_status()
+                    if status_data.get("robots") == "idle":
+                        break  # La tarea terminó, salimos del bucle
+                except Exception as poll_error:
+                    # Si el polling falla, no rompemos el bucle,
+                    # solo lo reportamos y reintentamos.
+                    show_notification(f"Error al consultar estado de sync: {poll_error}", "warning")
+            # 3. Tarea completada: Recargar datos y notificar
+            show_notification("Sincronización completada. Actualizando lista...", "success")
             await load_robots()
+            set_is_syncing(False)
         except Exception as e:
-            show_notification(f"Error al sincronizar robots: {e}", "error")
+            # Captura errores de 'trigger_sync_robots' (ej. 409 Conflict)
+            show_notification(f"Error al iniciar sincronización: {e}", "error")
             set_error(f"Error en sincronización: {e}")
-        finally:
             set_is_syncing(False)
 
     @use_callback
