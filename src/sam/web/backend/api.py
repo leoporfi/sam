@@ -3,13 +3,14 @@ import logging
 from typing import Dict, Optional
 
 import pyodbc
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request, status
 
+from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.database import DatabaseConnector
 
 # Importa los servicios desde el archivo local de base de datos
 from . import database as db_service
-from .dependencies import get_db
+from .dependencies import get_aa_client, get_db
 
 # Importa los schemas desde el archivo local de schemas
 from .schemas import (
@@ -58,43 +59,92 @@ def _handle_endpoint_errors(func_name: str, e: Exception, resource: str, resourc
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor.")
 
 
+# Task Wrapper
+async def run_robot_sync_task(db: DatabaseConnector, aa_client: AutomationAnywhereClient, app_state):
+    """Wrapper para ejecutar y gestionar el estado de la tarea de sync de robots."""
+    lock = app_state.sync_lock
+    try:
+        # Poner el estado en "running"
+        async with lock:
+            app_state.sync_status["robots"] = "running"
+
+        # Ejecutar la tarea real (que tarda 36s)
+        await db_service.sync_robots_only(db, aa_client)
+
+    except Exception as e:
+        logger.error(f"Fallo en la tarea de fondo 'sync_robots_only': {e}", exc_info=True)
+    finally:
+        # Poner el estado de vuelta en "idle", incluso si falló
+        async with lock:
+            app_state.sync_status["robots"] = "idle"
+
+
+async def run_equipo_sync_task(db: DatabaseConnector, aa_client: AutomationAnywhereClient, app_state):
+    """Wrapper para ejecutar y gestionar el estado de la tarea de sync de equipos."""
+    lock = app_state.sync_lock
+    try:
+        async with lock:
+            app_state.sync_status["equipos"] = "running"
+        await db_service.sync_equipos_only(db, aa_client)
+    except Exception as e:
+        logger.error(f"Fallo en la tarea de fondo 'sync_equipos_only': {e}", exc_info=True)
+    finally:
+        async with lock:
+            app_state.sync_status["equipos"] = "idle"
+
+
 # ------------------------------------------------------------------
 # Sync routes
 # ------------------------------------------------------------------
-@router.post("/api/sync", tags=["Sincronización"])
-async def trigger_sync(db: DatabaseConnector = Depends(get_db)):
-    """
-    Dispara el proceso de sincronización manual con Automation Anywhere A360.
-    """
-    try:
-        summary = await db_service.sync_with_a360(db)
-        return {"message": "Sincronización global completada", "summary": summary}
-    except Exception as e:
-        _handle_endpoint_errors("trigger_sync", e, "Sincronización")
+@router.post("/api/sync/robots", tags=["Sincronización"], status_code=status.HTTP_202_ACCEPTED)
+async def trigger_sync_robots(
+    request: Request,  # <--- Inyectar Request
+    background_tasks: BackgroundTasks,
+    db: DatabaseConnector = Depends(get_db),
+    aa_client: AutomationAnywhereClient = Depends(get_aa_client),
+):
+    """Inicia la sincronización de robots en segundo plano."""
+    app_state = request.app.state  # Accedemos al estado de la app
+
+    async with app_state.sync_lock:
+        # Comprobar si ya hay una tarea corriendo
+        if app_state.sync_status["robots"] == "running":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Ya hay una sincronización de robots en curso."
+            )
+
+        # Usamos el wrapper, no la tarea directa
+        background_tasks.add_task(run_robot_sync_task, db, aa_client, app_state)
+
+    return {"message": "Sincronización de robots iniciada."}
 
 
-@router.post("/api/sync/robots", tags=["Sincronización"])
-async def trigger_sync_robots(db: DatabaseConnector = Depends(get_db)):
-    """
-    Sincroniza solo robots desde Automation Anywhere A360.
-    """
-    try:
-        summary = await db_service.sync_robots_only(db)
-        return {"message": "Robots sincronizados", "summary": summary}
-    except Exception as e:
-        _handle_endpoint_errors("trigger_sync_robots", e, "Robots")
+@router.post("/api/sync/equipos", tags=["Sincronización"], status_code=status.HTTP_202_ACCEPTED)
+async def trigger_sync_equipos(
+    request: Request,  # <--- Inyectar Request
+    background_tasks: BackgroundTasks,
+    db: DatabaseConnector = Depends(get_db),
+    aa_client: AutomationAnywhereClient = Depends(get_aa_client),
+):
+    """Inicia la sincronización de equipos en segundo plano."""
+    app_state = request.app.state
+    async with app_state.sync_lock:
+        if app_state.sync_status["equipos"] == "running":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Ya hay una sincronización de equipos en curso."
+            )
+
+        # Usamos el wrapper de equipos
+        background_tasks.add_task(run_equipo_sync_task, db, aa_client, app_state)
+
+    return {"message": "Sincronización de equipos iniciada."}
 
 
-@router.post("/api/sync/equipos", tags=["Sincronización"])
-async def trigger_sync_equipos(db: DatabaseConnector = Depends(get_db)):
-    """
-    Sincroniza solo equipos desde Automation Anywhere A360.
-    """
-    try:
-        summary = await db_service.sync_equipos_only(db)
-        return {"message": "Equipos sincronizados", "summary": summary}
-    except Exception as e:
-        _handle_endpoint_errors("trigger_sync_equipos", e, "Equipos")
+@router.get("/api/sync/status", tags=["Sincronización"])
+async def get_sync_status(request: Request):
+    """Obtiene el estado actual de las tareas de sincronización."""
+    # Simplemente devuelve el diccionario de estado
+    return request.app.state.sync_status
 
 
 # ------------------------------------------------------------------
