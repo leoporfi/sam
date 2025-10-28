@@ -1,4 +1,5 @@
 # ARCHIVO: src/web/frontend/app.py
+import asyncio
 import uuid
 
 from reactpy import component, html, use_effect, use_state
@@ -91,6 +92,8 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
 
     @use_effect(dependencies=[debounced_search])
     def sync_search_with_filters():
+        if debounced_search == robots_state["filters"].get("name"):
+            return
         robots_state["set_filters"](lambda prev_filters: {**prev_filters, "name": debounced_search or None})
 
     is_searching = debounced_search != search_input
@@ -293,7 +296,19 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
 
     @use_effect(dependencies=[debounced_search])
     def sync_search_with_filters():
-        equipos_state["set_filters"](lambda prev_filters: {**prev_filters, "name": debounced_search or None})
+        async def do_sync():
+            await asyncio.sleep(0.05)
+            if debounced_search == robots_state["filters"].get("name"):
+                return
+            equipos_state["set_filters"](lambda prev: {**prev, "name": debounced_search or None})
+
+        task = asyncio.create_task(do_sync())
+
+        def cleanup():
+            if not task.done():
+                task.cancel()
+
+        return cleanup
 
     is_searching = debounced_search != search_input
 

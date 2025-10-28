@@ -7,7 +7,7 @@ from ..shared.notifications import NotificationContext
 
 PAGE_SIZE = 20
 INITIAL_FILTERS = {"name": None, "active": None, "balanceable": None}
-POLLING_INTERVAL_SECONDS = 30
+POLLING_INTERVAL_SECONDS = 60
 
 
 def use_equipos():
@@ -41,14 +41,12 @@ def use_equipos():
                 "sort_dir": sort_dir,
             }
             api_params = {k: v for k, v in api_params.items() if v is not None}
-
-            # Asumimos que el cliente API tendrá un método get_equipos
             data = await api_client.get_equipos(api_params)
             set_equipos(data.get("equipos", []))
             set_total_count(data.get("total_count", 0))
         except Exception as e:
             set_error(str(e))
-            show_notification(f"Error al cargar equipos: {e}", "error")
+            notification_ctx["show_notification"](f"Error al cargar equipos: {e}", "error")
         finally:
             set_loading(False)
 
@@ -62,8 +60,9 @@ def use_equipos():
         try:
             # Usamos el método específico para equipos
             summary = await api_client.trigger_sync_equipos()
+            equipos_sync = summary.get("summary", {}).get("equipos_sincronizados", 0)
             show_notification(
-                f"Equipos sincronizados: {summary.get('equipos_sincronizados', 0)}.",
+                f"Equipos sincronizados: {equipos_sync}.",
                 "success",
             )
             await load_equipos()
@@ -73,16 +72,27 @@ def use_equipos():
         finally:
             set_is_syncing(False)
 
-    use_effect(load_equipos, [filters, current_page, sort_by, sort_dir])
+    # use_effect(load_equipos, [filters, current_page, sort_by, sort_dir])
+    @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
+    def setup_load():
+        task = asyncio.create_task(load_equipos())
+        return lambda: task.cancel()
 
     @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
     def setup_polling():
-        task = asyncio.ensure_future(polling_loop())
+        async def polling_loop():
+            while True:
+                await asyncio.sleep(POLLING_INTERVAL_SECONDS)
+                await load_equipos()
+
+        task = asyncio.create_task(polling_loop())
         return lambda: task.cancel()
 
     async def polling_loop():
         while True:
             await asyncio.sleep(POLLING_INTERVAL_SECONDS)
+            if is_syncing:
+                return
             try:
                 await load_equipos()
             except asyncio.CancelledError:

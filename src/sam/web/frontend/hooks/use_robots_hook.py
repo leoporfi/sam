@@ -9,7 +9,7 @@ from ..shared.notifications import NotificationContext
 # --- Constantes de configuración ---
 PAGE_SIZE = 20
 INITIAL_FILTERS = {"name": None, "active": True, "online": None}
-POLLING_INTERVAL_SECONDS = 15
+POLLING_INTERVAL_SECONDS = 120
 
 
 def use_robots():
@@ -19,6 +19,7 @@ def use_robots():
     """
     api_client = get_api_client()
     notification_ctx = use_context(NotificationContext)
+    show_notification = notification_ctx["show_notification"]
 
     # --- Estados del hook ---
     robots, set_robots = use_state([])
@@ -51,46 +52,34 @@ def use_robots():
             set_total_count(data.get("total_count", 0))
         except Exception as e:
             set_error(str(e))
+            show_notification(f"Error al cargar robots: {e}", "error")
         finally:
             set_loading(False)
 
-    @use_callback
-    async def trigger_sync(event=None):
-        """Sincroniza solo robots desde A360."""
-        if is_syncing:
-            return
-        set_is_syncing(True)
-        notification_ctx["show_notification"]("Sincronizando robots desde A360...", "info")
-        try:
-            # Usamos el método específico para robots
-            summary = await api_client.trigger_sync_robots()
-            notification_ctx["show_notification"](
-                f"Robots sincronizados: {summary.get('robots_sincronizados', 0)}.",
-                "success",
-            )
-            await load_robots()
-        except Exception as e:
-            notification_ctx["show_notification"](f"Error al sincronizar robots: {e}", "error")
-            set_error(f"Error en sincronización: {e}")
-        finally:
-            set_is_syncing(False)
+    @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
+    def setup_load():
+        task = asyncio.create_task(load_robots())
+        return lambda: task.cancel()
 
     # --- Efectos y Manejadores ---
-    use_effect(load_robots, [filters, current_page, sort_by, sort_dir])
+    # use_effect(load_robots, [filters, current_page, sort_by, sort_dir])
 
     # Polling effect (sin cambios)
     @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
     def setup_polling():
-        task = asyncio.ensure_future(polling_loop())
+        async def polling_loop():
+            while True:
+                await asyncio.sleep(POLLING_INTERVAL_SECONDS)
+                await load_robots()
 
-        def cleanup():
-            task.cancel()
-
-        return cleanup
+        task = asyncio.create_task(polling_loop())
+        return lambda: task.cancel()
 
     async def polling_loop():
         while True:
             await asyncio.sleep(POLLING_INTERVAL_SECONDS)
+            if is_syncing:
+                return
             try:
                 await load_robots()
             except asyncio.CancelledError:
@@ -109,6 +98,26 @@ def use_robots():
     def handle_set_filters(new_filters_func):
         set_current_page(1)
         set_filters(new_filters_func)
+
+    @use_callback
+    async def trigger_sync(event=None):
+        """Sincroniza solo robots desde A360."""
+        if is_syncing:
+            return
+        set_is_syncing(True)
+        show_notification("Sincronizando robots desde A360...", "info")
+        try:
+            # Usamos el método específico para robots
+            # await asyncio.sleep(1)
+            summary = await api_client.trigger_sync_robots()
+            equipos_sync = summary.get("summary", {}).get("robots_sincronizados", 0)
+            show_notification(f"Robots sincronizados: {equipos_sync}.", "success")
+            await load_robots()
+        except Exception as e:
+            show_notification(f"Error al sincronizar robots: {e}", "error")
+            set_error(f"Error en sincronización: {e}")
+        finally:
+            set_is_syncing(False)
 
     @use_callback
     async def update_robot_status(robot_id: int, status_data: Dict[str, bool]):
