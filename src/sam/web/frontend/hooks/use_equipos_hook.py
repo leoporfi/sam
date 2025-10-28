@@ -7,7 +7,7 @@ from ..shared.notifications import NotificationContext
 
 PAGE_SIZE = 20
 INITIAL_FILTERS = {"name": None, "active": None, "balanceable": None}
-POLLING_INTERVAL_SECONDS = 30
+POLLING_INTERVAL_SECONDS = 60
 
 
 def use_equipos():
@@ -60,8 +60,9 @@ def use_equipos():
         try:
             # Usamos el método específico para equipos
             summary = await api_client.trigger_sync_equipos()
+            equipos_sync = summary.get("summary", {}).get("equipos_sincronizados", 0)
             show_notification(
-                f"Equipos sincronizados: {summary.get('equipos_sincronizados', 0)}.",
+                f"Equipos sincronizados: {equipos_sync}.",
                 "success",
             )
             await load_equipos()
@@ -90,6 +91,8 @@ def use_equipos():
     async def polling_loop():
         while True:
             await asyncio.sleep(POLLING_INTERVAL_SECONDS)
+            if is_syncing:
+                return
             try:
                 await load_equipos()
             except asyncio.CancelledError:
