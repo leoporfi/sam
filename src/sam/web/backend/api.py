@@ -15,6 +15,7 @@ from .dependencies import get_aa_client, get_db
 # Importa los schemas desde el archivo local de schemas
 from .schemas import (
     AssignmentUpdateRequest,
+    EquipoCreateRequest,
     EquipoStatusUpdate,
     PoolAssignmentsRequest,
     PoolCreate,
@@ -318,6 +319,20 @@ def update_equipo_status(equipo_id: int, update_data: EquipoStatusUpdate, db: Da
 
     except Exception as e:
         _handle_endpoint_errors("update_equipo_status", e, "Equipo", equipo_id)
+
+
+@router.post("/api/equipos", tags=["Equipos"], status_code=status.HTTP_201_CREATED)
+def create_new_equipo(equipo_data: EquipoCreateRequest, db: DatabaseConnector = Depends(get_db)):
+    """Crea un nuevo equipo manualmente."""
+    try:
+        new_equipo = db_service.create_equipo(db, equipo_data)
+        return {"message": "Equipo creado exitosamente.", "equipo": new_equipo}
+    except ValueError as ve:  # Captura errores de validación o clave duplicada
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(ve))
+    except pyodbc.Error as dbe:  # Otros errores de base de datos
+        _handle_endpoint_errors("create_new_equipo", dbe, "Equipo")
+    except Exception as e:  # Errores inesperados
+        _handle_endpoint_errors("create_new_equipo", e, "Equipo")
 
 
 # ------------------------------------------------------------------

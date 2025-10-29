@@ -1,3 +1,4 @@
+# sam/web/hooks/use_equipos_hook.py
 import asyncio
 
 from reactpy import use_callback, use_context, use_effect, use_memo, use_state
