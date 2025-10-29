@@ -1,6 +1,6 @@
 from typing import List, Optional, TypedDict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RobotCreateRequest(BaseModel):
@@ -94,3 +94,15 @@ class Equipo(TypedDict):
 class EquipoStatusUpdate(BaseModel):
     field: str
     value: bool
+
+
+class EquipoCreateRequest(BaseModel):
+    EquipoId: int = Field(..., gt=0, description="ID del equipo obtenido de A360")
+    Equipo: str = Field(..., min_length=1, description="Nombre del host del equipo")
+    UserId: int = Field(..., gt=0, description="ID del usuario asociado obtenido de A360")
+    UserName: Optional[str] = Field(None, description="Nombre del usuario asociado (opcional)")
+    Licencia: Optional[str] = Field(None, description="Tipo de licencia (opcional, ej: RUNTIME)")
+    Activo_SAM: bool = 1
+    PermiteBalanceoDinamico: bool = 0
+    RobotAsignado: Optional[str] = None
+    Pool: Optional[str] = None

@@ -156,6 +156,20 @@ dialog[open] {
   z-index: 1100; /* Asegura que esté por encima del sticky-header */
 }
 
+
+/* --- Ajuste para hacer los modales más anchos --- */
+dialog[open] {
+  max-width: 85vw; /* Usa el 85% del ancho de la ventana. Puedes ajustar este valor (ej. 90vw, 70vw) */
+  width: auto;     /* Permite que el modal se ajuste al contenido si es más pequeño que max-width */
+}
+
+/* Opcional: Ajuste para pantallas más pequeñas (móviles) */
+@media (max-width: 600px) {
+  dialog[open] {
+    max-width: 95vw; /* Ocupa casi todo el ancho en pantallas pequeñas */
+  }
+}
+
 /* --- Paginación --- */
 .pagination-container {
   display: flex;
@@ -358,6 +372,82 @@ dialog[open] {
 .device-list-table tbody tr:hover {
   background-color: var(--pico-table-row-stripped-background-color);
 }
+
+
+/* --- Estilos para compactar la tabla de asignación en el modal --- */
+
+/* Contenedor con scroll y altura fija */
+.compact-assignment-table {
+  max-height: 300px; /* Ajusta la altura máxima según necesites */
+  overflow-y: auto; /* Habilita el scroll vertical */
+  border: 1px solid var(--pico-table-border-color); /* Opcional: borde */
+  border-radius: var(--pico-border-radius); /* Opcional: bordes redondeados */
+}
+
+/* Tabla dentro del contenedor */
+.compact-assignment-table table {
+  margin-bottom: 0; /* Quita el margen inferior por defecto de las tablas */
+  border: none; /* Quita borde si el contenedor ya tiene uno */
+}
+
+/* Encabezados de la tabla (sticky para que se queden fijos al hacer scroll) */
+.compact-assignment-table th {
+  position: sticky;
+  top: 0;
+  background-color: var(--pico-table-header-background-color);
+  z-index: 1; /* Asegura que esté por encima de las filas */
+  padding-top: 0.5rem; /* Padding reducido */
+  padding-bottom: 0.5rem; /* Padding reducido */
+  font-size: 0.9em; /* Fuente un poco más pequeña */
+}
+
+/* Celdas de la tabla (más compactas) */
+.compact-assignment-table td {
+  padding-top: 0.25rem; /* Padding vertical muy reducido */
+  padding-bottom: 0.25rem;
+  padding-left: 0.75rem; /* Mantenemos padding horizontal */
+  padding-right: 0.75rem;
+  vertical-align: middle; /* Centrar contenido verticalmente */
+  white-space: nowrap; /* Evita que el texto largo se divida en varias líneas */
+  overflow: hidden; /* Oculta el texto que desborda */
+  text-overflow: ellipsis; /* Añade "..." al texto que desborda */
+  font-size: 0.85em; /* Fuente más pequeña para las filas */
+}
+
+/* Ajuste específico para la celda del checkbox */
+.compact-assignment-table td:first-child {
+  width: 40px; /* Ancho fijo para el checkbox */
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* Ajuste para el tag de estado (más pequeño) */
+.compact-assignment-table .tag {
+    padding: 0.1rem 0.4rem;
+    font-size: 0.75em;
+}
+
+/* Reduce padding vertical en celdas de la tabla de programaciones */
+.compact-schedule-table th,
+.compact-schedule-table td {
+  padding-top: 0.35rem; /* Ajusta este valor si necesitas más/menos espacio */
+  padding-bottom: 0.35rem; /* Ajusta este valor si necesitas más/menos espacio */
+  vertical-align: middle; /* Asegura que el texto y botones estén centrados verticalmente */
+}
+
+/* Opcional: Reducir tamaño/padding de los botones dentro de esa tabla */
+.compact-schedule-table td .grid a,
+.compact-schedule-table td .grid button {
+  padding: 0.25rem 0.5rem; /* Padding más pequeño para los botones */
+  font-size: 0.8em; /* Fuente ligeramente más pequeña */
+  margin-bottom: 0; /* Quita margen inferior si lo hubiera */
+}
+
+/* Ajusta el espaciado dentro del grid de botones si es necesario */
+.compact-schedule-table td .grid {
+  gap: 0.25rem; /* Reduce el espacio entre botones */
+}
+
 
 /* --- Solapas (Tabs) --- */
 .tabs-container {

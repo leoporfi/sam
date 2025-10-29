@@ -1,4 +1,4 @@
-# web/frontend/features/equipos/equipos_components.py
+# src/web/frontend/features/equipos/equipos_components.py
 from typing import Callable, Dict, List
 
 from reactpy import component, event, html, use_state
@@ -17,6 +17,7 @@ def EquiposControls(
     balanceable_filter: str,
     on_balanceable_change: Callable,
     is_searching: bool,
+    on_create_equipo: Callable,
 ):
     """Controles para el dashboard de Equipos (título, filtros)."""
     is_expanded, set_is_expanded = use_state(False)
@@ -71,6 +72,7 @@ def EquiposControls(
                     html.option({"value": "false"}, "No Permite Balanceo"),
                 ),
                 html.button(
+                    {"on_click": lambda e: on_create_equipo()},
                     html.i({"class_name": "fa-solid fa-plus"}),
                     " Agregar Equipo",
                 ),
