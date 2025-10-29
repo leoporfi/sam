@@ -1,4 +1,4 @@
-# src/interfaz_web/features/modals/robots_modals.py
+# sam/web/features/modals/robots_modals.py
 import asyncio
 from typing import Any, Callable, Dict, List
 
@@ -289,8 +289,48 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
     if not robot:
         return None
 
+    def sort_devices(devices: List[Dict]) -> List[Dict]:
+        """Ordena una lista de diccionarios de equipos por el campo 'Equipo'."""
+        return sorted(devices, key=lambda x: x.get("Equipo", "").lower())
+
     @use_effect(dependencies=[robot])
     def fetch_data():
+        def get_highest_priority_assignment(assignments: List[Dict]) -> List[Dict]:
+            """
+            De-duplica una lista de asignaciones por EquipoId,
+            quedándose con el estado de mayor prioridad.
+            Prioridad: Programado > Reservado > Dinámico
+            """
+
+            def get_priority(asn):
+                if asn.get("EsProgramado"):
+                    return 1
+                if asn.get("Reservado"):
+                    return 2
+                return 3
+
+            unique_equipos = {}
+            for asn in assignments:
+                equipo_id = asn.get("EquipoId")
+                if not equipo_id:
+                    continue
+
+                current_assignment = unique_equipos.get(equipo_id)
+
+                if not current_assignment:
+                    unique_equipos[equipo_id] = asn
+                else:
+                    # Comparamos prioridades
+                    current_priority = get_priority(current_assignment)
+                    new_priority = get_priority(asn)
+
+                    # Si la nueva asignación tiene mayor prioridad (un nro más bajo),
+                    # la reemplazamos.
+                    if new_priority < current_priority:
+                        unique_equipos[equipo_id] = asn
+
+            return list(unique_equipos.values())
+
         async def get_data():
             if not robot:
                 return
@@ -304,7 +344,8 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
                     api_service.get_robot_assignments(robot["RobotId"]),
                     api_service.get_available_devices(robot["RobotId"]),
                 )
-                set_assigned_devices(assigned_res)
+                unique_assigned_devices = get_highest_priority_assignment(assigned_res)
+                set_assigned_devices(unique_assigned_devices)
                 set_available_devices(available_res)
             except Exception as e:
                 show_notification(f"Error al cargar datos: {e}", "error")
@@ -314,20 +355,26 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
         asyncio.create_task(get_data())
 
     filtered_assigned = use_memo(
-        lambda: [device for device in assigned_devices if search_assigned.lower() in device.get("Equipo", "").lower()],
+        lambda: sort_devices(
+            [device for device in assigned_devices if search_assigned.lower() in device.get("Equipo", "").lower()]
+        ),
         [assigned_devices, search_assigned],
     )
     filtered_available = use_memo(
-        lambda: [
-            device for device in available_devices if search_available.lower() in device.get("Equipo", "").lower()
-        ],
+        lambda: sort_devices(
+            [device for device in available_devices if search_available.lower() in device.get("Equipo", "").lower()]
+        ),
         [available_devices, search_available],
     )
 
     def move_items(source_list, set_source, dest_list, set_dest, selected_ids, clear_selection):
         items_to_move = {item["EquipoId"]: item for item in source_list if item["EquipoId"] in selected_ids}
-        set_dest(sorted(dest_list + list(items_to_move.values()), key=lambda x: x["Equipo"]))
-        set_source([item for item in source_list if item["EquipoId"] not in items_to_move])
+
+        new_dest_list = sort_devices(dest_list + list(items_to_move.values()))
+        new_source_list = sort_devices([item for item in source_list if item["EquipoId"] not in items_to_move])
+
+        set_dest(new_dest_list)
+        set_source(new_source_list)
         clear_selection([])
 
     async def execute_save():
@@ -643,7 +690,7 @@ def DeviceList(
             ),
         ),
         html.div(
-            {"class_name": "device-list-table"},
+            {"class_name": "device-list-table compact-assignment-table"},
             html.table(
                 {"role": "grid"},
                 html.thead(
@@ -755,6 +802,7 @@ def SchedulesList(
     )
     return html._(
         html.table(
+            {"class_name": "compact-schedule-table"},
             html.thead(html.tr(html.th("Detalles"), html.th("Equipos"), html.th("Acciones"))),
             html.tbody(
                 rows

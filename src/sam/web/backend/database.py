@@ -7,13 +7,13 @@ from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.database import DatabaseConnector
 from sam.common.sincronizador_comun import SincronizadorComun
 
-from .schemas import RobotCreateRequest, RobotUpdateRequest, ScheduleData
+from .schemas import EquipoCreateRequest, RobotCreateRequest, RobotUpdateRequest, ScheduleData
 
 logger = logging.getLogger(__name__)
 
 
 # Sincronización con A360
-async def sync_with_a360(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:  # <--- MODIFICAR
+async def sync_with_a360(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:
     """
     Orquesta la sincronización de las tablas Robots y Equipos con A360
     utilizando el nuevo componente centralizado.
@@ -30,7 +30,7 @@ async def sync_with_a360(db: DatabaseConnector, aa_client: AutomationAnywhereCli
         raise
 
 
-async def sync_robots_only(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:  # <--- MODIFICAR
+async def sync_robots_only(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:
     """
     Sincroniza únicamente la tabla Robots con A360.
     """
@@ -49,7 +49,7 @@ async def sync_robots_only(db: DatabaseConnector, aa_client: AutomationAnywhereC
         raise
 
 
-async def sync_equipos_only(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:  # <--- MODIFICAR
+async def sync_equipos_only(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:
     """
     Sincroniza únicamente la tabla Equipos con A360.
     """
@@ -499,3 +499,53 @@ def assign_resources_to_pool(db: DatabaseConnector, pool_id: int, robot_ids: Lis
             "EquipoIds": equipos_tvp,
         },
     )
+
+
+# Equipos
+def create_equipo(db: DatabaseConnector, equipo_data: EquipoCreateRequest) -> Dict:
+    """
+    Inserta un nuevo equipo manualmente en la base de datos.
+    NOTA: Esto asume que no existe un SP CrearEquipo. Usa INSERT directo.
+    """
+    logger.info(f"Intentando crear equipo manualmente: ID={equipo_data.EquipoId}, Nombre={equipo_data.Equipo}")
+    # Usamos valores por defecto consistentes con la tabla
+    # Activo_SAM = 1 (True)
+    # PermiteBalanceoDinamico = 0 (False)
+    query = """
+        INSERT INTO dbo.Equipos (
+            EquipoId, Equipo, UserId, UserName, Licencia,
+            Activo_SAM, PermiteBalanceoDinamico
+        )
+        OUTPUT INSERTED.EquipoId, INSERTED.Equipo, INSERTED.UserName, INSERTED.Licencia,
+               INSERTED.Activo_SAM, INSERTED.PermiteBalanceoDinamico
+               -- Agregamos valores 'N/A' para RobotAsignado y Pool para consistencia
+               , 'N/A' AS RobotAsignado, 'N/A' AS Pool
+        VALUES (?, ?, ?, ?, ?, 1, 0);
+    """
+    params = (
+        equipo_data.EquipoId,
+        equipo_data.Equipo,
+        equipo_data.UserId,
+        equipo_data.UserName,
+        equipo_data.Licencia,
+    )
+    try:
+        new_equipo_list = db.ejecutar_consulta(query, params, es_select=True)
+        if not new_equipo_list:
+            raise Exception("La inserción no devolvió el nuevo equipo.")
+        logger.info(f"Equipo {equipo_data.EquipoId} creado exitosamente.")
+        return new_equipo_list[0]
+    except pyodbc.IntegrityError as e:
+        # Captura error de clave duplicada
+        if "Violation of PRIMARY KEY constraint" in str(e) or "duplicate key" in str(e).lower():
+            logger.warning(f"Intento de crear equipo duplicado: ID={equipo_data.EquipoId}")
+            raise ValueError(f"Ya existe un equipo con el ID {equipo_data.EquipoId}.")
+        elif "FOREIGN KEY constraint" in str(e):
+            logger.warning(f"Error de FK al crear equipo {equipo_data.EquipoId}")
+            raise ValueError("Error de referencia: Verifique si el PoolId (si aplica) existe.")
+        else:
+            logger.error(f"Error de integridad no manejado al crear equipo: {e}", exc_info=True)
+            raise
+    except Exception as e:
+        logger.error(f"Error inesperado al crear equipo {equipo_data.EquipoId}: {e}", exc_info=True)
+        raise

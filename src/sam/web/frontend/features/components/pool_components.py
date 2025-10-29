@@ -1,4 +1,4 @@
-# /src/web/features/pools/pool_components.py
+# /src/sam/web/features/pools/pool_components.py
 
 from typing import Callable, Dict, List
 

@@ -151,6 +151,12 @@ class ApiClient:
     async def update_equipo_status(self, equipo_id: int, status_data: Dict[str, Any]) -> Dict:
         return await self._request("PATCH", f"/api/equipos/{equipo_id}", json_data=status_data)
 
+    async def create_equipo(self, equipo_data: Dict) -> Dict:
+        """Crea un nuevo equipo manualmente."""
+        # Podríamos añadir validación Pydantic aquí si quisiéramos
+        # Opcional: Validar equipo_data contra EquipoCreateRequest aquí antes de enviar
+        return await self._request("POST", "/api/equipos", json_data=equipo_data)
+
     # MÉTODOS UTILITARIOS
     async def get_sync_status(self) -> Dict:
         """Consulta el estado de las tareas de sincronización del backend."""
