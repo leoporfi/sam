@@ -28,11 +28,77 @@ DEFAULT_FORM_STATE = {
     "TipoProgramacion": "Diaria",
     "HoraInicio": "09:00",
     "Tolerancia": 60,
-    "DiasSemana": "Lu,Ma,Mi,Ju,Vi",
+    "DiasSemana": "Lu,Ma,Mi,Ju,Vi,Sa,Do",
     "DiaDelMes": 1,
     "FechaEspecifica": "",
     "Equipos": [],
 }
+
+# Definimos los días con la etiqueta de una sola letra que solicitaste
+# El 'id' (Lu, Ma, Sa) es lo que espera el SP y NO cambia.
+DAYS_OF_WEEK = [
+    {"id": "Lu", "label": "L"},
+    {"id": "Ma", "label": "M"},
+    {"id": "Mi", "label": "M"},
+    {"id": "Ju", "label": "J"},
+    {"id": "Vi", "label": "V"},
+    {"id": "Sa", "label": "S"},
+    {"id": "Do", "label": "D"},
+]
+
+
+@component
+def WeekdaySelector(value: str, on_change: Callable):
+    """
+    Un componente de checkboxes para seleccionar días de la semana.
+    Renderiza un layout tradicional con etiquetas (L,M,M...) y checkboxes debajo.
+    """
+
+    # Convertimos el string "Lu,Ma,Vi" en un set {"Lu", "Ma", "Vi"}
+    selected_days_set = use_memo(lambda: set((value or "").split(",")), [value])
+
+    def handle_day_change(day_id, is_checked):
+        # Creamos una copia del set actual
+        new_set = set(selected_days_set)
+
+        if is_checked:
+            new_set.add(day_id)
+        else:
+            new_set.discard(day_id)
+
+        # Reconstruimos el string en el orden de DAYS_OF_WEEK
+        ordered_days = [day["id"] for day in DAYS_OF_WEEK if day["id"] in new_set]
+        # Llamamos al on_change del formulario con el nuevo string
+        on_change(",".join(ordered_days))
+
+    return html.fieldset(
+        {"class_name": "weekday-selector-traditional"},  # Clase CSS
+        html.legend("Días de la Semana"),
+        html.div(
+            {"class_name": "weekday-grid"},
+            # Iteramos UNA vez para crear las 7 columnas
+            *[
+                html.div(
+                    {"key": day["id"], "class_name": "weekday-day-column"},  # Columna
+                    # Fila 1: Etiqueta (L, M, M...)
+                    html.span({"class_name": "weekday-header"}, day["label"]),
+                    # Fila 2: Checkbox
+                    html.label(
+                        {"class_name": "weekday-checkbox-label"},  # Label para centrar
+                        html.input(
+                            {
+                                "type": "checkbox",
+                                "name": f"weekday-{day['id']}",
+                                "checked": day["id"] in selected_days_set,
+                                "on_change": lambda e, d_id=day["id"]: handle_day_change(d_id, e["target"]["checked"]),
+                            }
+                        ),
+                    ),
+                )
+                for day in DAYS_OF_WEEK
+            ],
+        ),
+    )
 
 
 # --- Componentes de Modal ---
@@ -911,15 +977,8 @@ def ScheduleForm(
 @component
 def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
     if tipo == "Semanal":
-        return html.label(
-            "Días (ej: Lu,Ma,Mi)",
-            html.input(
-                {
-                    "type": "text",
-                    "value": form_data.get("DiasSemana", ""),
-                    "on_change": lambda e: on_change("DiasSemana", e["target"]["value"]),
-                }
-            ),
+        return WeekdaySelector(
+            value=form_data.get("DiasSemana", ""), on_change=lambda new_string: on_change("DiasSemana", new_string)
         )
     elif tipo == "Mensual":
         return html.label(
@@ -956,7 +1015,10 @@ def DeviceSelector(available_devices: List[Dict], selected_devices: List[int], o
     search_term, set_search_term = use_state("")
 
     filtered_devices = use_memo(
-        lambda: [d for d in available_devices if search_term.lower() in d["Equipo"].lower()],
+        lambda: sorted(
+            [d for d in available_devices if search_term.lower() in d["Equipo"].lower()],
+            key=lambda x: x.get("Equipo", "").lower(),
+        ),
         [available_devices, search_term],
     )
 
