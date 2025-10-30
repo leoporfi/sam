@@ -1,4 +1,4 @@
-# src/interfaz_web/features/modals/robots_modals.py
+# sam/web/features/modals/robots_modals.py
 import asyncio
 from typing import Any, Callable, Dict, List
 
@@ -28,11 +28,77 @@ DEFAULT_FORM_STATE = {
     "TipoProgramacion": "Diaria",
     "HoraInicio": "09:00",
     "Tolerancia": 60,
-    "DiasSemana": "Lu,Ma,Mi,Ju,Vi",
+    "DiasSemana": "Lu,Ma,Mi,Ju,Vi,Sa,Do",
     "DiaDelMes": 1,
     "FechaEspecifica": "",
     "Equipos": [],
 }
+
+# Definimos los días con la etiqueta de una sola letra que solicitaste
+# El 'id' (Lu, Ma, Sa) es lo que espera el SP y NO cambia.
+DAYS_OF_WEEK = [
+    {"id": "Lu", "label": "L"},
+    {"id": "Ma", "label": "M"},
+    {"id": "Mi", "label": "M"},
+    {"id": "Ju", "label": "J"},
+    {"id": "Vi", "label": "V"},
+    {"id": "Sa", "label": "S"},
+    {"id": "Do", "label": "D"},
+]
+
+
+@component
+def WeekdaySelector(value: str, on_change: Callable):
+    """
+    Un componente de checkboxes para seleccionar días de la semana.
+    Renderiza un layout tradicional con etiquetas (L,M,M...) y checkboxes debajo.
+    """
+
+    # Convertimos el string "Lu,Ma,Vi" en un set {"Lu", "Ma", "Vi"}
+    selected_days_set = use_memo(lambda: set((value or "").split(",")), [value])
+
+    def handle_day_change(day_id, is_checked):
+        # Creamos una copia del set actual
+        new_set = set(selected_days_set)
+
+        if is_checked:
+            new_set.add(day_id)
+        else:
+            new_set.discard(day_id)
+
+        # Reconstruimos el string en el orden de DAYS_OF_WEEK
+        ordered_days = [day["id"] for day in DAYS_OF_WEEK if day["id"] in new_set]
+        # Llamamos al on_change del formulario con el nuevo string
+        on_change(",".join(ordered_days))
+
+    return html.fieldset(
+        {"class_name": "weekday-selector-traditional"},  # Clase CSS
+        html.legend("Días de la Semana"),
+        html.div(
+            {"class_name": "weekday-grid"},
+            # Iteramos UNA vez para crear las 7 columnas
+            *[
+                html.div(
+                    {"key": day["id"], "class_name": "weekday-day-column"},  # Columna
+                    # Fila 1: Etiqueta (L, M, M...)
+                    html.span({"class_name": "weekday-header"}, day["label"]),
+                    # Fila 2: Checkbox
+                    html.label(
+                        {"class_name": "weekday-checkbox-label"},  # Label para centrar
+                        html.input(
+                            {
+                                "type": "checkbox",
+                                "name": f"weekday-{day['id']}",
+                                "checked": day["id"] in selected_days_set,
+                                "on_change": lambda e, d_id=day["id"]: handle_day_change(d_id, e["target"]["checked"]),
+                            }
+                        ),
+                    ),
+                )
+                for day in DAYS_OF_WEEK
+            ],
+        ),
+    )
 
 
 # --- Componentes de Modal ---
@@ -289,8 +355,48 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
     if not robot:
         return None
 
+    def sort_devices(devices: List[Dict]) -> List[Dict]:
+        """Ordena una lista de diccionarios de equipos por el campo 'Equipo'."""
+        return sorted(devices, key=lambda x: x.get("Equipo", "").lower())
+
     @use_effect(dependencies=[robot])
     def fetch_data():
+        def get_highest_priority_assignment(assignments: List[Dict]) -> List[Dict]:
+            """
+            De-duplica una lista de asignaciones por EquipoId,
+            quedándose con el estado de mayor prioridad.
+            Prioridad: Programado > Reservado > Dinámico
+            """
+
+            def get_priority(asn):
+                if asn.get("EsProgramado"):
+                    return 1
+                if asn.get("Reservado"):
+                    return 2
+                return 3
+
+            unique_equipos = {}
+            for asn in assignments:
+                equipo_id = asn.get("EquipoId")
+                if not equipo_id:
+                    continue
+
+                current_assignment = unique_equipos.get(equipo_id)
+
+                if not current_assignment:
+                    unique_equipos[equipo_id] = asn
+                else:
+                    # Comparamos prioridades
+                    current_priority = get_priority(current_assignment)
+                    new_priority = get_priority(asn)
+
+                    # Si la nueva asignación tiene mayor prioridad (un nro más bajo),
+                    # la reemplazamos.
+                    if new_priority < current_priority:
+                        unique_equipos[equipo_id] = asn
+
+            return list(unique_equipos.values())
+
         async def get_data():
             if not robot:
                 return
@@ -304,7 +410,8 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
                     api_service.get_robot_assignments(robot["RobotId"]),
                     api_service.get_available_devices(robot["RobotId"]),
                 )
-                set_assigned_devices(assigned_res)
+                unique_assigned_devices = get_highest_priority_assignment(assigned_res)
+                set_assigned_devices(unique_assigned_devices)
                 set_available_devices(available_res)
             except Exception as e:
                 show_notification(f"Error al cargar datos: {e}", "error")
@@ -314,20 +421,26 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
         asyncio.create_task(get_data())
 
     filtered_assigned = use_memo(
-        lambda: [device for device in assigned_devices if search_assigned.lower() in device.get("Equipo", "").lower()],
+        lambda: sort_devices(
+            [device for device in assigned_devices if search_assigned.lower() in device.get("Equipo", "").lower()]
+        ),
         [assigned_devices, search_assigned],
     )
     filtered_available = use_memo(
-        lambda: [
-            device for device in available_devices if search_available.lower() in device.get("Equipo", "").lower()
-        ],
+        lambda: sort_devices(
+            [device for device in available_devices if search_available.lower() in device.get("Equipo", "").lower()]
+        ),
         [available_devices, search_available],
     )
 
     def move_items(source_list, set_source, dest_list, set_dest, selected_ids, clear_selection):
         items_to_move = {item["EquipoId"]: item for item in source_list if item["EquipoId"] in selected_ids}
-        set_dest(sorted(dest_list + list(items_to_move.values()), key=lambda x: x["Equipo"]))
-        set_source([item for item in source_list if item["EquipoId"] not in items_to_move])
+
+        new_dest_list = sort_devices(dest_list + list(items_to_move.values()))
+        new_source_list = sort_devices([item for item in source_list if item["EquipoId"] not in items_to_move])
+
+        set_dest(new_dest_list)
+        set_source(new_source_list)
         clear_selection([])
 
     async def execute_save():
@@ -643,7 +756,7 @@ def DeviceList(
             ),
         ),
         html.div(
-            {"class_name": "device-list-table"},
+            {"class_name": "device-list-table compact-assignment-table"},
             html.table(
                 {"role": "grid"},
                 html.thead(
@@ -755,6 +868,7 @@ def SchedulesList(
     )
     return html._(
         html.table(
+            {"class_name": "compact-schedule-table"},
             html.thead(html.tr(html.th("Detalles"), html.th("Equipos"), html.th("Acciones"))),
             html.tbody(
                 rows
@@ -863,15 +977,8 @@ def ScheduleForm(
 @component
 def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
     if tipo == "Semanal":
-        return html.label(
-            "Días (ej: Lu,Ma,Mi)",
-            html.input(
-                {
-                    "type": "text",
-                    "value": form_data.get("DiasSemana", ""),
-                    "on_change": lambda e: on_change("DiasSemana", e["target"]["value"]),
-                }
-            ),
+        return WeekdaySelector(
+            value=form_data.get("DiasSemana", ""), on_change=lambda new_string: on_change("DiasSemana", new_string)
         )
     elif tipo == "Mensual":
         return html.label(
@@ -908,7 +1015,10 @@ def DeviceSelector(available_devices: List[Dict], selected_devices: List[int], o
     search_term, set_search_term = use_state("")
 
     filtered_devices = use_memo(
-        lambda: [d for d in available_devices if search_term.lower() in d["Equipo"].lower()],
+        lambda: sorted(
+            [d for d in available_devices if search_term.lower() in d["Equipo"].lower()],
+            key=lambda x: x.get("Equipo", "").lower(),
+        ),
         [available_devices, search_term],
     )
 

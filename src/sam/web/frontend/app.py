@@ -1,15 +1,16 @@
-# ARCHIVO: src/web/frontend/app.py
+# sam/web/frontend/app.py
 import asyncio
 import uuid
 
 from reactpy import component, html, use_effect, use_state
 from reactpy_router import browser_router, link, route
 
-from .features.equipos.equipos_components import EquiposControls, EquiposDashboard
+from .features.components.equipos_components import EquiposControls, EquiposDashboard
+from .features.components.pool_components import PoolsControls, PoolsDashboard
+from .features.components.robots_components import RobotsControls, RobotsDashboard
+from .features.modals.equipos_modals import EquipoEditModal
 from .features.modals.pool_modals import PoolAssignmentsModal, PoolEditModal
 from .features.modals.robots_modals import AssignmentsModal, RobotEditModal, SchedulesModal
-from .features.pools.pool_components import PoolsControls, PoolsDashboard
-from .features.robots.robots_components import RobotsControls, RobotsDashboard
 from .hooks.use_debounced_value_hook import use_debounced_value
 from .hooks.use_equipos_hook import use_equipos
 from .hooks.use_pools_hook import use_pools_management
@@ -291,6 +292,24 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
     """Lógica y UI para la nueva página de Equipos."""
     robots_state = use_robots()
     equipos_state = use_equipos()
+
+    is_modal_open, set_is_modal_open = use_state(False)
+    # selected_equipo, set_selected_equipo = use_state(None) # Para futura edición
+
+    def handle_create_click():
+        """Abre el modal en modo creación."""
+        # set_selected_equipo(None) # Asegura que no haya datos previos
+        set_is_modal_open(True)
+
+    def handle_modal_close():
+        """Cierra el modal."""
+        set_is_modal_open(False)
+        # set_selected_equipo(None)
+
+    async def handle_save_success():
+        """Callback llamado por el modal tras guardar con éxito."""
+        await equipos_state["refresh"]()
+
     search_input, set_search_input = use_state(equipos_state["filters"].get("name") or "")
     debounced_search = use_debounced_value(search_input, 300)
 
@@ -328,6 +347,7 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
         on_balanceable_change=lambda value: equipos_state["set_filters"](
             lambda prev: {**prev, "balanceable": None if value == "all" else value == "true"}
         ),
+        on_create_equipo=handle_create_click,
     )
 
     return PageWithLayout(
@@ -335,7 +355,16 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
         on_theme_toggle=on_theme_toggle,
         robots_state=robots_state,
         equipos_state=equipos_state,
-        children=html._(page_controls, EquiposDashboard(equipos_state=equipos_state)),
+        children=html._(
+            page_controls,
+            EquiposDashboard(equipos_state=equipos_state),
+            EquipoEditModal(
+                equipo=None,  # Pasar None para modo creación
+                is_open=is_modal_open,
+                on_close=handle_modal_close,
+                on_save_success=handle_save_success,
+            ),
+        ),
     )
 
 

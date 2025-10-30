@@ -56,9 +56,15 @@ class ConfigManager:
             "backupCount": int(cls._get_env_with_warning("LOG_BACKUP_COUNT", 7)),
             # Nombres de archivo específicos para cada servicio
             "app_log_filename_lanzador": cls._get_env_with_warning("APP_LOG_FILENAME_LANZADOR", "sam_lanzador_app.log"),
-            "app_log_filename_balanceador": cls._get_env_with_warning("APP_LOG_FILENAME_BALANCEADOR", "sam_balanceador_app.log"),
-            "app_log_filename_callback": cls._get_env_with_warning("APP_LOG_FILENAME_CALLBACK", "sam_callback_server.log"),
-            "app_log_filename_interfaz_web": cls._get_env_with_warning("APP_LOG_FILENAME_INTERFAZ_WEB", "sam_interfaz_web.log"),
+            "app_log_filename_balanceador": cls._get_env_with_warning(
+                "APP_LOG_FILENAME_BALANCEADOR", "sam_balanceador_app.log"
+            ),
+            "app_log_filename_callback": cls._get_env_with_warning(
+                "APP_LOG_FILENAME_CALLBACK", "sam_callback_server.log"
+            ),
+            "app_log_filename_interfaz_web": cls._get_env_with_warning(
+                "APP_LOG_FILENAME_INTERFAZ_WEB", "sam_interfaz_web.log"
+            ),
             # Parámetros fijos de rotación
             "when": "midnight",
             "interval": 1,
@@ -90,7 +96,9 @@ class ConfigManager:
             "timeout": int(cls._get_env_with_warning(f"{prefix}_TIMEOUT_CONEXION_INICIAL", 30)),
             "max_retries": int(cls._get_env_with_warning(f"{prefix}_MAX_REINTENTOS_QUERY", 3)),
             "initial_delay": float(cls._get_env_with_warning(f"{prefix}_DELAY_REINTENTO_QUERY_BASE_SEG", 2)),
-            "retryable_sqlstates": cls._get_env_with_warning(f"{prefix}_CODIGOS_SQLSTATE_REINTENTABLES", "40001,HYT00,HYT01,08S01").split(","),
+            "retryable_sqlstates": cls._get_env_with_warning(
+                f"{prefix}_CODIGOS_SQLSTATE_REINTENTABLES", "40001,HYT00,HYT01,08S01"
+            ).split(","),
         }
 
     # --- CONFIGURACIONES ESPECÍFICAS POR SERVICIO ---
@@ -105,10 +113,14 @@ class ConfigManager:
         try:
             default_params = json.loads(default_params_str)
             if not isinstance(default_params, dict):
-                logger.error("LANZADOR_PARAMETROS_DEFAULT_JSON no es un objeto JSON válido. Se usarán parámetros vacíos.")
+                logger.error(
+                    "LANZADOR_PARAMETROS_DEFAULT_JSON no es un objeto JSON válido. Se usarán parámetros vacíos."
+                )
                 default_params = {}
         except json.JSONDecodeError:
-            logger.error("Error al decodificar LANZADOR_PARAMETROS_DEFAULT_JSON. Se usarán parámetros vacíos.", exc_info=True)
+            logger.error(
+                "Error al decodificar LANZADOR_PARAMETROS_DEFAULT_JSON. Se usarán parámetros vacíos.", exc_info=True
+            )
             default_params = {}
         return {
             "intervalo_lanzamiento": int(cls._get_env_with_warning("LANZADOR_INTERVALO_LANZAMIENTO_SEG", 120)),
@@ -126,8 +138,14 @@ class ConfigManager:
         return {
             "cooling_period_seg": int(cls._get_env_with_warning("BALANCEADOR_COOLING_PERIOD_SEG", 300)),
             "intervalo_ciclo_seg": int(cls._get_env_with_warning("BALANCEADOR_INTERVALO_CICLO_SEG", 120)),
-            "aislamiento_estricto_pool": cls._get_env_with_warning("BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", "True").lower() == "true",
-            "proveedores_carga": [p.strip() for p in cls._get_env_with_warning("BALANCEADOR_PROVEEDORES_CARGA", "clouders,rpa360").split(",")],
+            "aislamiento_estricto_pool": cls._get_env_with_warning(
+                "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", "True"
+            ).lower()
+            == "true",
+            "proveedores_carga": [
+                p.strip()
+                for p in cls._get_env_with_warning("BALANCEADOR_PROVEEDORES_CARGA", "clouders,rpa360").split(",")
+            ],
         }
 
     @classmethod
@@ -139,7 +157,9 @@ class ConfigManager:
             "threads": int(cls._get_env_with_warning("CALLBACK_SERVER_THREADS", 8)),
             "token": cls._get_env_with_warning("CALLBACK_TOKEN"),
             "auth_mode": cls._get_env_with_warning("CALLBACK_AUTH_MODE", "strict").lower(),
-            "public_host": cls._get_env_with_warning("CALLBACK_SERVER_PUBLIC_HOST", os.getenv("CALLBACK_SERVER_HOST", "localhost")),
+            "public_host": cls._get_env_with_warning(
+                "CALLBACK_SERVER_PUBLIC_HOST", os.getenv("CALLBACK_SERVER_HOST", "localhost")
+            ),
             "endpoint_path": cls._get_env_with_warning("CALLBACK_ENDPOINT_PATH", "/api/callback").strip("/"),
         }
 
@@ -169,7 +189,10 @@ class ConfigManager:
                 return {}
             return mapa
         except json.JSONDecodeError:
-            logger.error("Error al decodificar MAPA_ROBOTS. Asegúrese de que es un JSON válido. Se usará un mapa vacío.", exc_info=True)
+            logger.error(
+                "Error al decodificar MAPA_ROBOTS. Asegúrese de que es un JSON válido. Se usará un mapa vacío.",
+                exc_info=True,
+            )
             return {}
 
     @classmethod
@@ -204,7 +227,9 @@ class ConfigManager:
             "grant_type": cls._get_env_with_warning("API_GATEWAY_GRANT_TYPE", "client_credentials"),
             "scope": cls._get_env_with_warning("API_GATEWAY_SCOPE", "scope1"),
             "timeout_seconds": int(cls._get_env_with_warning("API_GATEWAY_TIMEOUT_SECONDS", 30)),
-            "token_expiration_buffer_sec": int(cls._get_env_with_warning("API_GATEWAY_TOKEN_EXPIRATION_BUFFER_SEC", 300)),
+            "token_expiration_buffer_sec": int(
+                cls._get_env_with_warning("API_GATEWAY_TOKEN_EXPIRATION_BUFFER_SEC", 300)
+            ),
         }
 
     # --- UTILIDADES ---

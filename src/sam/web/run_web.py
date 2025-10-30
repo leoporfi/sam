@@ -87,11 +87,11 @@ def main():
     except Exception as e:
         logger.critical(f"Error crítico no controlado al iniciar el servicio: {e}", exc_info=True)
         sys.exit(1)
-    finally:
-        logger.info("Iniciando limpieza final de recursos...")
-        if db_connector:
-            db_connector.cerrar_conexion_hilo_actual()
-        logger.info(f"El servicio {SERVICE_NAME} ha concluido su ejecución y liberado recursos.")
+    # finally:
+    #     logger.info("Iniciando limpieza final de recursos...")
+    #     if db_connector:
+    #         db_connector.cerrar_conexion_hilo_actual()
+    #     logger.info(f"El servicio {SERVICE_NAME} ha concluido su ejecución y liberado recursos.")
 
 
 if __name__ == "__main__":

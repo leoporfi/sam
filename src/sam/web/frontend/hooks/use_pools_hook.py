@@ -1,9 +1,4 @@
-# ---------------------------------------------------------------------------
-# ARCHIVO: src/interfaz_web/hooks/use_pools_hook.py
-# ---------------------------------------------------------------------------
-# NOTA: He consolidado la lógica de los dos archivos de hooks que me pasaste
-# en este único hook más completo, siguiendo el patrón de `use_robots_hook.py`.
-# ---------------------------------------------------------------------------
+# sam/web/hooks/use_pools_hook.py
 import asyncio
 
 from reactpy import use_callback, use_effect, use_state

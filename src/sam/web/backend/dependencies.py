@@ -3,9 +3,11 @@ from typing import Optional
 
 from fastapi import HTTPException
 
+from sam.common.a360_client import AutomationAnywhereClient  # <--- Importar
 from sam.common.database import DatabaseConnector
 
 
+# --- Proveedor de BD (Sin cambios) ---
 class DBDependencyProvider:
     """
     Clase que actúa como un contenedor para nuestra dependencia de base de datos.
@@ -23,16 +25,27 @@ class DBDependencyProvider:
     def get_db_connector(self) -> DatabaseConnector:
         """Esta es la función que FastAPI usará con `Depends`."""
         if self._db_connector is None:
-            raise HTTPException(
-                status_code=503,
-                detail="La conexión a la base de datos no está disponible.",
-            )
+            raise HTTPException(status_code=503, detail="Conexión BD no disponible.")
         return self._db_connector
 
 
-# Creamos una instancia única que será compartida por toda la aplicación.
 db_dependency_provider = DBDependencyProvider()
-
-# Creamos el objeto `Depends` para usar en los endpoints.
-# Es una convención útil para no tener que importar la instancia en cada archivo de ruta.
 get_db = db_dependency_provider.get_db_connector
+
+
+# --- NUEVO: Proveedor de Cliente A360 ---
+class AAClientDependencyProvider:
+    def __init__(self):
+        self._aa_client: Optional[AutomationAnywhereClient] = None
+
+    def set_aa_client(self, aa_client: AutomationAnywhereClient):
+        self._aa_client = aa_client
+
+    def get_aa_client(self) -> AutomationAnywhereClient:
+        if self._aa_client is None:
+            raise HTTPException(status_code=503, detail="Cliente A360 no disponible.")
+        return self._aa_client
+
+
+aa_client_provider = AAClientDependencyProvider()
+get_aa_client = aa_client_provider.get_aa_client  # <--- Exportar

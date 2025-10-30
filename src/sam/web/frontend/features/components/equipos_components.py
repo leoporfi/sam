@@ -1,4 +1,4 @@
-# web/frontend/features/equipos/equipos_components.py
+# src/web/frontend/features/equipos/equipos_components.py
 from typing import Callable, Dict, List
 
 from reactpy import component, event, html, use_state
@@ -17,6 +17,7 @@ def EquiposControls(
     balanceable_filter: str,
     on_balanceable_change: Callable,
     is_searching: bool,
+    on_create_equipo: Callable,
 ):
     """Controles para el dashboard de Equipos (título, filtros)."""
     is_expanded, set_is_expanded = use_state(False)
@@ -71,6 +72,7 @@ def EquiposControls(
                     html.option({"value": "false"}, "No Permite Balanceo"),
                 ),
                 html.button(
+                    {"on_click": lambda e: on_create_equipo()},
                     html.i({"class_name": "fa-solid fa-plus"}),
                     " Agregar Equipo",
                 ),
@@ -129,6 +131,7 @@ def EquiposTable(equipos: List[Equipo], on_action: Callable, sort_by: str, sort_
         {"key": "Activo_SAM", "label": "Activo SAM"},
         {"key": "PermiteBalanceoDinamico", "label": "Permite Balanceo"},
         {"key": "RobotAsignado", "label": "Robot Asignado"},
+        {"key": "EsProgramado", "label": "Tipo Asig."},
         {"key": "Pool", "label": "Pool"},
     ]
 
@@ -169,11 +172,22 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
     Fila de la tabla de equipos.
     Siguiendo el mismo patrón que RobotRow: funciones async separadas para cada acción.
     """
+    # Desactivar el switch de balanceo SOLO si el equipo tiene una asignación PROGRAMADA
+    is_programado = equipo.get("EsProgramado", False)
+    balanceo_disabled = is_programado
+    balanceo_title = (
+        "No se puede balancear un equipo con asignación programada."
+        if is_programado
+        else "Activar/Desactivar Balanceo Dinámico"
+    )
 
     async def handle_toggle_activo(event):
         await on_action(equipo["EquipoId"], "Activo_SAM", not equipo["Activo_SAM"])
 
     async def handle_toggle_balanceo(event):
+        # Evitar acción si está desactivado
+        if balanceo_disabled:
+            return
         await on_action(equipo["EquipoId"], "PermiteBalanceoDinamico", not equipo["PermiteBalanceoDinamico"])
 
     return html.tr(
@@ -202,6 +216,8 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
                         "role": "switch",
                         "checked": equipo["PermiteBalanceoDinamico"],
                         "on_change": event(handle_toggle_balanceo),
+                        "disabled": balanceo_disabled,
+                        "title": balanceo_title,
                     }
                 )
             )
@@ -211,6 +227,15 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
                 {"class_name": "tag secondary" if equipo.get("RobotAsignado") == "N/A" else "tag"},
                 equipo.get("RobotAsignado", "N/A"),
             )
+        ),
+        # --- Opcional: Mostrar el estado de la asignación ---
+        html.td(
+            html.span(
+                {"class_name": f"tag {'tag-ejecucion-programado' if is_programado else 'tag-ejecucion-demanda'}"},
+                "Programado" if is_programado else "Dinámico",
+            )
+            if equipo.get("RobotAsignado") not in [None, "N/A"]
+            else "N/A"
         ),
         html.td(
             html.span(
@@ -226,11 +251,20 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
     Tarjeta de equipo para vista móvil.
     Siguiendo el mismo patrón que RobotCard: funciones async separadas para cada acción.
     """
+    is_programado = equipo.get("EsProgramado", False)  # Nuevo campo del SP
+    balanceo_disabled = is_programado
+    balanceo_title = (
+        "No se puede balancear un equipo con asignación programada."
+        if is_programado
+        else "Activar/Desactivar Balanceo Dinámico"
+    )
 
     async def handle_toggle_activo(event):
         await on_action(equipo["EquipoId"], "Activo_SAM", not equipo["Activo_SAM"])
 
     async def handle_toggle_balanceo(event):
+        if balanceo_disabled:
+            return
         await on_action(equipo["EquipoId"], "PermiteBalanceoDinamico", not equipo["PermiteBalanceoDinamico"])
 
     return html.article(
@@ -245,6 +279,15 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
                     {"class_name": "tag secondary" if equipo.get("RobotAsignado") == "N/A" else "tag"},
                     equipo.get("RobotAsignado", "N/A"),
                 ),
+            ),
+            html.p(
+                "Tipo Asig.: ",
+                html.span(
+                    {"class_name": f"tag {'tag-ejecucion-programado' if is_programado else 'tag-ejecucion-demanda'}"},
+                    "Programado" if is_programado else "Dinámico",
+                )
+                if equipo.get("RobotAsignado") not in [None, "N/A"]
+                else "N/A",
             ),
             html.p(
                 "Pool: ",

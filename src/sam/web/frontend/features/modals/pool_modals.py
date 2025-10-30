@@ -1,6 +1,4 @@
-# ---------------------------------------------------------------------------
-# ARCHIVO: src/interfaz_web/features/pools/modals.py
-# ---------------------------------------------------------------------------
+# sam/web/features/modals/pool_modals.py
 import asyncio
 from typing import Callable, Dict, List
 
