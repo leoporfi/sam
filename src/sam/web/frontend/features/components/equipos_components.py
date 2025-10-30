@@ -102,6 +102,7 @@ def EquiposDashboard(equipos_state: Dict):
     )
 
     return html._(
+        pagination_component,
         html.div(
             {"class_name": "cards-container"},
             *[
@@ -119,7 +120,6 @@ def EquiposDashboard(equipos_state: Dict):
                 on_sort=equipos_state["handle_sort"],
             ),
         ),
-        pagination_component,
     )
 
 
