@@ -119,6 +119,7 @@ def RobotsDashboard(robots: List[Robot], on_action: Callable, robots_state: Dict
     )
 
     return html._(
+        pagination_component,
         html.div(
             {"class_name": "cards-container robot-cards"},
             *[RobotCard(robot=robot, on_action=on_action) for robot in robots],
@@ -133,7 +134,6 @@ def RobotsDashboard(robots: List[Robot], on_action: Callable, robots_state: Dict
                 on_sort=robots_state["handle_sort"],
             ),
         ),
-        pagination_component,
     )
 
 
