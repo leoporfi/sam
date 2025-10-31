@@ -43,8 +43,8 @@ button[aria-busy="true"]::before {
   top: 0;
   z-index: 1000;
   background-color: var(--pico-background-color);
-  padding-top: var(--pico-spacing);
-  padding-bottom: var(--pico-spacing);
+  /* padding-top: var(--pico-spacing);
+  padding-bottom: var(--pico-spacing); */
   margin-bottom: var(--pico-spacing);
   border-bottom: 1px solid var(--pico-muted-border-color);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -112,8 +112,9 @@ dialog header h2,
   border-radius: var(--pico-border-radius);
   border: 1px solid var(--pico-card-border-color);
   padding: var(--pico-spacing);
-  margin-bottom: var(--pico-spacing);
-  margin-bottom: var(--pico-typography-spacing-vertical);
+  margin-top: 1em;
+  /* margin-bottom: var(--pico-spacing);
+  margin-bottom: var(--pico-typography-spacing-vertical); */
   background-color: var(--pico-card-background-color);
 }
 
