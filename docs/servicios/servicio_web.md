@@ -2,56 +2,104 @@
 
 **Módulo:** sam.web
 
-## **1\. Propósito**
+## **1. Propósito**
 
-La **Interfaz Web** es el componente visual y de interacción humana del ecosistema SAM. Proporciona un dashboard centralizado que permite a los administradores y usuarios monitorear el estado de los robots en tiempo real, gestionar la configuración de los pools de máquinas y obtener una visión general del rendimiento del sistema.
+La **Interfaz Web** de SAM es un dashboard de monitoreo y gestión. Permite a los usuarios visualizar el estado de las ejecuciones de robots, el estado de los equipos (devices) y gestionar la configuración de los robots y su asignación a "Pools" de ejecución.
 
-Es el único servicio de SAM con una interfaz de usuario (UI).
+## **2. Arquitectura y Componentes**
 
-## **2\. Arquitectura: Backend y Frontend**
+El servicio es una **única aplicación FastAPI** que se ejecuta en un servidor uvicorn. Esta aplicación sirve dos componentes principales montados en rutas diferentes:
 
-Este servicio tiene una arquitectura de dos capas que se ejecutan en el mismo proceso:
-
-1. **Backend (API \- FastAPI):** Una API RESTful responsable de toda la comunicación con la base de datos. Su única función es exponer endpoints seguros que devuelven datos en formato JSON. No tiene ninguna responsabilidad sobre la presentación.  
-2. **Frontend (UI \- ReactPy):** Una Single-Page Application (SPA) construida con ReactPy. Se ejecuta en el navegador del usuario y es responsable de toda la lógica de presentación. Para obtener o modificar datos, realiza llamadas HTTP a su propio Backend API.
-
-Esta separación estricta asegura que la lógica de negocio (backend) esté desacoplada de la capa de visualización (frontend), facilitando el mantenimiento y futuras mejoras.
+1. **Backend (API):** Un conjunto de endpoints API RESTful montados bajo el prefijo /api.  
+2. **Frontend (UI):** Una interfaz de usuario interactiva (un dashboard) montada en la ruta raíz (/).
 
 ### **Componentes Principales**
 
-* **main.py**: El punto de entrada que monta la aplicación de backend (API) y la aplicación de frontend (ReactPy) para que puedan ser servidas juntas por el servidor Uvicorn.  
-* **Backend (backend/)**:  
-  * **api.py**: Define todos los endpoints de la API, como /api/robots, /api/pools, etc. Aquí reside la lógica para manejar las solicitudes HTTP.  
-  * **database.py**: Contiene las funciones que interactúan directamente con la base de datos para obtener y modificar los datos que la API necesita.  
-  * **schemas.py**: Define los modelos de datos Pydantic utilizados para la validación de datos en las solicitudes y la serialización en las respuestas, asegurando una estructura de datos consistente.  
-* **Frontend (frontend/)**:  
-  * **app.py**: El componente raíz de la aplicación ReactPy. Define la estructura principal de la página, el layout y el enrutamiento.  
-  * **api\_client.py**: Un cliente HTTP (basado en httpx) que el frontend utiliza para comunicarse con el backend API. Centraliza toda la lógica de llamadas de red.  
-  * **components/ y features/**: Directorios que contienen los componentes reutilizables de la UI (botones, tablas, modales) y las vistas principales de la aplicación (Dashboard, Vista de Pools).  
-  * **hooks/**: Contiene la lógica de estado y obtención de datos del frontend (ej. use\_robots\_hook), siguiendo patrones modernos de desarrollo de interfaces.
+* **Servidor (sam.web.run_web.py)**:  
+  * **Rol:** Lanzador del Servidor.  
+  * **Descripción:** Utiliza uvicorn para iniciar el servidor web, cargando la aplicación principal (app) desde sam.web.main.py.  
+* **App Principal (sam.web.main.py)**:  
+  * **Rol:** Orquestador Web.  
+  * **Descripción:** Es el corazón de la aplicación. Crea la instancia principal de FastAPI y:  
+    1. Monta el router del **Backend** (desde backend.api.router) bajo la ruta /api.  
+    2. Monta la aplicación **Frontend** de ReactPy (desde frontend.app.layout) en la ruta raíz (/).  
+    3. Configura el servicio de archivos estáticos (CSS, JS) en la ruta /static.  
+* **Backend (sam.web.backend/api.py)**:  
+  * **Rol:** API de Datos.  
+  * **Descripción:** Expone todos los endpoints RESTful que el frontend necesita (ej. /api/robots/, /api/pools/, /api/equipos/, /api/dashboard/stats). No contiene lógica de negocio; su función es recibir peticiones, llamar a la base de datos y devolver los datos como JSON.  
+* **Gestor de Base de Datos (sam.web.backend/database.py)**:  
+  * **Rol:** Capa de Acceso a Datos del Backend.  
+  * **Descripción:** Contiene los métodos que ejecutan las consultas y Stored Procedures (SPs) específicos contra la base de datos de SAM (ej. ObtenerRobotsDetalle, ObtenerEquiposDetalle, ActualizarRobotConfig).  
+* **Frontend (sam.web.frontend/app.py)**:  
+  * **Rol:** Interfaz de Usuario (UI).  
+  * **Descripción:** Es el dashboard interactivo construido con **ReactPy**. Define la estructura de las páginas (Robots, Equipos, Pools, Dashboard), los componentes visuales (tablas, modales) y la lógica de estado.  
+* **Cliente API (sam.web.frontend/api/api_client.py)**:  
+  * **Rol:** Conector Frontend ->> Backend.  
+  * **Descripción:** Un componente del *Frontend* que utiliza httpx para realizar las llamadas a los endpoints del *Backend* (ej. llama a /api/robots/ para obtener la lista de robots) y devolver los datos a la interfaz.
 
-## **3\. Flujo de Datos Típico**
+## **3. Flujo de Datos**
 
-1. El usuario accede a la URL del servicio en su navegador.  
-2. El servidor Uvicorn sirve el HTML y JavaScript iniciales que cargan la aplicación ReactPy.  
-3. Un componente del frontend (ej. la tabla de robots) utiliza un hook (ej. use\_robots\_hook) para solicitar los datos.  
-4. El hook llama a una función en el api\_client.py.  
-5. El api\_client realiza una solicitud GET al endpoint del backend, por ejemplo, /api/robots.  
-6. El endpoint en backend/api.py recibe la solicitud, llama a la función correspondiente en backend/database.py para obtener los datos de la base de datos.  
-7. El backend serializa los resultados usando un esquema Pydantic y los devuelve como una respuesta JSON.  
-8. El api\_client en el frontend recibe el JSON, el hook actualiza el estado de la aplicación.  
-9. ReactPy detecta el cambio de estado y vuelve a renderizar la tabla de robots con los nuevos datos.
+1. Un usuario accede a la URL del servicio (ej. http://localhost:8000/) en su navegador.  
+2. El servidor uvicorn recibe la petición y la dirige a la **App Principal (FastAPI)**.  
+3. Como la ruta es /, FastAPI la dirige al **Frontend (ReactPy)**.  
+4. ReactPy renderiza la página principal y la envía al navegador.  
+5. Los componentes de ReactPy (ej. la tabla de robots) se cargan e invocan al **Cliente API** del frontend.  
+6. El **Cliente API** realiza una petición GET a la ruta del backend (ej. GET /api/robots/).  
+7. FastAPI recibe esta petición /api/ y la dirige al **Backend (API)**.  
+8. El endpoint del Backend llama al **Gestor de Base de Datos** para ejecutar el Stored Procedure (ej. ObtenerRobotsDetalle).  
+9. La base de datos devuelve los datos al Backend, que los formatea como JSON y los devuelve en la respuesta.  
+10. El **Cliente API** recibe el JSON y se lo entrega a los componentes del **Frontend**.  
+11. El Frontend (ReactPy) actualiza la interfaz para mostrar los datos (ej. rellena la tabla de robots).
 
-## **4\. Variables de Entorno Requeridas**
+## **4. Variables de Entorno Requeridas (.env)**
 
-* WEB\_HOST: La dirección IP en la que el servidor escuchará (ej. 0.0.0.0).  
-* WEB\_PORT: El puerto en el que se ejecutará el servicio (ej. 8080).  
-* SQL\_SAM\_SERVER, SQL\_SAM\_DATABASE, SQL\_SAM\_USER, SQL\_SAM\_PASSWORD: Credenciales de la base de datos de SAM.
+Este servicio depende de las siguientes variables. Dado que corre bajo NSSM, **cualquier cambio en estas variables requiere un reinicio del servicio** para que tenga efecto.
 
-## **5\. Ejecución**
+### **Configuración de la Interfaz Web**
+
+* INTERFAZ_WEB_HOST  
+  * **Propósito:** La dirección IP en la que escuchará el servidor uvicorn (ej. 127.0.0.1 o 0.0.0.0).  
+  * **Efecto:** Requiere reinicio.  
+* INTERFAZ_WEB_PORT  
+  * **Propósito:** El puerto TCP en el que escuchará el servidor (ej. 8000).  
+  * **Efecto:** Requiere reinicio.  
+* INTERFAZ_WEB_DEBUG  
+  * **Propósito:** true o false. Activa el modo "debug" de FastAPI, que proporciona más detalles de errores y recarga automáticamente el servidor en cambios (no recomendado en producción).  
+  * **Efecto:** Requiere reinicio.
+
+### **Configuración Base de Datos (SAM)**
+
+* SQL_SAM_DRIVER  
+  * **Propósito:** Driver ODBC para la conexión (ej. {ODBC Driver 17 for SQL Server}).  
+  * **Efecto:** Requiere reinicio.  
+* SQL_SAM_HOST  
+  * **Propósito:** Dirección IP o Hostname del servidor SQL Server donde reside la BD de SAM.  
+  * **Efecto:** Requiere reinicio.  
+* SQL_SAM_DB_NAME  
+  * **Propósito:** Nombre de la base de datos de SAM.  
+  * **Efecto:** Requiere reinicio.  
+* SQL_SAM_UID / SQL_SAM_PWD  
+  * **Propósito:** Credenciales (usuario y contraseña) para la base de datos SAM.  
+  * **Efecto:** Requiere reinicio.  
+* (Variables de reintento de SQL: SQL_SAM_MAX_REINTENTOS_QUERY, etc.)
+
+### **Configuración de Logging**
+
+* LOG_DIRECTORY  
+  * **Propósito:** Carpeta donde se guardarán los archivos de log.  
+  * **Efecto:** Requiere reinicio.  
+* LOG_LEVEL  
+  * **Propósito:** Nivel de detalle del log (ej. INFO, DEBUG).  
+  * **Efecto:** Requiere reinicio.  
+* APP_LOG_FILENAME_INTERFAZ_WEB  
+  * **Propósito:** Nombre específico del archivo de log para este servicio.  
+  * **Efecto:** Requiere reinicio.
+
+## **5. Ejecución**
 
 Para ejecutar el servicio en un entorno de desarrollo:
 
-uv run \-m sam.web
+Bash
 
-La interfaz será accesible desde la URL http://127.0.0.1:8080.
+uv run -m sam.web
+

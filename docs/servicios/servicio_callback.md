@@ -2,61 +2,120 @@
 
 **Módulo:** sam.callback
 
-## **1\. Propósito**
+## **1. Propósito**
 
-El **Servicio de Callback** es el componente de escucha en tiempo real del ecosistema SAM. Su única función es exponer un endpoint (URL) seguro y de alta disponibilidad para que el sistema externo (Automation 360\) pueda notificar a SAM instantáneamente cuando un despliegue de robot ha finalizado.
+El **Servicio de Callback** es un microservicio web (API) cuya única responsabilidad es recibir notificaciones *push* (webhooks) desde Automation 360 cuando una ejecución de robot finaliza.
 
-Esto elimina la necesidad de que el Sincronizador del Servicio Lanzador consulte constantemente el estado de todos los robots, permitiendo una actualización de estado mucho más eficiente y rápida.
+Esto permite al ecosistema SAM registrar el estado final de un robot (ej. COMPLETED, RUN_FAILED) de forma inmediata, sin tener que esperar al próximo ciclo del Conciliador del Servicio Lanzador.
 
-## **2\. Arquitectura y Componentes**
+## **2. Arquitectura y Componentes**
 
-El servicio está construido como una aplicación web ligera utilizando el framework **FastAPI**, lo que le confiere un alto rendimiento y una generación automática de documentación interactiva (Swagger/OpenAPI).
+El servicio es una API ligera construida con **FastAPI** que expone un único endpoint.
 
 ### **Componentes Principales**
 
-* **Aplicación FastAPI (service/main.py)**:  
-  * **Rol:** Servidor Web y Punto de Entrada.  
-  * **Descripción:** Define la aplicación FastAPI y sus endpoints.  
-    1. **Endpoint /callback (POST):** Es la ruta principal que recibe las notificaciones de A360. Valida la solicitud, procesa los datos y actualiza la base de datos.  
-    2. **Endpoint /health (GET):** Una ruta simple para verificaciones de estado, que devuelve una respuesta {"status": "ok"} para confirmar que el servicio está en línea.  
-* **Gestión del Ciclo de Vida (lifespan)**:  
-  * **Rol:** Gestor de Recursos.  
-  * **Descripción:** Se utiliza el gestor de contexto lifespan de FastAPI para manejar los recursos de la aplicación.  
-    * **Al iniciar (startup):** Se crea una única instancia del DatabaseConnector que será compartida por todas las solicitudes, optimizando las conexiones.  
-    * **Al apagar (shutdown):** Se llama al método close() del conector para asegurar que la conexión a la base de datos se cierre de forma limpia.
+* **FastAPI App (service/main.py)**:  
+  * **Rol:** Servidor Web.  
+  * **Descripción:** Configura y ejecuta un servidor uvicorn. Define el endpoint que recibirá las notificaciones.  
+* **Endpoint de Callback (service/main.py)**:  
+  * **Rol:** Receptor de Notificaciones.  
+  * **Descripción:** Es un endpoint POST (la ruta es configurable, por defecto /api/callback) que espera un JSON con la estructura de CallbackPayload enviada por A360.  
+* **AuthDependency (service/main.py)**:  
+  * **Rol:** Gestor de Seguridad.  
+  * **Descripción:** Una dependencia de FastAPI que se ejecuta en cada petición para validar la autenticidad de la llamada. Implementa una lógica de autenticación dual (ver sección 4).  
+* **CallbackPayload (Modelo Pydantic)**:  
+  * **Rol:** Modelo de Datos.  
+  * **Descripción:** Valida que el JSON entrante contenga los campos esperados por A360 (como deploymentId, status, type).  
+* **DatabaseConnector (common/database.py)**:  
+  * **Rol:** Persistencia de Datos.  
+  * **Descripción:** Se utiliza para invocar el método actualizar_ejecucion_desde_callback en la base de datos de SAM.
 
-## **3\. Seguridad**
+## **3. Flujo de Datos**
 
-Dado que el endpoint /callback está expuesto a internet, la seguridad es un pilar fundamental. El acceso está restringido mediante un mecanismo de **clave API (API Key)**.
+1. El **Servicio Lanzador** despliega un bot en A360 e inyecta la URL de este servicio (AA_URL_CALLBACK) en la petición.  
+2. Cuando el bot finaliza en A360, A360 envía una petición POST al endpoint de callback (ej. /api/callback).  
+3. AuthDependency intercepta la petición y valida las credenciales (Token estático y/o JWT) según el modo configurado.  
+4. Si la autenticación es exitosa, FastAPI valida el cuerpo (JSON) de la petición contra el modelo CallbackPayload.  
+5. El servicio invoca db_connector.actualizar_ejecucion_desde_callback(), pasando el deploymentId, el estado final y el JSON completo.  
+6. La base de datos (mediante actualizar_ejecucion_desde_callback) actualiza la fila correspondiente en dbo.Ejecuciones, marcando el estado (ej. COMPLETED) y almacenando el JSON crudo en la columna CallbackInfo.  
+7. El servicio devuelve un HTTP 200 OK a A360 para confirmar la recepción.
 
-* **Mecanismo:** Cada solicitud entrante al endpoint /callback **debe** incluir una cabecera HTTP X-API-KEY.  
-* **Validación:** El valor de esta cabecera se compara con el valor definido en la variable de entorno CALLBACK\_API\_KEY.  
-* **Respuesta:**  
-  * Si la cabecera no existe o la clave es incorrecta, el servicio responde inmediatamente con un error 401 Unauthorized y no procesa la solicitud.  
-  * Si la clave es correcta, la solicitud se procesa.
+## **4. Seguridad (Autenticación)**
 
-## **4\. Flujo de Datos**
+El endpoint de callback valida las peticiones entrantes usando una combinación de dos tokens. El comportamiento se controla mediante la variable CALLBACK_AUTH_MODE:
 
-1. Un robot finaliza su ejecución en la plataforma A360.  
-2. A360 envía una solicitud POST al endpoint https://\<URL\_DEL\_SERVIDOR\>/callback. La solicitud incluye un cuerpo (payload) en formato JSON con los detalles del despliegue (ej. deploymentId, status, etc.) y la cabecera X-API-KEY.  
-3. El servicio FastAPI recibe la solicitud.  
-4. Un middleware o una dependencia de FastAPI extrae y valida la X-API-KEY.  
-5. Si la validación es exitosa, la lógica del endpoint se ejecuta.  
-6. Se extrae el deploymentId y el status del cuerpo de la solicitud.  
-7. Se utiliza el DatabaseConnector para ejecutar una sentencia UPDATE en la tabla robots, buscando la fila que coincida con el deploymentId y actualizando su estado.  
-8. El servicio devuelve una respuesta 200 OK a A360 para confirmar la recepción.
+1. **Token Estático (X-Authorization):** Un token secreto compartido (definido en CALLBACK_TOKEN) que se envía en la cabecera X-Authorization.  
+2. **Token Dinámico JWT (Authorization):** Un token Bearer (JWT) que es generado por el API Gateway (ApiGatewayClient) y validado por este servicio usando una clave pública (JWT_PUBLIC_KEY).
 
-## **5\. Variables de Entorno Requeridas**
+Los modos de autenticación (CALLBACK_AUTH_MODE) son:
 
-* CALLBACK\_HOST: La dirección IP en la que el servidor escuchará (ej. 0.0.0.0 para todas las interfaces).  
-* CALLBACK\_PORT: El puerto en el que se ejecutará el servicio (ej. 8000).  
-* CALLBACK\_API\_KEY: La clave secreta compartida que se utilizará para autenticar las solicitudes entrantes.  
-* SQL\_SAM\_SERVER, SQL\_SAM\_DATABASE, SQL\_SAM\_USER, SQL\_SAM\_PASSWORD: Credenciales de la base de datos de SAM.
+* optional (Default): La petición es válida si **al menos uno** de los dos tokens (estático o JWT) está presente y es correcto.  
+* required: La petición es válida solo si **ambos** tokens (estático y JWT) están presentes y son correctos.  
+* none: No se realiza ninguna validación. **(No recomendado para producción)**.
 
-## **6\. Ejecución**
+## **5. Variables de Entorno Requeridas (.env)**
+
+Este servicio depende de las siguientes variables. Dado que corre bajo NSSM, **cualquier cambio en estas variables requiere un reinicio del servicio** para que tenga efecto.
+
+### **Configuración del Servidor**
+
+* CALLBACK_SERVER_HOST  
+  * **Propósito:** Dirección IP en la que el servidor FastAPI escuchará (ej. 0.0.0.0 para todas las interfaces).  
+  * **Efecto:** Requiere reinicio.  
+* CALLBACK_SERVER_PORT  
+  * **Propósito:** Puerto en el que el servidor FastAPI escuchará (ej. 8008).  
+  * **Efecto:** Requiere reinicio.  
+* CALLBACK_SERVER_THREADS  
+  * **Propósito:** Número de "workers" (hilos) que uvicorn utilizará para manejar peticiones concurrentes.  
+  * **Efecto:** Requiere reinicio.  
+* CALLBACK_ENDPOINT_PATH  
+  * **Propósito:** La ruta de la URL para el endpoint de callback (ej. /api/callback).  
+  * **Efecto:** Requiere reinicio.
+
+### **Configuración de Seguridad y Autenticación**
+
+* CALLBACK_AUTH_MODE  
+  * **Propósito:** Define la lógica de validación de tokens (optional, required, none).  
+  * **Efecto:** Requiere reinicio.  
+* CALLBACK_TOKEN  
+  * **Propósito:** El token secreto estático (API Key) esperado en la cabecera X-Authorization.  
+  * **Efecto:** Requiere reinicio.  
+* API_GATEWAY_CLIENT_ID  
+  * **Propósito:** El Client ID del API Gateway, esperado en la cabecera x-ibm-client-id (usado para validación cruzada del JWT).  
+  * **Efecto:** Requiere reinicio.  
+* JWT_PUBLIC_KEY  
+  * **Propósito:** La clave pública (en formato PEM) usada para verificar la firma de los tokens JWT provenientes del API Gateway.  
+  * **Efecto:** Requiere reinicio.  
+* JWT_AUDIENCE  
+  * **Propósito:** El valor "audience" esperado dentro del token JWT.  
+  * **Efecto:** Requiere reinicio.  
+* JWT_ISSUER  
+  * **Propósito:** El valor "issuer" (emisor) esperado dentro del token JWT.  
+  * **Efecto:** Requiere reinicio.
+
+### **Configuración Base de Datos (SAM)**
+
+* SQL_SAM_DRIVER, SQL_SAM_HOST, SQL_SAM_DB_NAME, SQL_SAM_UID, SQL_SAM_PWD  
+  * **Propósito:** Credenciales completas para conectarse a la base de datos de SAM y actualizar el estado de las ejecuciones.  
+  * **Efecto:** Requiere reinicio.
+
+### **Configuración de Logging**
+
+* LOG_DIRECTORY  
+  * **Propósito:** Carpeta donde se guardarán los archivos de log.  
+  * **Efecto:** Requiere reinicio.  
+* LOG_LEVEL  
+  * **Propósito:** Nivel de detalle del log (ej. INFO, DEBUG).  
+  * **Efecto:** Requiere reinicio.  
+* APP_LOG_FILENAME_CALLBACK  
+  * **Propósito:** Nombre específico del archivo de log para este servicio.  
+  * **Efecto:** Requiere reinicio.
+
+## **6. Ejecución**
 
 Para ejecutar el servicio en un entorno de desarrollo:
 
-uv run \-m sam.callback
+Bash
 
-Una vez iniciado, la documentación interactiva de la API estará disponible en la URL http://127.0.0.1:8000/docs.
+uv run -m sam.callback
+

@@ -155,20 +155,35 @@ class DatabaseConnector:
                     raise
         return None
 
-    def ejecutar_consulta_multiple(self, query: str, params_list: List[tuple]) -> int:
+    def ejecutar_consulta_multiple(
+        self, query: str, params_list: List[tuple], usar_fast_executemany: bool = True
+    ) -> int:
+        """
+        Ejecuta una consulta múltiple.
+        Si usar_fast_executemany=True, intenta usar la optimización.
+        Si falla o usar_fast_executemany=False, usa el fallback de ejecución individual.
+        """
         if not params_list:
             return 0
         total_affected = 0
         try:
+            if not usar_fast_executemany:
+                # Forzamos el salto al bloque 'except' (fallback)
+                raise pyodbc.Error("FAST_EXECUTE_DISABLED", "Forzando fallback por parámetro.")
+
             with self.obtener_cursor() as cursor:
                 cursor.fast_executemany = True
                 cursor.executemany(query, params_list)
                 total_affected = cursor.rowcount
             return total_affected
         except pyodbc.Error as e:
-            logger.error(f"Error en ejecución múltiple: {e}")
-            # Fallback a ejecución individual si fast_executemany falla
+            # Solo loguear error si se *intentó* usar fast_executemany
+            if usar_fast_executemany:
+                logger.error(f"Error en ejecución múltiple (fast_executemany): {e}")
+
             logger.warning("Fallback a ejecución individual de queries...")
+
+            # Lógica de Fallback (ahora se ejecuta si falla o si se fuerza)
             for params in params_list:
                 try:
                     total_affected += self.ejecutar_consulta(query, params, es_select=False)

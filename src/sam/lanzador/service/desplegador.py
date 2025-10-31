@@ -64,9 +64,14 @@ class Desplegador:
         concurrency_limit = self._lanzador_cfg.get("max_workers_lanzador", 10)
         auth_headers = await self._preparar_cabeceras_callback()
 
-        logger.info(f"{len(robots_a_ejecutar)} robots encontrados. Desplegando en paralelo (límite: {concurrency_limit})...")
+        logger.info(
+            f"{len(robots_a_ejecutar)} robots encontrados. Desplegando en paralelo (límite: {concurrency_limit})..."
+        )
 
-        tasks = [asyncio.create_task(self._desplegar_y_registrar_robot(robot_info, bot_input, auth_headers)) for robot_info in robots_a_ejecutar]
+        tasks = [
+            asyncio.create_task(self._desplegar_y_registrar_robot(robot_info, bot_input, auth_headers))
+            for robot_info in robots_a_ejecutar
+        ]
 
         successful_deploys = 0
         failed_deploys = 0
@@ -78,35 +83,44 @@ class Desplegador:
 
         logger.info(f"Ciclo de despliegue completado. Exitosos: {successful_deploys}, Fallidos: {failed_deploys}.")
 
-    async def _desplegar_y_registrar_robot(self, robot_info: Dict, bot_input: Dict, auth_headers: Dict) -> tuple[int, bool]:
+    async def _desplegar_y_registrar_robot(
+        self, robot_info: Dict, bot_input: Dict, auth_headers: Dict
+    ) -> tuple[int, bool]:
         """
         Encapsula la lógica para desplegar un robot y registrar su ejecución,
         incluyendo reintentos para errores específicos.
         """
         robot_id = robot_info["RobotId"]
+        user_id = robot_info["UserId"]
+        equipo_id = robot_info.get("EquipoId")
+        hora = robot_info.get("Hora")
         max_attempts = 1 + self._lanzador_cfg.get("max_reintentos_deploy", 1)
         delay_seconds = self._lanzador_cfg.get("delay_reintento_deploy_seg", 15)
 
         for attempt in range(1, max_attempts + 1):
             try:
                 deployment_result = await self._aa_client.desplegar_bot_v4(
-                    file_id=robot_id, user_ids=[robot_info["UserId"]], bot_input=bot_input, callback_auth_headers=auth_headers
+                    file_id=robot_id, user_ids=[user_id], bot_input=bot_input, callback_auth_headers=auth_headers
                 )
 
                 if deployment_result and "deploymentId" in deployment_result:
                     self._db_connector.insertar_registro_ejecucion(
                         id_despliegue=deployment_result["deploymentId"],
                         db_robot_id=robot_id,
-                        db_equipo_id=robot_info.get("EquipoId"),
-                        a360_user_id=robot_info["UserId"],
-                        marca_tiempo_programada=robot_info.get("Hora"),
+                        db_equipo_id=equipo_id,
+                        a360_user_id=user_id,
+                        marca_tiempo_programada=hora,
                         estado="DEPLOYED",
                     )
-                    logger.info(f"Robot {robot_id} desplegado con ID: {deployment_result['deploymentId']} (Intento {attempt}/{max_attempts})")
+                    logger.info(
+                        f"Robot {robot_id} desplegado con ID: {deployment_result['deploymentId']} (Intento {attempt}/{max_attempts})"
+                    )
                     return robot_id, True
                 else:
                     error_msg = deployment_result.get("error", "Fallo al obtener deploymentId")
-                    logger.error(f"Error de API al desplegar robot {robot_id}: {error_msg}")
+                    logger.error(
+                        f"Error de API al desplegar robot {robot_id} usuario {user_id} equipo {equipo_id}: {error_msg}"
+                    )
                     return robot_id, False
 
             except httpx.HTTPStatusError as e:
@@ -114,18 +128,21 @@ class Desplegador:
 
                 if is_device_error and attempt < max_attempts:
                     logger.warning(
-                        f"Fallo de despliegue para robot {robot_id} (Intento {attempt}/{max_attempts}): El dispositivo no está activo. Reintentando en {delay_seconds}s..."
+                        f"Fallo de despliegue para robot {robot_id} usuario {user_id} equipo {equipo_id} (Intento {attempt}/{max_attempts}): El dispositivo no está activo. Reintentando en {delay_seconds}s..."
                     )
                     await asyncio.sleep(delay_seconds)
                     continue
                 else:
                     logger.error(
-                        f"Fallo de despliegue definitivo para robot {robot_id} (Intento {attempt}/{max_attempts}): {e.response.status_code} - {e.response.text}"
+                        f"Fallo de despliegue definitivo para robot {robot_id} usuario {user_id} equipo {equipo_id} (Intento {attempt}/{max_attempts}): {e.response.status_code} - {e.response.text}"
                     )
                     return robot_id, False
 
             except Exception as e:
-                logger.error(f"Excepción inesperada al desplegar robot {robot_id} (Intento {attempt}/{max_attempts}): {e}", exc_info=True)
+                logger.error(
+                    f"Excepción inesperada al desplegar robot {robot_id}  usuario {user_id} equipo {equipo_id} (Intento {attempt}/{max_attempts}): {e}",
+                    exc_info=True,
+                )
                 return robot_id, False
 
         logger.error(f"El despliegue del robot {robot_id} falló después de {max_attempts} intentos.")

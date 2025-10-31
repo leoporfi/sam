@@ -2,67 +2,194 @@
 
 **Módulo:** sam.lanzador
 
-## **1\. Propósito**
+## **1. Propósito**
 
-El **Servicio Lanzador** es el componente principal del ecosistema SAM. Su única responsabilidad es orquestar el ciclo de vida de las ejecuciones de robots: desde que se marcan como PENDIENTE en la base de datos hasta que se registran como FINALIZADO o ERROR.
+El **Servicio Lanzador** es el componente orquestador central del ecosistema SAM. Su responsabilidad es gestionar el ciclo de vida completo de las ejecuciones de robots y mantener la sincronización de las entidades maestras (robots, usuarios, equipos) con Automation 360.
 
-Es un servicio de fondo (demonio) que opera en un bucle continuo para asegurar que los robots se procesen de manera oportuna.
+Es un servicio de fondo (demonio) asíncrono que opera en múltiples bucles paralelos para:
 
-## **2\. Arquitectura y Componentes**
+1. Lanzar nuevas ejecuciones programadas.  
+2. Conciliar el estado de las ejecuciones en curso.  
+3. Sincronizar los datos maestros de A360 con la base de datos de SAM.
 
-El servicio sigue un patrón de diseño de **Inyección de Dependencias** y **Separación de Responsabilidades**, donde la clase principal actúa como un orquestador y delega la lógica de negocio a componentes especializados ("cerebros").
+## **2. Arquitectura y Componentes**
+
+El servicio sigue un patrón de **Inyección de Dependencias** y opera de forma **asíncrona**. La clase principal (LanzadorService) gestiona tres bucles de tareas independientes que se ejecutan en paralelo, cada uno con su propio intervalo de tiempo.
 
 ### **Componentes Principales**
 
 * **LanzadorService (service/main.py)**:  
-  * **Rol:** Orquestador.  
-  * **Descripción:** Es la clase principal que gestiona el bucle de ejecución del servicio. No contiene lógica de negocio compleja. Sus tareas son:  
-    1. Inicializar y recibir las dependencias (DatabaseConnector, AutomationAnywhereClient).  
-    2. Ejecutar un bucle infinito que se repite cada X segundos (configurable).  
-    3. Dentro del bucle, invocar secuencialmente a los componentes Desplegador y Sincronizador.  
-    4. Gestionar el cierre ordenado (graceful shutdown) para liberar las conexiones.  
+  * **Rol:** Orquestador Asíncrono.  
+  * **Descripción:** Gestiona el ciclo de vida del servicio. Sus tareas son:  
+    1. Inicializar y recibir todas las dependencias (los "cerebros" y clientes).  
+    2. Lanzar tres tareas (Tasks) de asyncio que se ejecutan concurrentemente: _run_launcher_cycle, _run_sync_cycle y _run_conciliador_cycle.  
+    3. Cada tarea se ejecuta, espera un intervalo (configurable) y se repite, independientemente de las otras.  
+    4. Gestionar el cierre ordenado (graceful shutdown) para detener todos los bucles.  
 * **Desplegador (service/desplegador.py)**:  
   * **Rol:** Cerebro de Despliegue.  
-  * **Descripción:** Encapsula toda la lógica para iniciar nuevos robots.  
-    1. Recibe el DatabaseConnector y el AutomationAnywhereClient en su constructor.  
-    2. Su método run() busca en la base de datos el próximo robot con estado PENDIENTE.  
-    3. Si encuentra uno, llama al método deploy\_bot() del cliente de A360.  
-    4. Si el despliegue es exitoso, actualiza el estado del robot en la base de datos a EN\_CURSO, almacenando el deploymentId devuelto por la API.  
-    5. Si el despliegue falla, actualiza el estado a ERROR.  
+  * **Descripción:** Encapsula la lógica para iniciar nuevos robots.  
+    1. Consulta la base de datos (SP dbo.ObtenerRobotsEjecutables) para obtener los robots que deben ejecutarse.  
+    2. Verifica si el servicio está en una "ventana de pausa" operacional (configurable).  
+    3. Obtiene credenciales del API Gateway (ApiGatewayClient) para usarlas en la URL de callback.  
+    4. Llama al método desplegar_bot_v4() del cliente de A360, inyectando la URL y cabeceras de callback.  
+    5. Si el despliegue es exitoso, **inserta un nuevo registro** en dbo.Ejecuciones con el estado DEPLOYED y el deploymentId devuelto.  
+    6. Maneja reintentos para fallos específicos (ej. dispositivo no activo).  
 * **Sincronizador (service/sincronizador.py)**:  
-  * **Rol:** Cerebro de Sincronización.  
+  * **Rol:** Cerebro de Sincronización de Entidades.  
+  * **Descripción:** Su única responsabilidad es delegar la lógica de sincronización de datos maestros a un componente común.  
+    1. Invoca al SincronizadorComun, que es el encargado real de:  
+    2. Consultar la API de A360 para obtener la lista actualizada de robots, usuarios y dispositivos.  
+    3. Actualizar (hacer MERGE) estas entidades en las tablas maestras de la base de datos de SAM.  
+  * **Nota:** Este componente *no* sincroniza estados de ejecución; esa es la tarea del Conciliador.  
+* **Conciliador (service/conciliador.py)**:  
+  * **Rol:** Cerebro de Conciliación de Estados.  
   * **Descripción:** Se encarga de verificar el estado de los robots que ya están en ejecución.  
-    1. Recibe sus dependencias en el constructor.  
-    2. Su método run() busca en la base de datos todos los robots con estado EN\_CURSO.  
-    3. Para cada uno, utiliza su deploymentId para consultar el estado del despliegue a través del método get\_deployment\_status() del cliente de A360.  
-    4. Actualiza el estado en la base de datos a FINALIZADO o ERROR según la respuesta de la API.
+    1. Busca en la BD todas las ejecuciones que no estén en un estado final (ej. DEPLOYED, RUNNING).  
+    2. Consulta la API de A360 (obtener_detalles_por_deployment_ids) para obtener el estado real de esos deploymentId.  
+    3. Actualiza la BD con los estados finales (COMPLETED, RUN_FAILED, etc.) si el robot finalizó (y no fue reportado por el callback).  
+    4. Si un deploymentId no se encuentra en la API de A360 (un "deployment perdido"), incrementa un contador de intentos.  
+    5. Si se supera un umbral de intentos (CONCILIADOR_MAX_INTENTOS_FALLIDOS), marca la ejecución como UNKNOWN.  
+* **EmailAlertClient (common/mail_client.py)**:  
+  * **Rol:** Notificador.  
+  * **Descripción:** Utilizado por LanzadorService para enviar alertas por correo electrónico si ocurre un error crítico e irrecuperable en cualquiera de los bucles principales.
 
-## **3\. Flujo de Datos**
+## **3. Flujo de Datos**
 
-El flujo de trabajo del servicio es un ciclo continuo y predecible:
+El servicio opera en tres flujos paralelos y continuos:
 
-1. LanzadorService inicia su bucle principal.  
-2. Invoca a Desplegador.run().  
-3. Desplegador consulta la tabla robots buscando estado \= 'PENDIENTE'.  
-4. Si encuentra un robot, lo despliega vía API y actualiza su fila a estado \= 'EN\_CURSO' y deployment\_id \= '...'.  
-5. LanzadorService invoca a Sincronizador.run().  
-6. Sincronizador consulta la tabla robots buscando estado \= 'EN\_CURSO'.  
-7. Para cada robot encontrado, consulta su estado en A360 usando el deployment\_id.  
-8. Actualiza la fila del robot a estado \= 'FINALIZADO' o estado \= 'ERROR'.  
-9. El bucle de LanzadorService espera el intervalo configurado y vuelve a empezar.
+1. **Bucle de Lanzamiento (Intervalo corto, ej. 15 seg):**  
+   * LanzadorService invoca a Desplegador.desplegar_robots_pendientes().  
+   * Desplegador obtiene robots programados de la BD.  
+   * Desplegador obtiene token de API Gateway.  
+   * Desplegador llama a desplegar_bot_v4() de A360 (con la URL de callback).  
+   * Desplegador inserta una nueva fila en dbo.Ejecuciones con estado DEPLOYED.  
+2. **Bucle de Conciliación (Intervalo medio, ej. 15 min):**  
+   * LanzadorService invoca a Conciliador.conciliar_ejecuciones().  
+   * Conciliador obtiene ejecuciones "en curso" de la BD de SAM.  
+   * Conciliador consulta la API de A360 para verificar sus estados.  
+   * Conciliador actualiza las filas en SAM a COMPLETED, RUN_FAILED, o UNKNOWN según corresponda.  
+3. **Bucle de Sincronización (Intervalo largo, ej. 1 hora):**  
+   * LanzadorService invoca a Sincronizador.sincronizar_entidades().  
+   * Sincronizador delega a SincronizadorComun.  
+   * SincronizadorComun consulta la API de A360 para obtener todos los robots, usuarios y devices.  
+   * SincronizadorComun actualiza las tablas maestras (Robots, Equipos) en la BD de SAM.  
+   * Este bucle se puede deshabilitar con LANZADOR_HABILITAR_SYNC.
 
-## **4\. Variables de Entorno Requeridas**
+## **4. Variables de Entorno Requeridas (.env)**
 
-Este servicio depende de las siguientes variables definidas en el archivo .env:
+Este servicio depende de las siguientes variables. Dado que corre bajo NSSM, **cualquier cambio en estas variables requiere un reinicio del servicio** para que tenga efecto.
 
-* LANZADOR\_INTERVALO\_LANZAMIENTO\_SEG: Intervalo en segundos entre cada ciclo de ejecución.  
-* A360\_CONTROL\_ROOM\_URL: URL de la Control Room de Automation Anywhere.  
-* A360\_USERNAME: Nombre de usuario para la autenticación API.  
-* A360\_API\_KEY: Clave API para la autenticación.  
-* SQL\_SAM\_SERVER, SQL\_SAM\_DATABASE, SQL\_SAM\_USER, SQL\_SAM\_PASSWORD: Credenciales de la base de datos de SAM.
+### **Configuración del Lanzador**
 
-## **5\. Ejecución**
+* LANZADOR_INTERVALO_LANZAMIENTO_SEG  
+  * **Propósito:** Intervalo en segundos entre cada ciclo de *lanzamiento* de robots.  
+  * **Efecto:** Requiere reinicio.  
+* LANZADOR_INTERVALO_CONCILIACION_SEG  
+  * **Propósito:** Intervalo en segundos entre cada ciclo de *conciliación* de estados.  
+  * **Efecto:** Requiere reinicio.  
+* LANZADOR_INTERVALO_SINCRONIZACION_SEG  
+  * **Propósito:** Intervalo en segundos entre cada ciclo de *sincronización* de entidades (robots, devices).  
+  * **Efecto:** Requiere reinicio.  
+* LANZADOR_HABILITAR_SYNC  
+  * **Propósito:** Define si el bucle de sincronización de entidades (robots, devices) debe ejecutarse. true para activar, false para desactivar.  
+  * **Efecto:** Requiere reinicio.  
+* LANZADOR_BOT_INPUT_VUELTAS  
+  * **Propósito:** Valor numérico que se pasa como input (in_NumRepeticion) al desplegar un bot.  
+  * **Efecto:** Requiere reinicio.  
+* LANZADOR_MAX_WORKERS  
+  * **Propósito:** Límite de tareas concurrentes para el despliegue de robots en un solo ciclo.  
+  * **Efecto:** Requiere reinicio.  
+* LANZADOR_MAX_REINTENTOS_DEPLOY  
+  * **Propósito:** Número de reintentos (adicionales al primer intento) si el despliegue falla por un error de dispositivo no activo.  
+  * **Efecto:** Requiere reinicio.  
+* LANZADOR_DELAY_REINTENTO_DEPLOY_SEG  
+  * **Propósito:** Segundos de espera antes de reintentar un despliegue fallido (por dispositivo no activo).  
+  * **Efecto:** Requiere reinicio.  
+* LANZADOR_PAUSA_INICIO_HHMM / LANZADOR_PAUSA_FIN_HHMM  
+  * **Propósito:** Define una ventana de "pausa operacional" (en formato HH:MM) durante la cual el Desplegador no lanzará nuevos robots.  
+  * **Efecto:** Requiere reinicio.  
+* CONCILIADOR_MAX_INTENTOS_FALLIDOS  
+  * **Propósito:** Número de veces que el Conciliador debe fallar en encontrar un deploymentId en A360 antes de marcarlo como UNKNOWN.  
+  * **Efecto:** Requiere reinicio.
+
+### **Configuración de Automation Anywhere (A360)**
+
+* AA_CR_URL  
+  * **Propósito:** URL base de la Control Room (ej. https://control-room.com).  
+  * **Efecto:** Requiere reinicio.  
+* AA_CR_USER  
+  * **Propósito:** Nombre de usuario del bot API de SAM para autenticarse contra A360.  
+  * **Efecto:** Requiere reinicio.  
+* AA_CR_API_KEY  
+  * **Propósito:** Clave API (o contraseña) para el usuario AA_CR_USER. Se prioriza la API Key.  
+  * **Efecto:** Requiere reinicio.  
+* AA_API_TIMEOUT_SECONDS  
+  * **Propósito:** Tiempo máximo (en segundos) de espera para las peticiones a la API de A360.  
+  * **Efecto:** Requiere reinicio.  
+* AA_URL_CALLBACK  
+  * **Propósito:** URL completa del servicio de Callback a la que A360 debe notificar cuando un bot finaliza.  
+  * **Efecto:** Requiere reinicio.
+
+### **Configuración Base de Datos (SAM)**
+
+* SQL_SAM_DRIVER  
+  * **Propósito:** Driver ODBC para la conexión (ej. {ODBC Driver 17 for SQL Server}).  
+  * **Efecto:** Requiere reinicio.  
+* SQL_SAM_HOST  
+  * **Propósito:** Dirección IP o Hostname del servidor SQL Server.  
+  * **Efecto:** Requiere reinicio.  
+* SQL_SAM_DB_NAME  
+  * **Propósito:** Nombre de la base de datos de SAM.  
+  * **Efecto:** Requiere reinicio.  
+* SQL_SAM_UID / SQL_SAM_PWD  
+  * **Propósito:** Credenciales (usuario y contraseña) para la base de datos SAM.  
+  * **Efecto:** Requiere reinicio.  
+* (Variables de reintento de SQL: SQL_SAM_MAX_REINTENTOS_QUERY, SQL_SAM_DELAY_REINTENTO_QUERY_BASE_SEG, SQL_SAM_CODIGOS_SQLSTATE_REINTENTABLES)
+
+### **Configuración API Gateway (para Callback)**
+
+* API_GATEWAY_URL  
+  * **Propósito:** URL del endpoint de autenticación (token) del API Gateway.  
+  * **Efecto:** Requiere reinicio.  
+* API_GATEWAY_CLIENT_ID / API_GATEWAY_CLIENT_SECRET  
+  * **Propósito:** Credenciales para obtener el token de autorización del API Gateway.  
+  * **Efecto:** Requiere reinicio.  
+* API_GATEWAY_SCOPE  
+  * **Propósito:** El "scope" o permiso solicitado al API Gateway.  
+  * **Efecto:** Requiere reinicio.  
+* CALLBACK_TOKEN  
+  * **Propósito:** Token estático (X-Authorization) que también se añade a las cabeceras del callback, además del token dinámico del API Gateway.  
+  * **Efecto:** Requiere reinicio.
+
+### **Configuración de Alertas (Email)**
+
+* EMAIL_SMTP_SERVER / EMAIL_SMTP_PORT  
+  * **Propósito:** Servidor SMTP y puerto para el envío de correos de alerta.  
+  * **Efecto:** Requiere reinicio.  
+* EMAIL_FROM  
+  * **Propósito:** Dirección de correo remitente para las alertas.  
+  * **Efecto:** Requiere reinicio.  
+* EMAIL_RECIPIENTS  
+  * **Propósito:** Lista de destinatarios (separados por comas) para las alertas de errores críticos.  
+  * **Efecto:** Requiere reinicio.
+
+### **Configuración de Logging**
+
+* LOG_DIRECTORY  
+  * **Propósito:** Carpeta donde se guardarán los archivos de log.  
+  * **Efecto:** Requiere reinicio.  
+* LOG_LEVEL  
+  * **Propósito:** Nivel de detalle del log (ej. INFO, DEBUG).  
+  * **Efecto:** Requiere reinicio.  
+* APP_LOG_FILENAME_LANZADOR  
+  * **Propósito:** Nombre específico del archivo de log para este servicio.  
+  * **Efecto:** Requiere reinicio.
+
+## **5. Ejecución**
 
 Para ejecutar el servicio en un entorno de desarrollo:
 
-uv run \-m sam.lanzador  
+Bash
+
+uv run -m sam.lanzador
+
