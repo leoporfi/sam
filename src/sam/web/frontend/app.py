@@ -43,6 +43,7 @@ def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state)
                                 "aria-busy": str(robots_state.get("is_syncing", False)).lower(),
                                 "class_name": "pico-background-fuchsia-500",
                                 "data-tooltip": "Sincronizar Robots",
+                                "data-placement": "bottom",
                             },
                             html.i({"class_name": "fa-solid fa-robot"}),
                         )
@@ -55,6 +56,7 @@ def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state)
                                 "aria-busy": str(equipos_state.get("is_syncing", False)).lower(),
                                 "class_name": "pico-background-purple-500",
                                 "data-tooltip": "Sincronizar Equipos",
+                                "data-placement": "bottom",
                             },
                             html.i({"class_name": "fa-solid fa-desktop"}),
                         )
