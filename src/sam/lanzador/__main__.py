@@ -1,13 +1,11 @@
 # sam/lanzador/__main__.py
-"""Entry point for lanzador service"""
-
-import asyncio
-
+"""
+Punto de entrada para `uv run -m sam.lanzador`
+"""
 from sam.common.config_loader import ConfigLoader
 
-from .run_lanzador import main_async
+from .run_lanzador import main  # noqa: I001
 
-ConfigLoader.initialize_service("lanzador")
-
-if __name__ == "__main__":
-    asyncio.run(main_async())
+SERVICE_NAME = "lanzador"
+ConfigLoader.initialize_service(SERVICE_NAME)
+main(SERVICE_NAME)
