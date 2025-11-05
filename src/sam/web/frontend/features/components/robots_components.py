@@ -212,7 +212,7 @@ def RobotRow(robot: Robot, on_action: Callable):
 
     return html.tr(
         {"key": robot["RobotId"]},
-        html.td(robot["Robot"]),
+        html.td({"title": robot["Descripcion"]}, robot["Robot"]),
         html.td(robot.get("CantidadEquiposAsignados", 0)),
         html.td(
             html.label(
