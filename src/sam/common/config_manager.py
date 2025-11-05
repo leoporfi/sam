@@ -129,6 +129,9 @@ class ConfigManager:
             "pausa_lanzamiento": (pausa_inicio, pausa_fin),
             "max_workers_lanzador": int(cls._get_env_with_warning("LANZADOR_MAX_WORKERS", 10)),
             "conciliador_max_intentos_fallidos": int(cls._get_env_with_warning("CONCILIADOR_MAX_INTENTOS_FALLIDOS", 3)),
+            "shutdown_timeout_seg": int(cls._get_env_with_warning("LANZADOR_SHUTDOWN_TIMEOUT_SEG", 60)),
+            "habilitar_sync": os.getenv("LANZADOR_HABILITAR_SYNC", "True").lower() == "true",
+            "repeticiones": int(cls._get_env_with_warning("LANZADOR_BOT_INPUT_VUELTAS", 3)),
             "parametros_default": default_params,
         }
 
@@ -206,12 +209,12 @@ class ConfigManager:
         }
 
     @classmethod
-    def get_aa_config(cls) -> Dict[str, Any]:
+    def get_aa360_config(cls) -> Dict[str, Any]:
         return {
-            "url_cr": cls._get_env_with_warning("AA_CR_URL"),
-            "usuario": cls._get_env_with_warning("AA_CR_USER"),
-            "pwd": cls._get_env_with_warning("AA_CR_PWD"),  # Optional
-            "api_key": cls._get_env_with_warning("AA_CR_API_KEY"),
+            "cr_url": cls._get_env_with_warning("AA_CR_URL"),
+            "cr_user": cls._get_env_with_warning("AA_CR_USER"),
+            "cr_pwd": cls._get_env_with_warning("AA_CR_PWD"),  # Optional
+            "cr_api_key": cls._get_env_with_warning("AA_CR_API_KEY"),
             "verify_ssl": cls._get_env_with_warning("AA_VERIFY_SSL", "false").lower() == "false",
             "api_timeout_seconds": int(cls._get_env_with_warning("AA_API_TIMEOUT_SECONDS", 60)),
             "callback_url_deploy": cls._get_env_with_warning("AA_URL_CALLBACK"),

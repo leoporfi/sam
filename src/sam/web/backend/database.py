@@ -518,13 +518,12 @@ def create_equipo(db: DatabaseConnector, equipo_data: EquipoCreateRequest) -> Di
         )
         OUTPUT INSERTED.EquipoId, INSERTED.Equipo, INSERTED.UserName, INSERTED.Licencia,
                INSERTED.Activo_SAM, INSERTED.PermiteBalanceoDinamico
-               -- Agregamos valores 'N/A' para RobotAsignado y Pool para consistencia
                , 'N/A' AS RobotAsignado, 'N/A' AS Pool
         VALUES (?, ?, ?, ?, ?, 1, 0);
     """
     params = (
         equipo_data.EquipoId,
-        equipo_data.Equipo,
+        str(equipo_data.Equipo).upper(),
         equipo_data.UserId,
         equipo_data.UserName,
         equipo_data.Licencia,

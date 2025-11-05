@@ -1,11 +1,26 @@
+# sam/lanzador/run_lanzador.py
+"""
+Punto de entrada único del servicio Lanzador.
+Contiene la lógica de arranque, gestión de señales y cierre de recursos.
+"""
+
+from __future__ import annotations
+
 import asyncio
 import logging
-import os
 import signal
 import sys
-from typing import Optional
+from pathlib import Path
+from typing import Any, Dict, Optional
 
-# Corrección en los imports para la estructura plana de 'common'
+from sam.common.config_loader import ConfigLoader
+
+# --- Añadimos src al path para ejecución directa ---
+if __name__ == "__main__":
+    src_path = str(Path(__file__).resolve().parent.parent.parent)
+    if src_path not in sys.path:
+        sys.path.insert(0, src_path)
+
 from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.apigw_client import ApiGatewayClient
 from sam.common.config_manager import ConfigManager
@@ -17,125 +32,227 @@ from sam.lanzador.service.desplegador import Desplegador
 from sam.lanzador.service.main import LanzadorService
 from sam.lanzador.service.sincronizador import Sincronizador
 
-# --- Constantes y Globales ---
-SERVICE_NAME = "lanzador"
-service_instance: Optional[LanzadorService] = None
+# --- Globales del Servicio ---
+_service_name = "lanzador"
+_shutdown_initiated = False
+_service_instance: Optional[LanzadorService] = None
+
+# --- Dependencias Globales ---
+_db_connector: Optional[DatabaseConnector] = None
+_aa_client: Optional[AutomationAnywhereClient] = None
+_gateway_client: Optional[ApiGatewayClient] = None
+_notificador: Optional[EmailAlertClient] = None
 
 
-# --- Manejo de Cierre Ordenado (Graceful Shutdown) ---
-def graceful_shutdown(signum, frame):
-    """Maneja las señales de cierre de forma ordenada."""
+# ---------- Gestión de Cierre Ordenado (Graceful Shutdown) ----------
+
+
+def _graceful_shutdown(signum: int, frame: Any) -> None:
+    """Manejador de señales para un cierre ordenado."""
+    global _shutdown_initiated
+    if _shutdown_initiated:
+        logging.warning("Señal de cierre duplicada recibida. Ya se está deteniendo.")
+        return
+    _shutdown_initiated = True
     logging.info(f"Señal de parada recibida (Señal: {signum}). Iniciando cierre ordenado...")
-    if service_instance:
-        service_instance.stop()
 
-
-async def main_async():
-    """Función principal asíncrona que gestiona el ciclo de vida completo del servicio."""
-    global service_instance
-
-    # --- Configuración inicial ---
-    setup_logging(service_name=SERVICE_NAME)
-    logging.info(f"Iniciando el servicio: {SERVICE_NAME.capitalize()}...")
-
-    db_connector = None
-    aa_client = None
-    gateway_client = None
-
-    try:
-        signal.signal(signal.SIGINT, graceful_shutdown)
-        signal.signal(signal.SIGTERM, graceful_shutdown)
-
-        logging.info("Creando todas las dependencias del servicio...")
-        # Configuración
-        lanzador_cfg = ConfigManager.get_lanzador_config()
-        aa_cfg = ConfigManager.get_aa_config()
-        sync_enabled = os.getenv("LANZADOR_HABILITAR_SYNC", "True").lower() == "true"
-        callback_token = ConfigManager.get_callback_server_config().get("token")
-        cfg_sql_sam = ConfigManager.get_sql_server_config("SQL_SAM")
-
-        # --- Creación de Dependencias ---
-        db_connector = DatabaseConnector(
-            servidor=cfg_sql_sam["servidor"],
-            base_datos=cfg_sql_sam["base_datos"],
-            usuario=cfg_sql_sam["usuario"],
-            contrasena=cfg_sql_sam["contrasena"],
-        )
-
-        # Se pasan los argumentos de forma explícita y correcta.
-        # 'password' es opcional y 'api_key' se pasa como keyword argument.
-        aa_client = AutomationAnywhereClient(
-            control_room_url=aa_cfg["url_cr"],
-            username=aa_cfg["usuario"],
-            password=aa_cfg.get("pwd"),  # Opcional, se usa .get()
-            api_key=aa_cfg.get("api_key"),  # Se pasa explícitamente
-            api_timeout_seconds=aa_cfg.get("api_timeout_seconds"),
-            callback_url_deploy=aa_cfg.get("callback_url_deploy"),
-        )
-
-        gateway_client = ApiGatewayClient(ConfigManager.get_apigw_config())
-        notificador = EmailAlertClient(service_name=SERVICE_NAME)
-
-        # Componentes de Lógica ("Cerebros")
-        sincronizador = Sincronizador(db_connector=db_connector, aa_client=aa_client)
-        desplegador = Desplegador(
-            db_connector=db_connector,
-            aa_client=aa_client,
-            api_gateway_client=gateway_client,
-            lanzador_config=lanzador_cfg,
-            callback_token=callback_token,
-        )
-        conciliador = Conciliador(
-            db_connector=db_connector,
-            aa_client=aa_client,
-            max_intentos_fallidos=lanzador_cfg["conciliador_max_intentos_fallidos"],
-        )
-
-        # Orquestador
-        service_instance = LanzadorService(
-            sincronizador=sincronizador,
-            desplegador=desplegador,
-            conciliador=conciliador,
-            notificador=notificador,
-            lanzador_config=lanzador_cfg,
-            sync_enabled=sync_enabled,
-        )
-
-        # --- Ejecución del Servicio ---
-        logging.info("Iniciando el ciclo principal del orquestador...")
-        await service_instance.run()
-
-    except KeyboardInterrupt:
-        logging.info("Interrupción de teclado detectada (Ctrl+C).")
-        if service_instance:
-            service_instance.stop()
-    except Exception as e:
-        logging.critical(f"Error crítico no controlado en el servicio {SERVICE_NAME}: {e}", exc_info=True)
-    finally:
-        # --- Limpieza Final de Recursos ---
-        logging.info("Iniciando limpieza final de recursos...")
-        if gateway_client:
-            await gateway_client.close()
-        if aa_client:
-            await aa_client.close()
-        if db_connector:
-            db_connector.cerrar_conexion_hilo_actual()
-        logging.info(f"El servicio {SERVICE_NAME} ha concluido su ejecución y liberado recursos.")
-
-
-# Este bloque solo se ejecuta si se llama directamente al script,
-# pero la ejecución principal viene de __main__.py
-if __name__ == "__main__":
-    # Configurar manejadores de señales para un cierre limpio
-    loop = asyncio.get_event_loop()
-    if sys.platform != "win32":
-        loop.add_signal_handler(signal.SIGINT, graceful_shutdown)
-        loop.add_signal_handler(signal.SIGTERM, graceful_shutdown)
+    if _service_instance:
+        if hasattr(_service_instance, "_shutdown_event"):
+            logging.info("Notificando a las tareas asíncronas que deben detenerse...")
+            _service_instance._shutdown_event.set()
+        else:
+            # Fallback por si el service_instance no es el esperado
+            _service_instance.stop()
     else:
-        signal.signal(signal.SIGINT, graceful_shutdown)
-        signal.signal(signal.SIGTERM, graceful_shutdown)
+        # Si el servicio aún no se ha inicializado, forzar la salida en el main
+        sys.exit(0)
+
+
+def _setup_signals() -> None:
+    """Configura los manejadores de señales para Windows y Unix."""
+    if sys.platform == "win32":
+        logging.info("Plataforma Windows detectada. Registrando SIGINT y SIGBREAK.")
+        signal.signal(signal.SIGINT, _graceful_shutdown)
+        try:
+            signal.signal(signal.SIGBREAK, _graceful_shutdown)
+        except AttributeError:
+            logging.warning("signal.SIGBREAK no está disponible.")
+    else:
+        logging.info("Plataforma No-Windows detectada. Registrando SIGINT y SIGTERM.")
+        signal.signal(signal.SIGINT, _graceful_shutdown)
+        signal.signal(signal.SIGTERM, _graceful_shutdown)
+
+
+# ---------- Lógica del Servicio ----------
+
+
+def _setup_dependencies() -> Dict[str, Any]:
+    """Crea y retorna las dependencias específicas del servicio."""
+    global _db_connector, _aa_client, _gateway_client, _notificador
+
+    logging.info("Creando dependencias (DB, Clientes API)...")
+
+    cfg_sql_sam = ConfigManager.get_sql_server_config("SQL_SAM")
+    _db_connector = DatabaseConnector(
+        servidor=cfg_sql_sam["servidor"],
+        base_datos=cfg_sql_sam["base_datos"],
+        usuario=cfg_sql_sam["usuario"],
+        contrasena=cfg_sql_sam["contrasena"],
+    )
+
+    cfg_aa = ConfigManager.get_aa360_config()
+    _aa_client = AutomationAnywhereClient(
+        cr_url=cfg_aa["cr_url"],
+        cr_user=cfg_aa["cr_user"],
+        cr_pwd=cfg_aa.get("cr_pwd"),
+        cr_api_key=cfg_aa["cr_api_key"],
+        cr_api_timeout=cfg_aa["api_timeout_seconds"],
+        callback_url_deploy=cfg_aa.get("callback_url_deploy"),
+    )
+
+    cfg_apigw = ConfigManager.get_apigw_config()
+    _gateway_client = ApiGatewayClient(cfg_apigw)
+
+    _notificador = EmailAlertClient(service_name=_service_name)
+
+    return {
+        "db_connector": _db_connector,
+        "aa_client": _aa_client,
+        "gateway_client": _gateway_client,
+        "notificador": _notificador,
+    }
+
+
+async def _run_service(deps: Dict[str, Any]) -> None:
+    """Inicializa y ejecuta la lógica principal del servicio (asíncrono)."""
+    global _service_instance
+
+    lanzador_config = ConfigManager.get_lanzador_config()
+    callback_token = ConfigManager.get_callback_server_config().get("token")
+
+    sincronizador = Sincronizador(deps["db_connector"], deps["aa_client"])
+    desplegador = Desplegador(
+        deps["db_connector"],
+        deps["aa_client"],
+        deps["gateway_client"],
+        lanzador_config,
+        callback_token,
+    )
+    conciliador = Conciliador(
+        deps["db_connector"], deps["aa_client"], lanzador_config.get("conciliador_max_intentos_fallidos", 3)
+    )
+    sync_enabled = lanzador_config.get("habilitar_sync", False)
+
+    _service_instance = LanzadorService(
+        sincronizador,
+        desplegador,
+        conciliador,
+        deps["notificador"],
+        lanzador_config,
+        sync_enabled,
+    )
+
+    logging.info("Iniciando los ciclos de tareas asíncronas...")
+    await _service_instance.run()
+
+
+async def _cleanup_resources() -> None:
+    """Limpia y cierra todas las conexiones y recursos."""
+    global _db_connector, _aa_client, _gateway_client, _notificador
+
+    logging.info("Iniciando limpieza de recursos...")
+
+    lanzador_config = ConfigManager.get_lanzador_config()
+    shutdown_timeout = lanzador_config.get("shutdown_timeout_seg", 60)
+
+    # 1. Esperar a que las tareas asíncronas terminen
+    if _service_instance and hasattr(_service_instance, "_tasks") and _service_instance._tasks:
+        logging.info(f"Esperando a que las tareas finalicen (máx {shutdown_timeout} segundos)...")
+        try:
+            if hasattr(_service_instance, "_shutdown_event"):
+                _service_instance._shutdown_event.set()
+
+            results = await asyncio.wait_for(
+                asyncio.gather(*_service_instance._tasks, return_exceptions=True), timeout=float(shutdown_timeout)
+            )
+            for i, result in enumerate(results):
+                if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
+                    logging.warning(f"Tarea {i} terminó con excepción durante el cierre: {result}")
+            logging.info("Todas las tareas asíncronas finalizaron.")
+        except asyncio.TimeoutError:
+            logging.warning(f"Timeout ({shutdown_timeout}s) esperando tareas. Forzando cancelación...")
+            for task in _service_instance._tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*_service_instance._tasks, return_exceptions=True)
+        except Exception as e:
+            logging.error(f"Error durante el gather de tareas en el cierre: {e}", exc_info=True)
+
+    # 2. Cerrar clientes HTTP (asíncronos)
+    if _gateway_client:
+        try:
+            await _gateway_client.close()
+            logging.info("gateway_client cerrado.")
+        except Exception as e:
+            logging.error(f"Error cerrando gateway_client: {e}")
+    if _aa_client:
+        try:
+            await _aa_client.close()
+            logging.info("aa_client cerrado.")
+        except Exception as e:
+            logging.error(f"Error cerrando aa_client: {e}")
+
+    # 3. Cerrar BD
+    if _db_connector:
+        try:
+            _db_connector.cerrar_conexion_hilo_actual()
+            logging.info("db_connector cerrado.")
+        except Exception as e:
+            logging.error(f"Error cerrando db_connector: {e}")
+
+    logging.info(f"Servicio {_service_name.upper()} ha concluido y liberado recursos.")
+
+
+# ---------- Punto de Entrada Principal ----------
+
+
+async def _main_async() -> None:
+    """Función principal asíncrona que envuelve el ciclo de vida."""
+    deps = {}
+    try:
+        deps = _setup_dependencies()
+        await _run_service(deps)
+    except asyncio.CancelledError:
+        logging.warning("El bucle principal de asyncio fue cancelado (esperado durante el cierre).")
+    except Exception as e:
+        logging.critical(f"Error crítico no controlado en _main_async: {e}", exc_info=True)
+        if _notificador:
+            _notificador.send_alert(f"Error Crítico en {_service_name.upper()}", f"Error: {e}")
+        sys.exit(1)
+    finally:
+        await _cleanup_resources()
+
+
+def main(service_name: str) -> None:
+    """Punto de entrada síncrono llamado por __main__.py."""
+    global _service_name
+    _service_name = service_name
+
+    setup_logging(service_name=_service_name)
+    logging.info(f"Iniciando el servicio: {_service_name.capitalize()}...")
+
+    _setup_signals()
 
     try:
-        loop.run_until_complete(main_async())
-    except asyncio.CancelledError:
-        logging.info("El bucle principal de eventos fue cancelado.")
+        asyncio.run(_main_async())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Servicio detenido por el usuario o el sistema (KeyboardInterrupt/SystemExit).")
+    except Exception as e:
+        logging.critical(f"Error fatal no capturado en el nivel superior de asyncio.run: {e}", exc_info=True)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    """Punto de entrada para ejecución directa (python run_lanzador.py)."""
+    ConfigLoader.initialize_service(_service_name)
+    main(_service_name)

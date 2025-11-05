@@ -50,11 +50,11 @@ async def main():
             contrasena=cfg_sql_sam["contrasena"],
         )
 
-        aa_cfg = ConfigManager.get_aa_config()
+        aa_cfg = ConfigManager.get_aa360_config()
         aa_client = AutomationAnywhereClient(
-            control_room_url=aa_cfg["url_cr"],
-            username=aa_cfg["usuario"],
-            password=aa_cfg.get("pwd"),
+            cr_url=aa_cfg["url_cr"],
+            cr_user=aa_cfg["usuario"],
+            cr_pwd=aa_cfg.get("pwd"),
             api_key=aa_cfg.get("api_key"),
             api_timeout_seconds=aa_cfg.get("api_timeout_seconds"),
         )
@@ -78,4 +78,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

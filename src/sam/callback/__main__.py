@@ -1,11 +1,12 @@
 # sam/callback/__main__.py
-"""Entry point for callback service"""
+"""
+Punto de entrada para `uv run -m sam.callback`
+"""
 
 from sam.common.config_loader import ConfigLoader
 
-from .run_callback import main
+from .run_callback import main  # noqa: I001
 
-ConfigLoader.initialize_service("callback")
-
-if __name__ == "__main__":
-    main()
+SERVICE_NAME = "callback"
+ConfigLoader.initialize_service(SERVICE_NAME)
+main(SERVICE_NAME)

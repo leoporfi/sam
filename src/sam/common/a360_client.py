@@ -22,19 +22,19 @@ class AutomationAnywhereClient:
 
     CONCILIADOR_BATCH_SIZE = 50  # Procesar de 50 en 50 para evitar timeouts
 
-    def __init__(self, control_room_url: str, username: str, password: Optional[str] = None, **kwargs):
-        self.url_base = control_room_url.strip("/")
-        self.username = username
-        self.password = password
-        self.api_key = kwargs.get("api_key")
-        self.api_timeout = kwargs.get("api_timeout_seconds", 60)
+    def __init__(self, cr_url: str, cr_user: str, cr_pwd: Optional[str] = None, **kwargs):
+        self.cr_url = cr_url.strip("/")
+        self.cr_user = cr_user
+        self.cr_pwd = cr_pwd
+        self.cr_api_key = kwargs.get("cr_api_key")
+        self.cr_api_timeout = kwargs.get("api_timeout_seconds", 60)
         self.callback_url_deploy = kwargs.get("callback_url_deploy")
 
         self._token: Optional[str] = None
         self._token_lock = asyncio.Lock()
 
-        self._client = httpx.AsyncClient(base_url=self.url_base, verify=False, timeout=self.api_timeout)
-        logger.info(f"Cliente API Asíncrono inicializado para CR: {self.url_base}")
+        self._client = httpx.AsyncClient(base_url=self.cr_url, verify=False, timeout=self.cr_api_timeout)
+        logger.info(f"Cliente API Asíncrono inicializado para CR: {self.cr_url}")
 
     # --- Métodos Internos: Gestión de Token y Peticiones ---
 
@@ -45,15 +45,15 @@ class AutomationAnywhereClient:
         else:
             logger.info("Obteniendo token de A360...")
 
-        payload = {"username": self.username}
+        payload = {"username": self.cr_user}
 
         # Priorizar apiKey si está disponible y no es una cadena vacía
-        if self.api_key:
-            payload["apiKey"] = self.api_key
+        if self.cr_api_key:
+            payload["apiKey"] = self.cr_api_key
             logger.info("Intentando autenticación con apiKey.")
         # Si no hay apiKey, usar la contraseña como fallback
-        elif self.password:
-            payload["password"] = self.password
+        elif self.cr_pwd:
+            payload["password"] = self.cr_pwd
             logger.info("Intentando autenticación con contraseña.")
         else:
             # Si no hay ni apiKey ni contraseña, es un error de configuración
@@ -252,7 +252,7 @@ class AutomationAnywhereClient:
                 all_details.extend(response_json.get("list", []))
             except httpx.ReadTimeout:
                 logger.error(
-                    f"Timeout ({self.api_timeout}s) al procesar un lote de {len(batch_ids)} deployment IDs. Lote omitido. IDs: {batch_ids}."
+                    f"Timeout ({self.cr_api_timeout}s) al procesar un lote de {len(batch_ids)} deployment IDs. Lote omitido. IDs: {batch_ids}."
                 )
             except Exception as e:
                 logger.error(f"Error al procesar un lote de deployment IDs. Lote omitido. Error: {e}", exc_info=True)

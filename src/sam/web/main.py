@@ -26,16 +26,16 @@ async def lifespan(app: FastAPI):
 
     # Obtener configs
     # 1: Usar el método correcto get_aa_config()
-    aa_config = ConfigManager.get_aa_config()
+    aa_config = ConfigManager.get_aa360_config()
 
     # Crear cliente A360
     # 2: Usar las claves correctas de tu configuración
     aa_client = AutomationAnywhereClient(
-        control_room_url=aa_config["url_cr"],
-        username=aa_config["usuario"],
-        password=aa_config.get("pwd"),
-        api_key=aa_config.get("api_key"),
-        api_timeout_seconds=aa_config.get("timeout", 60),
+        cr_url=aa_config["cr_url"],
+        cr_user=aa_config["cr_user"],
+        cr_pwd=aa_config.get("cr_pwd"),
+        cr_api_key=aa_config.get("cr_api_key"),
+        api_timeout_seconds=aa_config.get("api_timeout_seconds", 60),
     )
 
     # Inyectar el cliente A360 en el proveedor de dependencias
