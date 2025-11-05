@@ -192,7 +192,7 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
 
     return html.tr(
         {"key": equipo["EquipoId"]},
-        html.td(equipo["Equipo"]),
+        html.td({"title":equipo["UserName"]},equipo["Equipo"]),
         html.td(equipo.get("Licencia") or "N/A"),
         html.td(
             html.label(
