@@ -1,6 +1,6 @@
 # sam/lanzador/service/conciliador.py
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import pytz
@@ -18,20 +18,18 @@ class Conciliador:
     de ejecuciones entre SAM y Automation Anywhere.
     """
 
-    def __init__(
-        self, db_connector: DatabaseConnector, aa_client: AutomationAnywhereClient, max_intentos_fallidos: int
-    ):
+    def __init__(self, db_connector: DatabaseConnector, aa_client: AutomationAnywhereClient, config: dict):
         """
         Inicializa el Conciliador con sus dependencias.
 
         Args:
             db_connector: Conector a la base de datos de SAM.
             aa_client: Cliente para la API de Automation Anywhere.
-            max_intentos_fallidos: Umbral para marcar una ejecución como UNKNOWN.
+            max_intentos_fallidos: Parámetro legacy (no usado, mantener por compatibilidad).
         """
         self._db_connector = db_connector
         self._aa_client = aa_client
-        self._max_intentos_fallidos = max_intentos_fallidos
+        self._config = config
         self.ESTADOS_VALIDOS_API = {
             "COMPLETED",
             "DEPLOYED",
@@ -73,7 +71,8 @@ class Conciliador:
             detalles_api = await self._aa_client.obtener_detalles_por_deployment_ids(deployment_ids)
 
             self._actualizar_estados_encontrados(detalles_api, mapa_deploy_a_ejecucion)
-            self._gestionar_deployments_perdidos(deployment_ids, detalles_api, mapa_deploy_a_ejecucion)
+            self._gestionar_deployments_perdidos(deployment_ids, detalles_api)
+            self._marcar_unknown_por_antiguedad()
 
         except Exception as e:
             logger.error(f"Error grave durante el ciclo de conciliación: {e}", exc_info=True)
@@ -84,7 +83,8 @@ class Conciliador:
             return
 
         updates_params = []
-        ids_para_incrementar_intento = []
+        ids_para_resetear_intento = []
+
         for detalle in detalles_api:
             dep_id = detalle.get("deploymentId")
             status_api = detalle.get("status")
@@ -93,20 +93,28 @@ class Conciliador:
 
             if not all([dep_id, status_api, ejecucion_id]):
                 continue
+
+            # Si A360 explícitamente retorna UNKNOWN, lo respetamos
             if status_api == "UNKNOWN":
                 logger.warning(
-                    f"Deployment {dep_id} (EjecucionId {ejecucion_id}) reportó 'UNKNOWN' desde A360. Se incrementa contador y se reintentará."
+                    f"A360 retornó estado UNKNOWN para Deployment {dep_id} (EjecucionId {ejecucion_id}). Marcando como UNKNOWN."
                 )
-                ids_para_incrementar_intento.append(ejecucion_id)
-                continue  # No lo añadimos a 'updates_params'
-            # Código existente para estados válidos
+                fecha_fin_dt = self._convertir_utc_a_local_sam(end_date_str)
+                updates_params.append(("UNKNOWN", fecha_fin_dt, ejecucion_id))
+                continue
+
+            # Mapeo de estado
             final_status_db = "RUNNING" if status_api == "UPDATE" else status_api
             if final_status_db not in self.ESTADOS_VALIDOS_API:
                 continue
 
             fecha_fin_dt = self._convertir_utc_a_local_sam(end_date_str)
             updates_params.append((final_status_db, fecha_fin_dt, ejecucion_id))
-        # Actualizar estados finales (COMPLETED, RUN_FAILED, etc.)
+
+            # Si encontramos el deployment, resetear contador
+            ids_para_resetear_intento.append(ejecucion_id)
+
+        # Actualizar estados
         if updates_params:
             query = """
                 UPDATE dbo.Ejecuciones
@@ -115,71 +123,67 @@ class Conciliador:
             """
             affected_count = self._db_connector.ejecutar_consulta_multiple(
                 query, updates_params, usar_fast_executemany=False
-            )  # Usar fast_executemany=False por simplicidad con pyodbc
+            )
             logger.info(f"Se actualizaron {affected_count} registros de ejecuciones desde la API.")
 
-        # Incrementar contador para los que respondieron UNKNOWN
-        if ids_para_incrementar_intento:
-            placeholders = ",".join("?" * len(ids_para_incrementar_intento))
-            query_increment = f"UPDATE dbo.Ejecuciones SET IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1, FechaActualizacion = GETDATE() WHERE EjecucionId IN ({placeholders}) AND CallbackInfo IS NULL;"
-            self._db_connector.ejecutar_consulta(query_increment, tuple(ids_para_incrementar_intento), es_select=False)
-
-    def _gestionar_deployments_perdidos(
-        self, deployment_ids_en_db: list, detalles_api: list, mapa_deploy_a_ejecucion: dict
-    ):
-        """Gestiona los deployments que no fueron devueltos por la API de A360."""
+    def _gestionar_deployments_perdidos(self, deployment_ids_en_db: list, detalles_api: list):
+        """Incrementa contador para deployments no encontrados en la respuesta de A360."""
         ids_encontrados_api = {item.get("deploymentId") for item in detalles_api}
         ids_perdidos = [dep_id for dep_id in deployment_ids_en_db if dep_id not in ids_encontrados_api]
 
         if not ids_perdidos:
             return
 
-        ejecucion_ids_perdidos = [
-            mapa_deploy_a_ejecucion[dep_id] for dep_id in ids_perdidos if dep_id in mapa_deploy_a_ejecucion
-        ]
-        if not ejecucion_ids_perdidos:
+        # Solo incrementar contador (sin límite)
+        placeholders = ",".join("?" * len(ids_perdidos))
+        query_increment = f"""
+            UPDATE dbo.Ejecuciones
+            SET IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1,
+                FechaActualizacion = GETDATE()
+            WHERE DeploymentId IN ({placeholders})
+            AND CallbackInfo IS NULL;
+        """
+        self._db_connector.ejecutar_consulta(query_increment, tuple(ids_perdidos), es_select=False)
+        logger.info(
+            f"Incrementado contador para {len(ids_perdidos)} deployment(s) no encontrados. "
+            f"Se reintentarán en próxima conciliación."
+        )
+
+    def _marcar_unknown_por_antiguedad(self):
+        """Marca como UNKNOWN ejecuciones que superan el umbral de días de tolerancia."""
+        dias_tolerancia = self._config.get("dias_tolerancia_unknown", 90)
+
+        query_select = """
+            SELECT EjecucionId, DeploymentId, Hora
+            FROM dbo.Ejecuciones
+            WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED', 'UNKNOWN')
+            AND CallbackInfo IS NULL
+            AND DATEDIFF(DAY, Hora, GETDATE()) > ?
+        """
+
+        ejecuciones_antiguas = self._db_connector.ejecutar_consulta(query_select, (dias_tolerancia,), es_select=True)
+
+        if not ejecuciones_antiguas:
             return
 
-        # Incrementar contador para los "perdidos" (no vinieron en la respuesta de la API)
-        placeholders = ",".join("?" * len(ejecucion_ids_perdidos))
-        query_increment = f"UPDATE dbo.Ejecuciones SET IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1, FechaActualizacion = GETDATE() WHERE EjecucionId IN ({placeholders}) AND CallbackInfo IS NULL;"
-        self._db_connector.ejecutar_consulta(query_increment, tuple(ejecucion_ids_perdidos), es_select=False)
-        logger.info(
-            f"Incrementado contador de intentos para {len(ejecucion_ids_perdidos)} deployment(s) 'perdidos' (no encontrados en la API)."
-        )
+        ids_a_actualizar = [reg["EjecucionId"] for reg in ejecuciones_antiguas]
 
-        query_unknown = f"UPDATE dbo.Ejecuciones SET Estado = 'UNKNOWN', FechaFin = GETDATE(), FechaActualizacion = GETDATE() WHERE EjecucionId IN ({placeholders}) AND IntentosConciliadorFallidos >= ?;"
-        params_unknown = tuple(ejecucion_ids_perdidos) + (self._max_intentos_fallidos,)
-        count_unknown = self._db_connector.ejecutar_consulta(query_unknown, params_unknown, es_select=False)
+        for reg in ejecuciones_antiguas:
+            logger.warning(
+                f"Deployment {reg['DeploymentId']} (EjecucionId {reg['EjecucionId']}) marcado como UNKNOWN "
+                f"tras {dias_tolerancia} días sin respuesta de A360. Hora programada: {reg['Hora']}"
+            )
 
-        # IDs afectados por 'perdidos' O por 'UNKNOWN de API' (del paso anterior)
-        todos_los_ids_con_intentos = list(mapa_deploy_a_ejecucion.values())
-        placeholders_totales = ",".join("?" * len(todos_los_ids_con_intentos))
-        # 1. Seleccionar los que cruzaron el umbral (y aún no son UNKNOWN)
-        query_select_unknown = f"""
-            SELECT EjecucionId, DeploymentId
-            FROM dbo.Ejecuciones 
-            WHERE EjecucionId IN ({placeholders_totales})
-            AND IntentosConciliadorFallidos >= ?
-            AND Estado <> 'UNKNOWN'
+        placeholders = ",".join("?" * len(ids_a_actualizar))
+        query_update = f"""
+            UPDATE dbo.Ejecuciones
+            SET Estado = 'UNKNOWN',
+                FechaFin = GETDATE(),
+                FechaActualizacion = GETDATE()
+            WHERE EjecucionId IN ({placeholders});
         """
-        params_select = tuple(todos_los_ids_con_intentos) + (self._max_intentos_fallidos,)
-        registros_para_unknown = self._db_connector.ejecutar_consulta(
-            query_select_unknown, params_select, es_select=True
-        )
-
-        if registros_para_unknown:
-            ids_a_actualizar = [reg["EjecucionId"] for reg in registros_para_unknown]
-
-            # 2. Loguear cada uno
-            for reg in registros_para_unknown:
-                logger.warning(
-                    f"Deployment {reg['DeploymentId']} (EjecucionId {reg['EjecucionId']}) marcado como UNKNOWN tras superar {self._max_intentos_fallidos} intentos de conciliación (API respondió UNKNOWN o se perdió)."
-                )
-            # 3. Actualizar solo esos
-            placeholders_update = ",".join("?" * len(ids_a_actualizar))
-            query_unknown = f"UPDATE dbo.Ejecuciones SET Estado = 'UNKNOWN', FechaFin = GETDATE(), FechaActualizacion = GETDATE() WHERE EjecucionId IN ({placeholders_update});"
-            self._db_connector.ejecutar_consulta(query_unknown, tuple(ids_a_actualizar), es_select=False)
+        self._db_connector.ejecutar_consulta(query_update, tuple(ids_a_actualizar), es_select=False)
+        logger.info(f"Se marcaron {len(ids_a_actualizar)} ejecuciones como UNKNOWN por antigüedad.")
 
     def _convertir_utc_a_local_sam(self, fecha_utc_str: Optional[str]) -> Optional[datetime]:
         """Convierte una fecha en formato ISO UTC a la zona horaria local de SAM."""

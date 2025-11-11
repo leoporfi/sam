@@ -129,6 +129,9 @@ class ConfigManager:
             "pausa_lanzamiento": (pausa_inicio, pausa_fin),
             "max_workers_lanzador": int(cls._get_env_with_warning("LANZADOR_MAX_WORKERS", 10)),
             "conciliador_max_intentos_fallidos": int(cls._get_env_with_warning("CONCILIADOR_MAX_INTENTOS_FALLIDOS", 3)),
+            "conciliador_dias_tolerancia_unknown": int(
+                cls._get_env_with_warning("CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN", 30)
+            ),
             "shutdown_timeout_seg": int(cls._get_env_with_warning("LANZADOR_SHUTDOWN_TIMEOUT_SEG", 60)),
             "habilitar_sync": os.getenv("LANZADOR_HABILITAR_SYNC", "True").lower() == "true",
             "repeticiones": int(cls._get_env_with_warning("LANZADOR_BOT_INPUT_VUELTAS", 3)),
