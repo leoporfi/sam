@@ -15,6 +15,8 @@ dependencies = [
     "python-dateutil>=2.9.0.post0",
     "reactpy[fastapi]>=1.0.0",
     "reactpy-router>=2.0.0",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
 ]
 
 [project.optional-dependencies]
@@ -33,7 +35,7 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = [".","src"]
 addopts = "-v --cov=sam --cov-report=term-missing"
 asyncio_mode = "auto"
 

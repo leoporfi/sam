@@ -1,6 +1,4 @@
 # src/sam/common/database.py
-# MODIFICADO: Se añade el método `cerrar_conexiones_pool` para el cierre limpio en FastAPI.
-
 import logging
 import threading
 import time
@@ -234,7 +232,8 @@ class DatabaseConnector:
     def obtener_ejecuciones_en_curso(self) -> List[Dict]:
         return (
             self.ejecutar_consulta(
-                "SELECT EjecucionId, DeploymentId FROM dbo.Ejecuciones WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED', 'UNKNOWN')",
+                "SELECT EjecucionId, DeploymentId FROM dbo.Ejecuciones WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED', 'UNKNOWN')"
+                "ORDER BY EjecucionId ASC;",
                 es_select=True,
             )
             or []
