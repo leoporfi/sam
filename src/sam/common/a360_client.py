@@ -93,24 +93,24 @@ class AutomationAnywhereClient:
             response.raise_for_status()
             return response.json() if response.content else {}
         except httpx.HTTPStatusError as e:
-            # --- LÓGICA DE REFRESCO DE TOKEN ---
-            # Si el error es 401 (No Autorizado), el token probablemente expiró.
-            if e.response.status_code == 401:
-                logger.warning(
-                    "Recibido error 401 (No Autorizado). El token puede haber expirado. Intentando reautenticar..."
-                )
+            status_code = e.response.status_code
 
-                # Forzar la obtención de un nuevo token
+            # Loguear errores conocidos como WARNING
+            if status_code in (400, 412):
+                logger.warning(f"Error {status_code} en {endpoint}: {e.response.text[:200]}")
+
+            # Lógica de refresco de token para 401
+            if status_code == 401:
+                logger.warning("Recibido error 401. Intentando reautenticar...")
                 await self._asegurar_validez_del_token(is_retry=True)
 
-                # Reintentar la petición original UNA VEZ MÁS con el nuevo token
-                logger.info(f"Reintentando la petición a {endpoint} con el nuevo token...")
+                logger.info(f"Reintentando petición a {endpoint} con nuevo token...")
                 response_retry = await self._client.request(method, endpoint, **kwargs)
                 response_retry.raise_for_status()
                 return response_retry.json() if response_retry.content else {}
-            else:
-                # Si es otro error HTTP, simplemente lo relanzamos
-                raise
+
+            # Re-lanzar para que el llamador maneje otros errores
+            raise
 
     async def _obtener_lista_paginada_entidades(self, endpoint: str, payload: Dict) -> List[Dict]:
         """
@@ -321,7 +321,12 @@ class AutomationAnywhereClient:
             logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
             return response
         except Exception as e:
-            logger.error(f"Fallo en el despliegue del bot {file_id}: {e}", exc_info=True)
+            if isinstance(e, httpx.HTTPStatusError) and e.response.status_code in (400, 412):
+                logger.warning(f"Fallo en el despliegue del bot {file_id}: {e}")
+            elif isinstance(e, (httpx.ReadTimeout, httpx.TimeoutException)):
+                logger.warning(f"Timeout en despliegue del bot {file_id}")
+            else:
+                logger.error(f"Fallo en el despliegue del bot {file_id}: {e}", exc_info=True)
             return {"error": str(e)}
 
     async def close(self):
