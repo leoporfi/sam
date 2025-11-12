@@ -146,55 +146,6 @@ class Conciliador:
                 f"Se reintentarán en próximos ciclos."
             )
 
-    def _actualizar_estados_encontrados_old(self, detalles_api: list, mapa_deploy_a_ejecucion: dict):
-        """Actualiza la BD con los estados de los deployments encontrados en la API."""
-        if not detalles_api:
-            return
-
-        updates_params = []
-        ids_para_resetear_intento = []
-
-        for detalle in detalles_api:
-            dep_id = detalle.get("deploymentId")
-            status_api = detalle.get("status")
-            end_date_str = detalle.get("endDateTime")
-            ejecucion_id = mapa_deploy_a_ejecucion.get(dep_id)
-
-            if not all([dep_id, status_api, ejecucion_id]):
-                continue
-
-            # Si A360 explícitamente retorna UNKNOWN, lo respetamos
-            if status_api == "UNKNOWN":
-                logger.warning(
-                    f"A360 retornó estado UNKNOWN para Deployment {dep_id} (EjecucionId {ejecucion_id}). Marcando como UNKNOWN."
-                )
-                fecha_fin_dt = self._convertir_utc_a_local_sam(end_date_str)
-                updates_params.append(("UNKNOWN", fecha_fin_dt, ejecucion_id))
-                continue
-
-            # Mapeo de estado
-            final_status_db = "RUNNING" if status_api == "UPDATE" else status_api
-            if final_status_db not in self.ESTADOS_VALIDOS_API:
-                continue
-
-            fecha_fin_dt = self._convertir_utc_a_local_sam(end_date_str)
-            updates_params.append((final_status_db, fecha_fin_dt, ejecucion_id))
-
-            # Si encontramos el deployment, resetear contador
-            ids_para_resetear_intento.append(ejecucion_id)
-
-        # Actualizar estados
-        if updates_params:
-            query = """
-                UPDATE dbo.Ejecuciones
-                SET Estado = ?, FechaFin = ?, FechaActualizacion = GETDATE(), IntentosConciliadorFallidos = 0
-                WHERE EjecucionId = ? AND CallbackInfo IS NULL;
-            """
-            affected_count = self._db_connector.ejecutar_consulta_multiple(
-                query, updates_params, usar_fast_executemany=False
-            )
-            logger.info(f"Se actualizaron {affected_count} registros de ejecuciones desde la API.")
-
     def _gestionar_deployments_perdidos(self, deployment_ids_en_db: list, detalles_api: list):
         """Incrementa contador para deployments no encontrados en la respuesta de A360."""
         ids_encontrados_api = {item.get("deploymentId") for item in detalles_api}
