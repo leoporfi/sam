@@ -109,6 +109,22 @@ class ApiClient:
         return await self._request("POST", f"/api/robots/{robot_id}/asignaciones", json_data=data)
 
     # MÉTODOS PARA PROGRAMACIONES (SCHEDULES)
+    async def get_schedules(self, params: Optional[Dict] = None) -> Dict:
+        """
+        Obtiene la lista paginada de programaciones.
+        """
+        return await self._request("GET", "/api/schedules", params=params)
+
+    async def toggle_schedule_status(self, schedule_id: int, activo: bool) -> Dict:
+        """
+        Cambia el estado 'Activo' de una programación.
+        """
+        payload = {"Activo": activo}
+        return await self._request("PATCH", f"/api/schedules/{schedule_id}/status", json_data=payload)
+
+    async def get_all_schedules_legacy(self) -> List[Dict]:
+        return await self._request("GET", "/api/schedules/all")
+
     async def get_all_schedules(self) -> List[Dict]:
         return await self._request("GET", "/api/schedules")
 
@@ -119,7 +135,17 @@ class ApiClient:
         return await self._request("POST", "/api/schedules", json_data=schedule_data)
 
     async def update_schedule(self, schedule_id: int, schedule_data: Dict) -> Dict:
+        """
+        Actualiza una programación completa.
+        """
         return await self._request("PUT", f"/api/schedules/{schedule_id}", json_data=schedule_data)
+
+    async def update_schedule_details(self, schedule_id: int, data: dict) -> Dict:
+        """
+        Usa el endpoint 'details' que no requiere el campo 'Equipos'.
+        Usado por la página de Programaciones.
+        """
+        return await self._request("PUT", f"/api/schedules/{schedule_id}/details", json_data=data)
 
     async def delete_schedule(self, schedule_id: int, robot_id: int) -> Dict:
         return await self._request("DELETE", f"/api/schedules/{schedule_id}/robot/{robot_id}")

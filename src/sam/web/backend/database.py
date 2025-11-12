@@ -1,13 +1,20 @@
 # Agrega estas importaciones al inicio del archivo database.py
 import asyncio
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.database import DatabaseConnector
 from sam.common.sincronizador_comun import SincronizadorComun
 
-from .schemas import EquipoCreateRequest, RobotCreateRequest, RobotUpdateRequest, ScheduleData
+from .schemas import (
+    AssignmentUpdateRequest,
+    EquipoCreateRequest,
+    RobotCreateRequest,
+    RobotUpdateRequest,
+    ScheduleData,
+    ScheduleEditData,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +288,7 @@ def get_available_devices_for_robot_inline(db: DatabaseConnector, robot_id: int)
             -- Equipos reservados manualmente o asignados dinámicamente por CUALQUIER robot
             SELECT DISTINCT EquipoId
             FROM dbo.Asignaciones
-            WHERE Reservado = 1 
+            WHERE Reservado = 1
                OR (EsProgramado = 0 AND Reservado = 0)
         ),
         EquiposYaAsignados AS (
@@ -366,7 +373,6 @@ def delete_schedule(db: DatabaseConnector, programacion_id: int, robot_id: int):
 
 
 def create_schedule(db: DatabaseConnector, data: ScheduleData):
-    # RFR-25: Se implementa la función para llamar al SP unificado.
     robot_nombre_result = db.ejecutar_consulta(
         "SELECT Robot FROM dbo.Robots WHERE RobotId = ?", (data.RobotId,), es_select=True
     )
@@ -400,7 +406,17 @@ def create_schedule(db: DatabaseConnector, data: ScheduleData):
 
 
 def update_schedule(db: DatabaseConnector, schedule_id: int, data: ScheduleData):
-    # RFR-25: Se implementa la función para llamar al SP de actualización.
+    """
+    Función COMPLEJA usada por el MODAL DE ROBOTS.
+    Llama a 'ActualizarProgramacionCompleta' con Equipos.
+    """
+    if data.TipoProgramacion == "Semanal" and not data.DiasSemana:
+        raise ValueError("Para programación Semanal, se requieren DiasSemana.")
+    if data.TipoProgramacion == "Mensual" and not data.DiaDelMes:
+        raise ValueError("Para programación Mensual, se requiere DiaDelMes.")
+    if data.TipoProgramacion == "Especifica" and not data.FechaEspecifica:
+        raise ValueError("Para programación Específica, se requiere FechaEspecifica.")
+
     equipos_str = ""
     if data.Equipos:
         placeholders = ",".join("?" for _ in data.Equipos)
@@ -418,13 +434,97 @@ def update_schedule(db: DatabaseConnector, schedule_id: int, data: ScheduleData)
         data.RobotId,
         data.TipoProgramacion,
         data.HoraInicio,
-        data.DiasSemana,
-        data.DiaDelMes,
-        data.FechaEspecifica,
+        data.DiasSemana or None,
+        data.DiaDelMes or None,
+        data.FechaEspecifica or None,
         data.Tolerancia,
         equipos_str,
     )
     db.ejecutar_consulta(query, params, es_select=False)
+
+
+def update_schedule_simple(db: DatabaseConnector, schedule_id: int, data: ScheduleEditData):
+    """
+    Función SIMPLE usada por la PÁGINA DE PROGRAMACIONES.
+    Llama a 'ActualizarProgramacionSimple'.
+    """
+    # (Validación...)
+    if data.TipoProgramacion == "Semanal" and not data.DiasSemana:
+        raise ValueError("Para programación Semanal, se requieren DiasSemana.")
+    if data.TipoProgramacion == "Mensual" and not data.DiaDelMes:
+        raise ValueError("Para programación Mensual, se requiere DiaDelMes.")
+    if data.TipoProgramacion == "Especifica" and not data.FechaEspecifica:
+        raise ValueError("Para programación Específica, se requiere FechaEspecifica.")
+
+    sql = """
+        EXEC dbo.ActualizarProgramacionSimple
+            @ProgramacionId=?, 
+            @TipoProgramacion=?, 
+            @HoraInicio=?, 
+            @DiasSemana=?, 
+            @DiaDelMes=?, 
+            @FechaEspecifica=?, 
+            @Tolerancia=?,
+            @Activo=?
+    """
+    params = (
+        schedule_id,
+        data.TipoProgramacion,
+        data.HoraInicio,
+        data.DiasSemana or None,
+        data.DiaDelMes or None,
+        data.FechaEspecifica or None,
+        data.Tolerancia,
+        data.Activo,
+    )
+    db.ejecutar_consulta(sql, params, es_select=False)
+
+
+def get_schedules_paginated(
+    db: DatabaseConnector,
+    robot_id: Optional[int],
+    tipo: Optional[str],
+    activo: Optional[bool],
+    page: int,
+    size: int,
+) -> dict:
+    """
+    Llama al SP dbo.ListarProgramacionesPaginadas (versión de 1 resultset)
+    """
+    offset = (page - 1) * size
+
+    # 1. Parámetros como tupla simple
+    params = (robot_id, tipo, activo, size, offset)
+
+    # 2. Sintaxis SQL EXEC simple (la más compatible con pyodbc.execute)
+    sql = "EXEC dbo.ListarProgramacionesPaginadas ?, ?, ?, ?, ?"
+
+    # 3. Usar 'ejecutar_consulta' (singular) con es_select=True
+    #    Esto devuelve una Lista de Diccionarios (List[Dict])
+    results = db.ejecutar_consulta(sql, params, es_select=True)
+
+    total = 0
+    schedules = []
+
+    if results:
+        # 4. 'results' es una lista de diccionarios.
+        #    Obtenemos el total de la clave 'TotalRows' de la *primera fila*.
+        total = results[0].get("TotalRows", 0)
+
+        # 5. La lista de programaciones es la lista completa de resultados
+        schedules = results
+
+        # 6. (Opcional pero recomendado) Limpiamos la clave 'TotalRows'
+        #    para no enviarla al frontend.
+        for s in schedules:
+            s.pop("TotalRows", None)
+
+    return {"schedules": schedules, "total_count": total}
+
+
+def toggle_schedule_active(db: DatabaseConnector, schedule_id: int, activo: bool):
+    sql = "UPDATE dbo.Programaciones SET Activo=? WHERE ProgramacionId=?"
+    db.ejecutar_consulta(sql, (activo, schedule_id), es_select=False)
 
 
 # Pool
@@ -534,7 +634,7 @@ def create_equipo(db: DatabaseConnector, equipo_data: EquipoCreateRequest) -> Di
             raise Exception("La inserción no devolvió el nuevo equipo.")
         logger.info(f"Equipo {equipo_data.EquipoId} creado exitosamente.")
         return new_equipo_list[0]
-    except pyodbc.IntegrityError as e:
+    except pyodbc.IntegrityError as e:  # type: ignore  # noqa: F821
         # Captura error de clave duplicada
         if "Violation of PRIMARY KEY constraint" in str(e) or "duplicate key" in str(e).lower():
             logger.warning(f"Intento de crear equipo duplicado: ID={equipo_data.EquipoId}")

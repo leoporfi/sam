@@ -23,6 +23,7 @@ from .schemas import (
     RobotCreateRequest,
     RobotUpdateRequest,
     ScheduleData,
+    ScheduleEditData,
 )
 
 logger = logging.getLogger(__name__)
@@ -214,12 +215,34 @@ def create_robot(robot_data: RobotCreateRequest, db: DatabaseConnector = Depends
 # ------------------------------------------------------------------
 # Schedules
 # ------------------------------------------------------------------
-@router.get("/api/schedules", tags=["Programaciones"])
-def get_all_schedules(db: DatabaseConnector = Depends(get_db)):
+# ------------------------------------------------------------------
+# Schedules  (legacy – usado por SchedulesList en el modal)
+# ------------------------------------------------------------------
+@router.get("/api/schedules/all", tags=["Programaciones"])  # ← cambié ruta para no pisar
+def get_all_schedules_legacy(db: DatabaseConnector = Depends(get_db)):
     try:
         return db_service.get_all_schedules(db)
     except Exception as e:
-        _handle_endpoint_errors("get_all_schedules", e, "Programaciones")
+        _handle_endpoint_errors("get_all_schedules_legacy", e, "Programaciones")
+
+
+# ------------------------------------------------------------------
+# Schedules – nueva página paginada
+# ------------------------------------------------------------------
+@router.get("/api/schedules", tags=["Programaciones"])
+def get_schedules(
+    db: DatabaseConnector = Depends(get_db),
+    robot_id: Optional[int] = Query(None, alias="robot"),
+    tipo: Optional[str] = Query(None),
+    activo: Optional[bool] = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+):
+    """Listado paginado de programaciones con filtros."""
+    try:
+        return db_service.get_schedules_paginated(db, robot_id=robot_id, tipo=tipo, activo=activo, page=page, size=size)
+    except Exception as e:
+        _handle_endpoint_errors("get_schedules", e, "Programaciones")
 
 
 @router.get("/api/schedules/robot/{robot_id}", tags=["Programaciones"])
@@ -238,6 +261,22 @@ def delete_schedule(programacion_id: int, robot_id: int, db: DatabaseConnector =
         db_service.delete_schedule(db, programacion_id, robot_id)
     except Exception as e:
         _handle_endpoint_errors("delete_schedule", e, "Programación", programacion_id)
+
+
+@router.get("/api/schedules", tags=["Programaciones"], response_model=dict)
+def get_schedules(
+    db: DatabaseConnector = Depends(get_db),
+    robot_id: Optional[int] = Query(None, alias="robot"),
+    tipo: Optional[str] = Query(None),
+    activo: Optional[bool] = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+):
+    """Listado paginado de programaciones con filtros."""
+    try:
+        return db_service.get_schedules_paginated(db, robot_id=robot_id, tipo=tipo, activo=activo, page=page, size=size)
+    except Exception as e:
+        _handle_endpoint_errors("get_schedules", e, "Programaciones")
 
 
 @router.post("/api/schedules", tags=["Programaciones"])
@@ -260,6 +299,41 @@ def update_schedule(schedule_id: int, data: ScheduleData, db: DatabaseConnector 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
         _handle_endpoint_errors("update_schedule", e, "Programación", schedule_id)
+
+
+@router.patch("/api/schedules/{schedule_id}/status", tags=["Programaciones"], status_code=200)
+def toggle_schedule_status(
+    schedule_id: int,
+    body: dict,  # CORRECCIÓN: Simplificado de 'Body(..., embed=True)' a 'dict'
+    db: DatabaseConnector = Depends(get_db),
+):
+    """Cambio rápido de estado Activo. Espera: {"Activo": true/false}"""
+    try:
+        activo = body.get("Activo")
+        if activo is None:
+            raise ValueError("El cuerpo debe contener la clave 'Activo'")
+        db_service.toggle_schedule_active(db, schedule_id, activo)
+        return {"message": "Estado actualizado"}
+    except Exception as e:
+        _handle_endpoint_errors("toggle_schedule_status", e, "Programación", schedule_id)
+
+
+@router.put("/api/schedules/{schedule_id}/details", tags=["Programaciones"], status_code=status.HTTP_204_NO_CONTENT)
+def update_schedule_details(
+    schedule_id: int,
+    data: ScheduleEditData,
+    db: DatabaseConnector = Depends(get_db),
+):
+    """
+    Endpoint de edición simple desde la página de Programaciones.
+    No requiere el campo 'Equipos'.
+    """
+    try:
+        # Reutiliza la función de base de datos 'update_schedule'
+        # (que ahora acepta ScheduleEditData gracias al Union)
+        db_service.update_schedule_simple(db, schedule_id, data)
+    except Exception as e:
+        _handle_endpoint_errors("update_schedule_details", e, "Programación", schedule_id)
 
 
 # ------------------------------------------------------------------

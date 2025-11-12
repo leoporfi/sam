@@ -192,7 +192,7 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
 
     return html.tr(
         {"key": equipo["EquipoId"]},
-        html.td({"title":equipo["UserName"]},equipo["Equipo"]),
+        html.td({"title": equipo["UserName"]}, equipo["Equipo"]),
         html.td(equipo.get("Licencia") or "N/A"),
         html.td(
             html.label(
@@ -283,7 +283,10 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
             html.p(
                 "Tipo Asig.: ",
                 html.span(
-                    {"class_name": f"tag {'tag-ejecucion-programado' if is_programado else 'tag-ejecucion-demanda'}"},
+                    {
+                        "title": balanceo_title,
+                        "class_name": f"tag {'tag-ejecucion-programado' if is_programado else 'tag-ejecucion-demanda'}",
+                    },
                     "Programado" if is_programado else "Dinámico",
                 )
                 if equipo.get("RobotAsignado") not in [None, "N/A"]

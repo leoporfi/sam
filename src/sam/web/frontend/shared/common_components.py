@@ -1,6 +1,7 @@
-from typing import Callable, List
+from typing import Callable, List, Optional
 
-from reactpy import component, hooks, html
+from reactpy import component, html
+from reactpy_router import link
 
 
 @component
@@ -127,6 +128,30 @@ def LoadingSpinner(size: str = "medium"):
 
 
 @component
+def ErrorMessage(error: Optional[str]):
+    """
+    Muestra un mensaje de error en un 'article' de PicoCSS si el error no es None.
+    """
+    if not error:
+        return None
+
+    return html.article(
+        {
+            "style": {
+                "backgroundColor": "var(--pico-color-red-200)",
+                "borderColor": "var(--pico-color-red-600)",
+                "color": "var(--pico-color-red-900)",
+                "padding": "1em",
+                "marginBottom": "1em",
+            },
+            "role": "alert",
+        },
+        html.strong("Error: "),
+        str(error),
+    )
+
+
+@component
 def ActionMenu(actions: List[dict]):
     """
     Menú desplegable de acciones que usa la estructura <details> de Pico.css.
@@ -210,4 +235,67 @@ def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Calla
                 ),
             ),
         ),
+    )
+
+
+@component
+def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state):
+    """Header de navegación con botones de sincronización globales."""
+    return html.header(
+        {"class_name": "sticky-header"},
+        html.div(
+            {"class_name": "container"},
+            html.nav(
+                html.ul(
+                    html.li(html.strong("SAM")),
+                    html.li(link({"to": "/"}, "Robots")),
+                    html.li(link({"to": "/equipos"}, "Equipos")),
+                    html.li(link({"to": "/pools"}, "Pools")),
+                    html.li(link({"to": "/programaciones"}, "Programaciones")),
+                ),
+                html.ul(
+                    html.li(
+                        html.button(
+                            {
+                                "on_click": robots_state.get("trigger_sync"),
+                                "disabled": robots_state.get("is_syncing", False),
+                                "aria-busy": str(robots_state.get("is_syncing", False)).lower(),
+                                "class_name": "pico-background-fuchsia-500",
+                                "data-tooltip": "Sincronizar Robots",
+                                "data-placement": "bottom",
+                            },
+                            html.i({"class_name": "fa-solid fa-robot"}),
+                        )
+                    ),
+                    html.li(
+                        html.button(
+                            {
+                                "on_click": equipos_state.get("trigger_sync"),
+                                "disabled": equipos_state.get("is_syncing", False),
+                                "aria-busy": str(equipos_state.get("is_syncing", False)).lower(),
+                                "class_name": "pico-background-purple-500",
+                                "data-tooltip": "Sincronizar Equipos",
+                                "data-placement": "bottom",
+                            },
+                            html.i({"class_name": "fa-solid fa-desktop"}),
+                        )
+                    ),
+                    html.li(ThemeSwitcher(is_dark=theme_is_dark, on_toggle=on_theme_toggle)),
+                ),
+            ),
+        ),
+    )
+
+
+@component
+def PageWithLayout(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state, children):
+    """Wrapper que incluye el header y la estructura principal en cada página."""
+    return html._(
+        HeaderNav(
+            theme_is_dark=theme_is_dark,
+            on_theme_toggle=on_theme_toggle,
+            robots_state=robots_state,
+            equipos_state=equipos_state,
+        ),
+        html.main({"class_name": "container"}, children),
     )

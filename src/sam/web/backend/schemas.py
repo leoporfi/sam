@@ -1,3 +1,4 @@
+from datetime import date, time
 from typing import List, Optional, TypedDict
 
 from pydantic import BaseModel, Field
@@ -26,13 +27,29 @@ class RobotUpdateRequest(BaseModel):
 
 class ScheduleData(BaseModel):
     RobotId: int
-    TipoProgramacion: str
+    TipoProgramacion: str = Field(..., max_length=50)
     HoraInicio: str
     Tolerancia: int
-    Equipos: List[int]  # Lista de EquipoId
+    Equipos: List[int]
     DiasSemana: Optional[str] = None
     DiaDelMes: Optional[int] = None
     FechaEspecifica: Optional[str] = None
+
+
+class ScheduleEditData(BaseModel):
+    """
+    Schema para editar una programación desde la página de Programaciones.
+    NO requiere la lista de equipos.
+    """
+
+    TipoProgramacion: str = Field(..., max_length=50)
+    HoraInicio: time
+    DiasSemana: Optional[str] = Field(None, max_length=50)
+    DiaDelMes: Optional[int] = None
+    FechaEspecifica: Optional[date] = None
+    Tolerancia: int
+    Activo: bool
+    # (Nota: No incluimos 'Equipos' a propósito)
 
 
 class AssignmentUpdateRequest(BaseModel):

@@ -127,7 +127,7 @@ async def _run_service(deps: Dict[str, Any]) -> None:
     """Inicializa y ejecuta la lógica principal del servicio (asíncrono)."""
     global _service_instance
 
-    lanzador_config = ConfigManager.get_lanzador_config()
+    cfg_lanzador = ConfigManager.get_lanzador_config()
     callback_token = ConfigManager.get_callback_server_config().get("token")
 
     sincronizador = Sincronizador(deps["db_connector"], deps["aa_client"])
@@ -135,20 +135,18 @@ async def _run_service(deps: Dict[str, Any]) -> None:
         deps["db_connector"],
         deps["aa_client"],
         deps["gateway_client"],
-        lanzador_config,
+        cfg_lanzador,
         callback_token,
     )
-    conciliador = Conciliador(
-        deps["db_connector"], deps["aa_client"], lanzador_config.get("conciliador_max_intentos_fallidos", 3)
-    )
-    sync_enabled = lanzador_config.get("habilitar_sync", False)
+    conciliador = Conciliador(deps["db_connector"], deps["aa_client"], cfg_lanzador)
+    sync_enabled = cfg_lanzador.get("habilitar_sync", False)
 
     _service_instance = LanzadorService(
         sincronizador,
         desplegador,
         conciliador,
         deps["notificador"],
-        lanzador_config,
+        cfg_lanzador,
         sync_enabled,
     )
 
@@ -162,8 +160,8 @@ async def _cleanup_resources() -> None:
 
     logging.info("Iniciando limpieza de recursos...")
 
-    lanzador_config = ConfigManager.get_lanzador_config()
-    shutdown_timeout = lanzador_config.get("shutdown_timeout_seg", 60)
+    cfg_lanzador = ConfigManager.get_lanzador_config()
+    shutdown_timeout = cfg_lanzador.get("shutdown_timeout_seg", 60)
 
     # 1. Esperar a que las tareas asíncronas terminen
     if _service_instance and hasattr(_service_instance, "_tasks") and _service_instance._tasks:
