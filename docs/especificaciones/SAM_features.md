@@ -14,22 +14,32 @@ And un cliente API para comunicarse con Automation Anywhere A360
 And una configuración que define los intervalos de ejecución de los ciclos  
 Scenario: Sincronización de Entidades desde A360  
 El servicio debe mantener las tablas maestras actualizadas con la realidad del Control Room.  
-Given existe un nuevo "taskbot" en A360 llamado "P123\_ProcesoFacturas"  
+Given existe un nuevo "taskbot" en A360 llamado "P123_ProcesoFacturas"  
 And existe un nuevo "device" conectado en A360  
 When el ciclo de sincronización se ejecuta  
 Then el servicio invoca al cliente de A360 para obtener la lista de robots y equipos  
-And se inserta un nuevo registro para "P123\_ProcesoFacturas" en la tabla \`Robots\` de SAM  
+And se inserta un nuevo registro para "P123_ProcesoFacturas" en la tabla \`Robots\` de SAM  
 And se inserta un nuevo registro para el equipo en la tabla \`Equipos\` de SAM
 
 Scenario: Lanzamiento de Robots Pendientes  
 El servicio debe identificar y desplegar los robots que están listos para ejecutarse.  
-Given el Stored Procedure \`ObtenerRobotsEjecutables\` retorna el "Robot\_X"  
-And el "Robot\_X" tiene un \`id\_robot\` de 1  
-And el "Robot\_X" requiere el \`id\_equipo\` de 5  
+Given el Stored Procedure \`ObtenerRobotsEjecutables\` retorna el "Robot_X"  
+And el "Robot_X" tiene un \`id_robot\` de 1  
+And el "Robot_X" requiere el \`id_equipo\` de 5  
 When el ciclo de lanzamiento se ejecuta  
-Then el servicio llama a la API de A360 para desplegar el bot con \`id\_robot=1\` en el \`id\_equipo=5\`  
-And el estado del "Robot\_X" en la base de datos se actualiza a "RUNNING"  
+Then el servicio llama a la API de A360 para desplegar el bot con \`id_robot=1\` en el \`id_equipo=5\`  
+And el estado del "Robot_X" en la base de datos se actualiza a "RUNNING"  
 And se guarda el \`deploymentId\` devuelto por la API
+
+Scenario: Conciliación de Estado UNKNOWN como Transitorio
+El conciliador debe tratar el estado 'UNKNOWN' de la API como transitorio y no como final, para evitar lanzamientos duplicados.
+Given una ejecución existe en la BD con EjecucionId = 123, Estado = 'RUNNING' y FechaFin = NULL
+When el ciclo de conciliación consulta la API de A360 por la ejecución 123
+And la API de A360 responde con status = 'UNKNOWN'
+Then el servicio actualiza la ejecución 123 a Estado = 'UNKNOWN'
+And el servicio actualiza la columna FechaUltimoUNKNOWN con la fecha y hora actual
+And el servicio incrementa IntentosConciliadorFallidos
+And la columna FechaFin para la ejecución 123 DEBE permanecer NULL
 
 ### **Feature: Gestión Dinámica de Recursos (Servicio Balanceador)**
 
@@ -43,13 +53,13 @@ And un conjunto de robots configurados con prioridades y límites de equipos
 And una carga de trabajo definida por la cantidad de tickets pendientes  
 Scenario: Asignación de Recursos por Aumento de Demanda  
 Si la carga de trabajo de un robot supera la capacidad actual, el sistema debe asignarle nuevos recursos.  
-Given el "Robot\_Contable" tiene 100 tickets pendientes  
+Given el "Robot_Contable" tiene 100 tickets pendientes  
 And su configuración permite un máximo de 5 equipos  
 And actualmente tiene solo 1 equipo asignado  
 When el ciclo del balanceador se ejecuta  
 Then el sistema identifica una alta demanda y una baja asignación  
-And el balanceador asigna 4 equipos adicionales al "Robot\_Contable" desde el pool disponible  
-And la decisión de "ASIGNAR\_DEMANDA" se registra en el histórico
+And el balanceador asigna 4 equipos adicionales al "Robot_Contable" desde el pool disponible  
+And la decisión de "ASIGNAR_DEMANDA" se registra en el histórico
 
 ### **Feature: Recepción de Notificaciones (Servicio de Callback)**
 
