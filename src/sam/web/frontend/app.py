@@ -2,85 +2,97 @@
 import asyncio
 import uuid
 
+# app.py - SECCIÓN DE IMPORTS
 from reactpy import component, html, use_effect, use_state
 from reactpy_router import browser_router, link, route
 
+# Componentes de páginas
 from .features.components.equipos_components import EquiposControls, EquiposDashboard
-from .features.components.pool_components import PoolsControls, PoolsDashboard
+from .features.components.pools_components import PoolsControls, PoolsDashboard
 from .features.components.robots_components import RobotsControls, RobotsDashboard
+from .features.components.schedules_components import SchedulesControls, SchedulesDashboard
+
+# Modales
 from .features.modals.equipos_modals import EquipoEditModal
 from .features.modals.pool_modals import PoolAssignmentsModal, PoolEditModal
 from .features.modals.robots_modals import AssignmentsModal, RobotEditModal, SchedulesModal
+from .features.modals.schedule_edit_modal import ScheduleEditModal
+
+# Hooks
 from .hooks.use_debounced_value_hook import use_debounced_value
 from .hooks.use_equipos_hook import use_equipos
 from .hooks.use_pools_hook import use_pools_management
 from .hooks.use_robots_hook import use_robots
-from .shared.common_components import ConfirmationModal, ThemeSwitcher
+from .hooks.use_schedules_hook import use_schedules
+
+# Layout
+# Componentes compartidos
+from .shared.common_components import ConfirmationModal, HeaderNav, PageWithLayout, ThemeSwitcher
 from .shared.notifications import NotificationContext, ToastContainer
 
+# # --- Header Component (dentro del router context) ---
+# @component
+# def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state):
+#     """Header de navegación con botones de sincronización globales."""
+#     return html.header(
+#         {"class_name": "sticky-header"},
+#         html.div(
+#             {"class_name": "container"},
+#             html.nav(
+#                 html.ul(
+#                     html.li(html.strong("SAM")),
+#                     html.li(link({"to": "/"}, "Robots")),
+#                     html.li(link({"to": "/equipos"}, "Equipos")),
+#                     html.li(link({"to": "/pools"}, "Pools")),
+#                     html.li(link({"to": "/programaciones"}, "Programaciones")),
+#                 ),
+#                 html.ul(
+#                     html.li(
+#                         html.button(
+#                             {
+#                                 "on_click": robots_state.get("trigger_sync"),
+#                                 "disabled": robots_state.get("is_syncing", False),
+#                                 "aria-busy": str(robots_state.get("is_syncing", False)).lower(),
+#                                 "class_name": "pico-background-fuchsia-500",
+#                                 "data-tooltip": "Sincronizar Robots",
+#                                 "data-placement": "bottom",
+#                             },
+#                             html.i({"class_name": "fa-solid fa-robot"}),
+#                         )
+#                     ),
+#                     html.li(
+#                         html.button(
+#                             {
+#                                 "on_click": equipos_state.get("trigger_sync"),
+#                                 "disabled": equipos_state.get("is_syncing", False),
+#                                 "aria-busy": str(equipos_state.get("is_syncing", False)).lower(),
+#                                 "class_name": "pico-background-purple-500",
+#                                 "data-tooltip": "Sincronizar Equipos",
+#                                 "data-placement": "bottom",
+#                             },
+#                             html.i({"class_name": "fa-solid fa-desktop"}),
+#                         )
+#                     ),
+#                     html.li(ThemeSwitcher(is_dark=theme_is_dark, on_toggle=on_theme_toggle)),
+#                 ),
+#             ),
+#         ),
+#     )
 
-# --- Header Component (dentro del router context) ---
-@component
-def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state):
-    """Header de navegación con botones de sincronización globales."""
-    return html.header(
-        {"class_name": "sticky-header"},
-        html.div(
-            {"class_name": "container"},
-            html.nav(
-                html.ul(
-                    html.li(html.strong("SAM")),
-                    html.li(link({"to": "/"}, "Robots")),
-                    html.li(link({"to": "/equipos"}, "Equipos")),
-                    html.li(link({"to": "/pools"}, "Pools")),
-                ),
-                html.ul(
-                    html.li(
-                        html.button(
-                            {
-                                "on_click": robots_state.get("trigger_sync"),
-                                "disabled": robots_state.get("is_syncing", False),
-                                "aria-busy": str(robots_state.get("is_syncing", False)).lower(),
-                                "class_name": "pico-background-fuchsia-500",
-                                "data-tooltip": "Sincronizar Robots",
-                                "data-placement": "bottom",
-                            },
-                            html.i({"class_name": "fa-solid fa-robot"}),
-                        )
-                    ),
-                    html.li(
-                        html.button(
-                            {
-                                "on_click": equipos_state.get("trigger_sync"),
-                                "disabled": equipos_state.get("is_syncing", False),
-                                "aria-busy": str(equipos_state.get("is_syncing", False)).lower(),
-                                "class_name": "pico-background-purple-500",
-                                "data-tooltip": "Sincronizar Equipos",
-                                "data-placement": "bottom",
-                            },
-                            html.i({"class_name": "fa-solid fa-desktop"}),
-                        )
-                    ),
-                    html.li(ThemeSwitcher(is_dark=theme_is_dark, on_toggle=on_theme_toggle)),
-                ),
-            ),
-        ),
-    )
 
-
-# --- Layout Wrapper para las páginas ---
-@component
-def PageWithLayout(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state, children):
-    """Wrapper que incluye el header y la estructura principal en cada página."""
-    return html._(
-        HeaderNav(
-            theme_is_dark=theme_is_dark,
-            on_theme_toggle=on_theme_toggle,
-            robots_state=robots_state,
-            equipos_state=equipos_state,
-        ),
-        html.main({"class_name": "container"}, children),
-    )
+# # --- Layout Wrapper para las páginas ---
+# @component
+# def PageWithLayout(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state, children):
+#     """Wrapper que incluye el header y la estructura principal en cada página."""
+#     return html._(
+#         HeaderNav(
+#             theme_is_dark=theme_is_dark,
+#             on_theme_toggle=on_theme_toggle,
+#             robots_state=robots_state,
+#             equipos_state=equipos_state,
+#         ),
+#         html.main({"class_name": "container"}, children),
+#     )
 
 
 # --- Componentes de Página (Lógica de cada ruta) ---
@@ -371,6 +383,87 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
 
 
 @component
+def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
+    """Lógica y UI para la página de Programaciones."""
+    robots_state = use_robots()
+    equipos_state = use_equipos()
+    schedules_state = use_schedules()
+
+    # Estado para filtros (como RobotsPage)
+    search_input, set_search_input = use_state("")
+    debounced_search = use_debounced_value(search_input, 300)
+    robot_filter, set_robot_filter = use_state(None)
+    tipo_filter, set_tipo_filter = use_state(None)
+
+    # Estado para modal
+    modal_sid, set_modal_sid = use_state(None)
+    modal_schedule, set_modal_schedule = use_state({})
+
+    # Efecto para sincronizar búsqueda
+    @use_effect(dependencies=[debounced_search])
+    def sync_search():
+        schedules_state["set_filters"](lambda prev: {**prev, "search": debounced_search or None})
+
+    # Efecto para sincronizar filtro de robot
+    @use_effect(dependencies=[robot_filter])
+    def sync_robot():
+        schedules_state["set_filters"](lambda prev: {**prev, "robot": robot_filter})
+
+    # Efecto para sincronizar filtro de tipo
+    @use_effect(dependencies=[tipo_filter])
+    def sync_tipo():
+        schedules_state["set_filters"](lambda prev: {**prev, "tipo": tipo_filter})
+
+    def open_edit_modal(sid: int):
+        schedule = next((s for s in schedules_state["schedules"] if s["ProgramacionId"] == sid), None)
+        if schedule:
+            set_modal_schedule(schedule)
+            set_modal_sid(sid)
+
+    # Renderizado directo (SIN condicionales complejos)
+    return PageWithLayout(
+        theme_is_dark=theme_is_dark,
+        on_theme_toggle=on_theme_toggle,
+        robots_state=robots_state,
+        equipos_state=equipos_state,
+        children=html._(
+            # Controles primero
+            SchedulesControls(
+                search=search_input,
+                on_search=set_search_input,
+                robot_filter=robot_filter,
+                on_robot=set_robot_filter,
+                tipo_filter=tipo_filter,
+                on_tipo=set_tipo_filter,
+                on_new=lambda: None,  # Placeholder
+                robots_list=robots_state["robots"],
+                is_searching=schedules_state["loading"],
+            ),
+            # Dashboard con props directas (como las otras páginas)
+            SchedulesDashboard(
+                schedules=schedules_state["schedules"],
+                on_toggle=schedules_state["toggle_active"],
+                on_edit=open_edit_modal,
+                current_page=schedules_state["current_page"],
+                total_pages=schedules_state["total_pages"],
+                on_page_change=schedules_state["set_page"],
+                total_count=schedules_state["total_count"],
+                loading=schedules_state["loading"],
+                error=schedules_state["error"],
+            ),
+            # Modal
+            ScheduleEditModal(
+                schedule_id=modal_sid,
+                schedule=modal_schedule,
+                is_open=modal_sid is not None,
+                on_close=lambda: set_modal_sid(None),
+                on_save=schedules_state["save_schedule"],
+            ),
+        ),
+    )
+
+
+@component
 def NotFoundPage(theme_is_dark: bool, on_theme_toggle):
     """Página para rutas no encontradas."""
     robots_state = use_robots()
@@ -421,8 +514,9 @@ def App():
             script_to_run,
             browser_router(
                 route("/", RobotsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                 route("/equipos", EquiposPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                route("/programaciones", SchedulesPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                 route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
             ),
             ToastContainer(),
