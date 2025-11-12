@@ -83,6 +83,75 @@ class Conciliador:
             return
 
         updates_params = []
+        updates_unknown_params = []
+
+        for detalle in detalles_api:
+            dep_id = detalle.get("deploymentId")
+            status_api = detalle.get("status")
+            end_date_str = detalle.get("endDateTime")
+            ejecucion_id = mapa_deploy_a_ejecucion.get(dep_id)
+
+            if not all([dep_id, status_api, ejecucion_id]):
+                continue
+
+            # CAMBIO: UNKNOWN ya no se trata como estado final
+            if status_api == "UNKNOWN":
+                logger.warning(
+                    f"Deployment {dep_id} (EjecucionId {ejecucion_id}) reportó 'UNKNOWN' desde A360. "
+                    f"Se marcará como transitorio y se reintentará en próximos ciclos."
+                )
+                # Actualizar a UNKNOWN pero SIN FechaFin (no es final)
+                # Registrar timestamp para control
+                updates_unknown_params.append((ejecucion_id,))
+                continue
+
+            # Estados válidos finales
+            final_status_db = "RUNNING" if status_api == "UPDATE" else status_api
+            if final_status_db not in self.ESTADOS_VALIDOS_API:
+                continue
+
+            fecha_fin_dt = self._convertir_utc_a_local_sam(end_date_str)
+            updates_params.append((final_status_db, fecha_fin_dt, ejecucion_id))
+
+        # Actualizar estados finales (COMPLETED, RUN_FAILED, etc.)
+        if updates_params:
+            query = """
+                UPDATE dbo.Ejecuciones
+                SET Estado = ?, 
+                    FechaFin = ?, 
+                    FechaActualizacion = GETDATE(), 
+                    IntentosConciliadorFallidos = 0
+                WHERE EjecucionId = ? AND CallbackInfo IS NULL;
+            """
+            affected_count = self._db_connector.ejecutar_consulta_multiple(
+                query, updates_params, usar_fast_executemany=False
+            )
+            logger.info(f"Se actualizaron {affected_count} registros a estados finales desde la API.")
+
+        # Actualizar los que reportaron UNKNOWN (sin marcar como final)
+        if updates_unknown_params:
+            query_unknown = """
+                UPDATE dbo.Ejecuciones
+                SET Estado = 'UNKNOWN',
+                    FechaUltimoUNKNOWN = GETDATE(),
+                    FechaActualizacion = GETDATE(),
+                    IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1
+                WHERE EjecucionId = ? AND CallbackInfo IS NULL;
+            """
+            affected_unknown = self._db_connector.ejecutar_consulta_multiple(
+                query_unknown, updates_unknown_params, usar_fast_executemany=False
+            )
+            logger.info(
+                f"Se marcaron {affected_unknown} registros como UNKNOWN (transitorio). "
+                f"Se reintentarán en próximos ciclos."
+            )
+
+    def _actualizar_estados_encontrados_old(self, detalles_api: list, mapa_deploy_a_ejecucion: dict):
+        """Actualiza la BD con los estados de los deployments encontrados en la API."""
+        if not detalles_api:
+            return
+
+        updates_params = []
         ids_para_resetear_intento = []
 
         for detalle in detalles_api:
