@@ -257,7 +257,7 @@ class DatabaseConnector:
                     "RUN_FAILED",
                     "DEPLOY_FAILED",
                     "RUN_ABORTED",
-                    "UNKNOWN",
+                    # "UNKNOWN", # ya que no estaría comportandose como un estado final
                 ):
                     return UpdateStatus.ALREADY_PROCESSED
 
