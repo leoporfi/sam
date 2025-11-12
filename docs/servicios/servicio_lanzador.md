@@ -44,11 +44,13 @@ El servicio sigue un patrón de **Inyección de Dependencias** y opera de forma 
 * **Conciliador (service/conciliador.py)**:  
   * **Rol:** Cerebro de Conciliación de Estados.  
   * **Descripción:** Se encarga de verificar el estado de los robots que ya están en ejecución.  
-    1. Busca en la BD todas las ejecuciones que no estén en un estado final (ej. DEPLOYED, RUNNING).  
+    1. Busca en la BD todas las ejecuciones que no estén en un estado final (ej. DEPLOYED, RUNNING). (Nota: Esta búsqueda excluye ejecuciones en 'UNKNOWN' que hayan sido actualizadas recientemente, basándose en FechaUltimoUNKNOWN, para evitar consultas innecesarias).  
     2. Consulta la API de A360 (obtener_detalles_por_deployment_ids) para obtener el estado real de esos deploymentId.  
-    3. Actualiza la BD con los estados finales (COMPLETED, RUN_FAILED, etc.) si el robot finalizó (y no fue reportado por el callback).  
+    3. **Manejo de Estados API:**
+      * Si la API reporta un estado final (COMPLETED, RUN_FAILED, etc.), actualiza la BD, establece la `FechaFin` y resetea los intentos.
+      * **Si la API reporta 'UNKNOWN'**: El servicio actualiza el `Estado` a 'UNKNOWN', registra la marca de tiempo en `FechaUltimoUNKNOWN` e incrementa `IntentosConciliadorFallidos`. **No se establece** `FechaFin`, tratando el estado como transitorio.
     4. Si un deploymentId no se encuentra en la API de A360 (un "deployment perdido"), incrementa un contador de intentos.  
-    5. Si se supera un umbral de intentos (CONCILIADOR_MAX_INTENTOS_FALLIDOS), marca la ejecución como UNKNOWN.  
+    5. Si se supera un umbral de intentos (CONCILIADOR_MAX_INTENTOS_FALLIDOS) para un *deployment perdido*, marca la ejecución como `UNKNOWN` y registra `FechaUltimoUNKNOWN` para finalizar su ciclo de vida de conciliación.  
 * **EmailAlertClient (common/mail_client.py)**:  
   * **Rol:** Notificador.  
   * **Descripción:** Utilizado por LanzadorService para enviar alertas por correo electrónico si ocurre un error crítico e irrecuperable en cualquiera de los bucles principales.
