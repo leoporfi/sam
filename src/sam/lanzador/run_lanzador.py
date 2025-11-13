@@ -135,6 +135,7 @@ async def _run_service(deps: Dict[str, Any]) -> None:
         deps["db_connector"],
         deps["aa_client"],
         deps["gateway_client"],
+        deps["notificador"],
         cfg_lanzador,
         callback_token,
     )

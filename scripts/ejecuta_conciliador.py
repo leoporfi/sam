@@ -42,17 +42,16 @@ async def main():
     cfg_aa = ConfigManager.get_aa360_config()
     aa_client = AutomationAnywhereClient(
         cr_url=cfg_aa["cr_url"],
-        cr_user=cfg_aa["cr_user"],
-        cr_pwd=cfg_aa.get("cr_pwd"),
-        cr_api_key=cfg_aa["cr_api_key"],
+        cr_user="lporfiri",
+        cr_pwd="",
+        cr_api_key="QBZV@{fS@`39R}tOmGD2cpAP5uCAC2r45JbG4XtG",
         cr_api_timeout=cfg_aa["api_timeout_seconds"],
     )
 
     cfg_lanzador = ConfigManager.get_lanzador_config()
-    max_intentos = cfg_lanzador.get("conciliador_max_intentos_fallidos", 3)
 
     # Crear conciliador
-    conciliador = Conciliador(db_connector=db_connector, aa_client=aa_client, max_intentos_fallidos=max_intentos)
+    conciliador = Conciliador(db_connector=db_connector, aa_client=aa_client, config=cfg_lanzador)
 
     # Ejecutar ciclo de conciliación
     print("\nIniciando ciclo de conciliación...\n")

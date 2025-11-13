@@ -25,7 +25,7 @@ class SincronizadorComun:
         """
         self._db_connector = db_connector
         self._aa_client = aa_client
-        self._valid_licenses = {"ATTENDEDRUNTIME", "RUNTIME"}
+        self._valid_licenses = {"ATTENDEDRUNTIME"}  # , "RUNTIME"} no sincronizar licencia DESATENDIDAS
 
     async def sincronizar_entidades(self) -> Dict[str, int]:
         """
