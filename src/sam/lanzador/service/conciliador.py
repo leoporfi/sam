@@ -178,7 +178,7 @@ class Conciliador:
             FROM dbo.Ejecuciones
             WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED', 'UNKNOWN')
             AND CallbackInfo IS NULL
-            AND DATEDIFF(DAY, Hora, GETDATE()) > ?
+            AND DATEDIFF(DAY, FechaInicio, GETDATE()) > ?
         """
 
         ejecuciones_antiguas = self._db_connector.ejecutar_consulta(query_select, (dias_tolerancia,), es_select=True)
