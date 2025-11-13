@@ -32,6 +32,7 @@ class DatabaseConnector:
         self.max_retries = sql_config["max_retries"]
         self.initial_delay = sql_config["initial_delay"]
         self.retryable_sqlstates = set(sql_config["retryable_sqlstates"])
+        self._pool_max_size = 5
 
         self.connection_string = (
             f"DRIVER={sql_config['driver']};"
@@ -48,34 +49,51 @@ class DatabaseConnector:
 
     def _obtener_conexion_del_pool(self):
         with self._pool_lock:
-            if not self._pool:
-                logger.info(f"Pool de conexiones vacío. Creando nueva conexión para {self.db_config_prefix}...")
-                return self.conectar_base_datos()
+            # Iterar mientras haya conexiones en el pool
+            while self._pool:
+                # 1. Saca una conexión existente.
+                conn = self._pool.pop()
 
-            conn = self._pool.pop()
-            try:
-                # Ejecuta una consulta simple y rápida para validar la conexión.
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1")
-                cursor.close()
-                # Si la consulta tiene éxito, la conexión es válida.
-                return conn
-            except pyodbc.Error as e:
-                # Si la consulta falla, la conexión está obsoleta (stale).
-                logger.warning(
-                    f"Se detectó una conexión obsoleta a la BD ({self.db_config_prefix}). Descartándola y creando una nueva. Error: {e}"
-                )
-                # Cierra la conexión rota de forma segura.
+                # 2. Valida que siga viva
                 try:
-                    conn.close()
-                except pyodbc.Error:
-                    pass  # La conexión ya podría estar cerrada.
-                # Crea y devuelve una conexión completamente nueva para reemplazar la rota.
-                return self.conectar_base_datos()
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT 1")
+                    cursor.close()
+                    # Si OK, devuélvela. ¡Encontramos una!
+                    return conn
+                except pyodbc.Error as e:
+                    # 3. Si falló, está obsoleta.
+                    logger.warning(
+                        f"Se detectó una conexión obsoleta a la BD ({self.db_config_prefix}). Descartándola. Error: {e}"
+                    )
+                    # Cierra la conexión rota de forma segura.
+                    try:
+                        conn.close()
+                    except pyodbc.Error:
+                        pass  # La conexión ya podría estar cerrada.
+
+                    # No retornamos, el 'while' volverá a intentarlo
+                    # con la siguiente conexión del pool.
+
+            # 4. Si salimos del 'while', es porque el pool se vació.
+            # Ahora sí, creamos una nueva.
+            logger.info(
+                f"Pool de conexiones vacío (o todas obsoletas). Creando nueva conexión para {self.db_config_prefix}..."
+            )
+            return self.conectar_base_datos()
 
     def _devolver_conexion_al_pool(self, conn):
         with self._pool_lock:
-            self._pool.append(conn)
+            # Solo volvemos a guardar la conexión si hay espacio
+            if len(self._pool) < self._pool_max_size:
+                self._pool.append(conn)
+            else:
+                # El pool está lleno, así que cerramos esta conexión
+                try:
+                    conn.close()
+                    logger.debug(f"Pool lleno ({self._pool_max_size}). Cerrando conexión en lugar de devolverla.")
+                except pyodbc.Error as e:
+                    logger.warning(f"Error al cerrar conexión excedente del pool: {e}")
 
     @contextmanager
     def obtener_cursor(self):
@@ -101,12 +119,16 @@ class DatabaseConnector:
                 self._devolver_conexion_al_pool(conn)
 
     def conectar_base_datos(self) -> pyodbc.Connection:
-        try:
-            conn = pyodbc.connect(self.connection_string)
-            return conn
-        except pyodbc.Error as ex:
-            logger.critical(f"No se pudo conectar a la base de datos {self.db_config_prefix}. Error: {ex}")
-            raise
+        for intento in range(3):
+            try:
+                return pyodbc.connect(self.connection_string)
+            except pyodbc.Error as ex:
+                if intento < 2:
+                    logger.warning(f"Fallo al conectar (intento {intento + 1}/3). Reintentando...")
+                    time.sleep(5)
+                else:
+                    logger.critical(f"No se pudo conectar tras 3 intentos: {ex}")
+                    raise
 
     def cerrar_conexion_hilo_actual(self):
         if hasattr(self._thread_local, "connection") and self._thread_local.connection:
@@ -232,7 +254,9 @@ class DatabaseConnector:
     def obtener_ejecuciones_en_curso(self) -> List[Dict]:
         return (
             self.ejecutar_consulta(
-                "SELECT EjecucionId, DeploymentId FROM dbo.Ejecuciones WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED', 'UNKNOWN')"
+                "SELECT EjecucionId, DeploymentId FROM dbo.Ejecuciones "
+                "WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED') "
+                "OR (Estado = 'UNKNOWN' AND FechaUltimoUNKNOWN IS NOT NULL AND DATEDIFF(DAY, FechaUltimoUNKNOWN, GETDATE()) > 7) "
                 "ORDER BY EjecucionId ASC;",
                 es_select=True,
             )

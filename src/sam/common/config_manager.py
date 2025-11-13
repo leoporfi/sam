@@ -93,7 +93,7 @@ class ConfigManager:
             "usuario": cls._get_env_with_warning(f"{prefix}_UID"),
             "contrasena": cls._get_env_with_warning(f"{prefix}_PWD"),
             "driver": cls._get_env_with_warning(f"{prefix}_DRIVER", "{ODBC Driver 17 for SQL Server}"),
-            "timeout": int(cls._get_env_with_warning(f"{prefix}_TIMEOUT_CONEXION_INICIAL", 30)),
+            "timeout": int(cls._get_env_with_warning(f"{prefix}_TIMEOUT_CONEXION_INICIAL", 60)),
             "max_retries": int(cls._get_env_with_warning(f"{prefix}_MAX_REINTENTOS_QUERY", 3)),
             "initial_delay": float(cls._get_env_with_warning(f"{prefix}_DELAY_REINTENTO_QUERY_BASE_SEG", 2)),
             "retryable_sqlstates": cls._get_env_with_warning(
