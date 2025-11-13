@@ -58,7 +58,6 @@ class LanzadorService:
             "intervalo_lanzamiento",
             "intervalo_sincronizacion",
             "intervalo_conciliacion",
-            "conciliador_max_intentos_fallidos",
         ]
         faltantes = [clave for clave in claves_criticas if clave not in self._lanzador_cfg]
         if faltantes:
