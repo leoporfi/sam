@@ -41,16 +41,38 @@ El servicio sigue un patrón de **Inyección de Dependencias** y opera de forma 
     2. Consultar la API de A360 para obtener la lista actualizada de robots, usuarios y dispositivos.  
     3. Actualizar (hacer MERGE) estas entidades en las tablas maestras de la base de datos de SAM.  
   * **Nota:** Este componente *no* sincroniza estados de ejecución; esa es la tarea del Conciliador.  
-* **Conciliador (service/conciliador.py)**:  
-  * **Rol:** Cerebro de Conciliación de Estados.  
-  * **Descripción:** Se encarga de verificar el estado de los robots que ya están en ejecución.  
-    1. Busca en la BD todas las ejecuciones que no estén en un estado final (ej. DEPLOYED, RUNNING). (Nota: Esta búsqueda excluye ejecuciones en 'UNKNOWN' que hayan sido actualizadas recientemente, basándose en FechaUltimoUNKNOWN, para evitar consultas innecesarias).  
-    2. Consulta la API de A360 (obtener_detalles_por_deployment_ids) para obtener el estado real de esos deploymentId.  
+* **Conciliador (service/conciliador.py)**:
+  * **Rol:** Cerebro de Conciliación de Estados.
+  * **Descripción:** Se encarga de verificar el estado de los robots que ya están en ejecución.
+    1. Busca en la BD todas las ejecuciones que no estén en un estado final (ej. `DEPLOYED`, `RUNNING`). (Nota: Esta búsqueda excluye ejecuciones en `UNKNOWN` que hayan sido actualizadas *recientemente*, basándose en `FechaUltimoUNKNOWN`, para evitar consultas innecesarias).
+    2. Consulta la API de A360 (`obtener_detalles_por_deployment_ids`) para obtener el estado real de esos `deploymentId`.
     3. **Manejo de Estados API:**
-      * Si la API reporta un estado final (COMPLETED, RUN_FAILED, etc.), actualiza la BD, establece la `FechaFin` y resetea los intentos.
-      * **Si la API reporta 'UNKNOWN'**: El servicio actualiza el `Estado` a 'UNKNOWN', registra la marca de tiempo en `FechaUltimoUNKNOWN` e incrementa `IntentosConciliadorFallidos`. **No se establece** `FechaFin`, tratando el estado como transitorio.
-    4. Si un deploymentId no se encuentra en la API de A360 (un "deployment perdido"), incrementa un contador de intentos.  
-    5. Si se supera un umbral de intentos (CONCILIADOR_MAX_INTENTOS_FALLIDOS) para un *deployment perdido*, marca la ejecución como `UNKNOWN` y registra `FechaUltimoUNKNOWN` para finalizar su ciclo de vida de conciliación.  
+      * Si la API reporta un estado final (`COMPLETED`, `RUN_FAILED`, etc.), actualiza la BD, establece la `FechaFin` y resetea los intentos.
+      * **Si la API reporta `UNKNOWN`**: El servicio actualiza el `Estado` a `UNKNOWN`, registra la marca de tiempo en `FechaUltimoUNKNOWN` e incrementa `IntentosConciliadorFallidos`. **No se establece** `FechaFin`, tratando el estado como transitorio.
+    4. **Manejo de Deployments Perdidos:** Si un `deploymentId` no se encuentra en la API de A360, el servicio **solo incrementa** el contador `IntentosConciliadorFallidos`. (Nota: La documentación anterior que indicaba que se marcaba como `UNKNOWN` después de `CONCILIADOR_MAX_INTENTOS_FALLIDOS` era incorrecta).
+    5. **Manejo de Antigüedad (Failsafe):** El conciliador también ejecuta un método (`_marcar_unknown_por_antiguedad`) que fuerza un estado `UNKNOWN` y asigna `FechaFin` a ejecuciones "colgadas" que superen un umbral extremo de antigüedad (ej. 90 días), independientemente de la API.
+
+### **Lógica de Negocio: El Estado UNKNOWN**
+
+El estado `UNKNOWN` es fundamental para la consistencia del sistema y posee una lógica dual (transitoria y final) que afecta directamente al **Conciliador** y al **Lanzador**.
+
+Esta lógica se basa en una **ventana de tiempo de 2 horas**, definida en `dbo.ObtenerRobotsEjecutables`.
+
+#### 1. UNKNOWN Transitorio (Equipo Ocupado)
+
+Un estado `UNKNOWN` se considera **transitorio** o "activo" cuando han pasado **menos de 2 horas** desde la última vez que se marcó (`FechaUltimoUNKNOWN > DATEADD(HOUR, -2, GETDATE())`).
+
+* **Impacto en el Lanzador:** El equipo se considera **Ocupado**. El Stored Procedure `dbo.ObtenerRobotsEjecutables` **NO** devolverá este equipo para una nueva ejecución, previniendo lanzamientos duplicados.
+* **Impacto en Vistas:** Este estado debe reflejarse en la vista `dbo.EjecucionesActivas`.
+
+#### 2. UNKNOWN Final (Equipo Liberado)
+
+Un estado `UNKNOWN` se considera **final** cuando han pasado **más de 2 horas** desde la última vez que se marcó.
+
+* **Impacto en el Lanzador:** El equipo se considera **Liberado**. El `lanzador` ignora este `UNKNOWN` y el equipo vuelve a estar disponible para nuevas ejecuciones programadas.
+* **Impacto en Vistas:** Este estado debe reflejarse en la vista `dbo.EjecucionesFinalizadas`.
+* **Impacto en Histórico:** El SP `usp_MoverEjecucionesAHistorico` eventualmente archivará esta ejecución como cualquier otro estado finalizado.
+
 * **EmailAlertClient (common/mail_client.py)**:  
   * **Rol:** Notificador.  
   * **Descripción:** Utilizado por LanzadorService para enviar alertas por correo electrónico si ocurre un error crítico e irrecuperable en cualquiera de los bucles principales.
