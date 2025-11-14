@@ -847,17 +847,25 @@ def SchedulesList(
             html.tr(
                 {"key": s["ProgramacionId"]},
                 html.td(format_schedule_details(s)),
-                html.td(", ".join([device["Equipo"] for device in s.get("Equipos", [])]) or "Ninguno"),
+                html.td(", ".join(sorted([device["Equipo"] for device in s.get("Equipos", [])])) or "Ninguno"),
                 html.td(
                     html.div(
                         {"class_name": "grid"},
-                        html.button({"class_name": "outline", "on_click": lambda e, sch=s: on_edit(sch)}, "Editar"),
+                        html.button(
+                            {
+                                "class_name": "outline",
+                                "on_click": lambda e, sch=s: on_edit(sch),
+                                "aria-label": "Editar",
+                            },
+                            html.i({"class_name": "fa-solid fa-pencil"}),
+                        ),
                         html.button(
                             {
                                 "class_name": "secondary outline",
                                 "on_click": lambda e, sch=s: set_schedule_to_delete(sch),
+                                "aria-label": "Eliminar",
                             },
-                            "Eliminar",
+                            html.i({"class_name": "fa-solid fa-trash"}),
                         ),
                     )
                 ),
