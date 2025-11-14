@@ -24,6 +24,7 @@ def setup_and_mock_config(pytestconfig):
     # Mock de las configuraciones específicas
     mock_lanzador_config = {
         "conciliador_max_intentos_fallidos": 3,
+        "dias_tolerancia_unknown": 90,
         "max_workers_lanzador": 10,
         "repeticiones": 1,
         "intervalo_lanzamiento": 60,
@@ -56,7 +57,7 @@ def conciliador_service(mock_db_connector, mock_aa_client):
     Crea una instancia del Conciliador con sus dependencias mockeadas.
     Usamos un umbral de 3 intentos para simular un entorno real.
     """
-    return Conciliador(db_connector=mock_db_connector, aa_client=mock_aa_client, max_intentos_fallidos=3)
+    return Conciliador(db_connector=mock_db_connector, aa_client=mock_aa_client, config={"dias_tolerancia_unknown": 90})
 
 
 # --- Pruebas (Tests) ---
@@ -167,12 +168,13 @@ async def test_conciliar_bot_perdido_NO_marca_unknown_Y_NO_incrementa_contador(
 
 
 @pytest.mark.asyncio
-async def test_conciliar_bot_api_reporta_unknown_NO_incrementa_contador(
+async def test_conciliar_bot_api_reporta_unknown_INCREMENTA_contador_y_actualiza_timestamp(
     conciliador_service, mock_db_connector, mock_aa_client
 ):
     """
-    Prueba que si la API reporta "UNKNOWN", el sistema lo registra en BD
-    pero NO incrementa contador de fallos (se resetea a 0).
+    Prueba que si la API reporta "UNKNOWN", el sistema actualiza el estado,
+    INCREMENTA el contador de fallos y actualiza FechaUltimoUNKNOWN,
+    pero NO establece FechaFin.
     """
     # Arrange: Un bot en curso en la BD
     BOT_EN_CURSO = {"EjecucionId": 300, "DeploymentId": "dep-789"}
@@ -183,7 +185,7 @@ async def test_conciliar_bot_api_reporta_unknown_NO_incrementa_contador(
         {
             "deploymentId": "dep-789",
             "status": "UNKNOWN",
-            "endDateTime": None,
+            "endDateTime": None,  # Importante: no hay fecha fin
         }
     ]
     mock_aa_client.obtener_detalles_por_deployment_ids.return_value = API_RESPONSE
@@ -193,11 +195,28 @@ async def test_conciliar_bot_api_reporta_unknown_NO_incrementa_contador(
 
     # Assert
     # 1. Se buscaron los bots y se llamó a la API
-    mock_db_connector.ejecutar_consulta_multiple.assert_called_once()
-    call_args = mock_db_connector.ejecutar_consulta_multiple.call_args
-    query = call_args[0][0]
-    params = call_args[0][1]
+    mock_db_connector.obtener_ejecuciones_en_curso.assert_called_once()
+    mock_aa_client.obtener_detalles_por_deployment_ids.assert_called_with(["dep-789"])
 
-    assert "IntentosConciliadorFallidos = 0" in query
-    assert params[0][0] == "UNKNOWN"  # Estado
-    assert params[0][2] == 300  # EjecucionId
+    # 2. Se debe llamar a la consulta MÚLTIPLE (para la query_unknown)
+    mock_db_connector.ejecutar_consulta_multiple.assert_called_once()
+
+    # 3. Verificamos los argumentos de esa llamada
+    call_args = mock_db_connector.ejecutar_consulta_multiple.call_args
+    query = call_args[0][0]  # La query SQL
+    params = call_args[0][1]  # Los parámetros
+
+    # 4. Validamos la QUERY
+    # El estado se setea directamente en la query
+    assert "SET Estado = 'UNKNOWN'" in query
+    # Se actualiza el timestamp
+    assert "FechaUltimoUNKNOWN = GETDATE()" in query
+    # Se INCREMENTA el contador
+    assert "IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1" in query
+    # NO se debe setear FechaFin
+    assert "FechaFin = ?" not in query
+    assert "FechaFin = GETDATE()" not in query
+
+    # 5. Validamos los PARÁMETROS
+    # La query_unknown solo espera el EjecucionId
+    assert params == [(300,)]  # Lista de tuplas -> [(EjecucionId,)]
