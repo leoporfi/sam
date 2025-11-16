@@ -44,10 +44,9 @@ def SchedulesControls(
                 html.input(
                     {
                         "type": "search",
-                        "placeholder": "Buscar... (no implementado)",
+                        "placeholder": "Buscar robots por nombres...",
                         "value": search,
                         "on_change": lambda e: on_search(e["target"]["value"]),
-                        # "disabled": True,
                     }
                 ),
                 html.select(

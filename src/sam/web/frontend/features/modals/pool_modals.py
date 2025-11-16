@@ -279,10 +279,15 @@ def AssignmentBox(
 @component
 def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_selected_ids: Callable):
     """Renderiza una lista de recursos seleccionables con búsqueda."""
-    search_term, set_search_term = use_state("")
-
+    search, set_search = use_state("")
+    sorted_items = use_memo(lambda: sorted(items, key=lambda x: x.get("Nombre", "").lower()), [items])
     filtered_items = use_memo(
-        lambda: [item for item in items if search_term.lower() in item["Nombre"].lower()], [items, search_term]
+        lambda: [
+            item
+            for item in sorted_items  # <-- Usamos la lista ya ordenada
+            if search.lower() in item["Nombre"].lower()
+        ],
+        [sorted_items, search],  # <-- Actualizamos la dependencia
     )
 
     selected_ids_set = use_memo(lambda: set(selected_ids), [selected_ids])
@@ -313,8 +318,8 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
                     "type": "search",
                     "name": f"search-{title.lower()}",
                     "placeholder": "Filtrar...",
-                    "value": search_term,
-                    "on_change": lambda e: set_search_term(e["target"]["value"]),
+                    "value": search,
+                    "on_change": lambda e: set_search(e["target"]["value"]),
                 }
             ),
         ),

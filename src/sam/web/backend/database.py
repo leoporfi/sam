@@ -485,6 +485,7 @@ def get_schedules_paginated(
     robot_id: Optional[int],
     tipo: Optional[str],
     activo: Optional[bool],
+    search: Optional[str],
     page: int,
     size: int,
 ) -> dict:
@@ -492,34 +493,25 @@ def get_schedules_paginated(
     Llama al SP dbo.ListarProgramacionesPaginadas (versión de 1 resultset)
     """
     offset = (page - 1) * size
+    params = (robot_id, tipo, activo, search, size, offset)
 
-    # 1. Parámetros como tupla simple
-    params = (robot_id, tipo, activo, size, offset)
+    try:
+        sql = "EXEC dbo.ListarProgramacionesPaginadas ?, ?, ?, ?, ?, ?"
+        results = db.ejecutar_consulta(sql, params, es_select=True)
 
-    # 2. Sintaxis SQL EXEC simple (la más compatible con pyodbc.execute)
-    sql = "EXEC dbo.ListarProgramacionesPaginadas ?, ?, ?, ?, ?"
+        total = 0
+        schedules = []
 
-    # 3. Usar 'ejecutar_consulta' (singular) con es_select=True
-    #    Esto devuelve una Lista de Diccionarios (List[Dict])
-    results = db.ejecutar_consulta(sql, params, es_select=True)
+        if results:
+            total = results[0].get("TotalRows", 0)
+            schedules = results
+            for s in schedules:
+                s.pop("TotalRows", None)
 
-    total = 0
-    schedules = []
-
-    if results:
-        # 4. 'results' es una lista de diccionarios.
-        #    Obtenemos el total de la clave 'TotalRows' de la *primera fila*.
-        total = results[0].get("TotalRows", 0)
-
-        # 5. La lista de programaciones es la lista completa de resultados
-        schedules = results
-
-        # 6. (Opcional pero recomendado) Limpiamos la clave 'TotalRows'
-        #    para no enviarla al frontend.
-        for s in schedules:
-            s.pop("TotalRows", None)
-
-    return {"schedules": schedules, "total_count": total}
+        return {"schedules": schedules, "total_count": total}
+    except Exception as e:
+        logger.error(f"Error al obtener programaciones paginadas: {e}", exc_info=True)
+        raise
 
 
 def toggle_schedule_active(db: DatabaseConnector, schedule_id: int, activo: bool):

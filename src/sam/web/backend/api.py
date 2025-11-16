@@ -229,18 +229,21 @@ def get_all_schedules_legacy(db: DatabaseConnector = Depends(get_db)):
 # ------------------------------------------------------------------
 # Schedules – nueva página paginada
 # ------------------------------------------------------------------
-@router.get("/api/schedules", tags=["Programaciones"])
+@router.get("/api/schedules", tags=["Programaciones"], response_model=dict)
 def get_schedules(
     db: DatabaseConnector = Depends(get_db),
     robot_id: Optional[int] = Query(None, alias="robot"),
     tipo: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     activo: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
 ):
     """Listado paginado de programaciones con filtros."""
     try:
-        return db_service.get_schedules_paginated(db, robot_id=robot_id, tipo=tipo, activo=activo, page=page, size=size)
+        return db_service.get_schedules_paginated(
+            db, robot_id=robot_id, tipo=tipo, activo=activo, search=search, page=page, size=size
+        )
     except Exception as e:
         _handle_endpoint_errors("get_schedules", e, "Programaciones")
 
@@ -261,22 +264,6 @@ def delete_schedule(programacion_id: int, robot_id: int, db: DatabaseConnector =
         db_service.delete_schedule(db, programacion_id, robot_id)
     except Exception as e:
         _handle_endpoint_errors("delete_schedule", e, "Programación", programacion_id)
-
-
-@router.get("/api/schedules", tags=["Programaciones"], response_model=dict)
-def get_schedules(
-    db: DatabaseConnector = Depends(get_db),
-    robot_id: Optional[int] = Query(None, alias="robot"),
-    tipo: Optional[str] = Query(None),
-    activo: Optional[bool] = Query(None),
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
-):
-    """Listado paginado de programaciones con filtros."""
-    try:
-        return db_service.get_schedules_paginated(db, robot_id=robot_id, tipo=tipo, activo=activo, page=page, size=size)
-    except Exception as e:
-        _handle_endpoint_errors("get_schedules", e, "Programaciones")
 
 
 @router.post("/api/schedules", tags=["Programaciones"])
