@@ -3,8 +3,10 @@ import asyncio
 import uuid
 
 # app.py - SECCIÓN DE IMPORTS
-from reactpy import component, html, use_effect, use_state
+from reactpy import component, html, use_context, use_effect, use_state
 from reactpy_router import browser_router, link, route
+
+from sam.web.frontend.api.api_client import get_api_client
 
 # Componentes de páginas
 from .features.components.equipos_components import EquiposControls, EquiposDashboard
@@ -16,7 +18,7 @@ from .features.components.schedules_components import SchedulesControls, Schedul
 from .features.modals.equipos_modals import EquipoEditModal
 from .features.modals.pool_modals import PoolAssignmentsModal, PoolEditModal
 from .features.modals.robots_modals import AssignmentsModal, RobotEditModal, SchedulesModal
-from .features.modals.schedule_edit_modal import ScheduleEditModal
+from .features.modals.schedule_modal import ScheduleEditModal, ScheduleEquiposModal
 
 # Hooks
 from .hooks.use_debounced_value_hook import use_debounced_value
@@ -27,72 +29,8 @@ from .hooks.use_schedules_hook import use_schedules
 
 # Layout
 # Componentes compartidos
-from .shared.common_components import ConfirmationModal, HeaderNav, PageWithLayout, ThemeSwitcher
+from .shared.common_components import ConfirmationModal, PageWithLayout
 from .shared.notifications import NotificationContext, ToastContainer
-
-# # --- Header Component (dentro del router context) ---
-# @component
-# def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state):
-#     """Header de navegación con botones de sincronización globales."""
-#     return html.header(
-#         {"class_name": "sticky-header"},
-#         html.div(
-#             {"class_name": "container"},
-#             html.nav(
-#                 html.ul(
-#                     html.li(html.strong("SAM")),
-#                     html.li(link({"to": "/"}, "Robots")),
-#                     html.li(link({"to": "/equipos"}, "Equipos")),
-#                     html.li(link({"to": "/pools"}, "Pools")),
-#                     html.li(link({"to": "/programaciones"}, "Programaciones")),
-#                 ),
-#                 html.ul(
-#                     html.li(
-#                         html.button(
-#                             {
-#                                 "on_click": robots_state.get("trigger_sync"),
-#                                 "disabled": robots_state.get("is_syncing", False),
-#                                 "aria-busy": str(robots_state.get("is_syncing", False)).lower(),
-#                                 "class_name": "pico-background-fuchsia-500",
-#                                 "data-tooltip": "Sincronizar Robots",
-#                                 "data-placement": "bottom",
-#                             },
-#                             html.i({"class_name": "fa-solid fa-robot"}),
-#                         )
-#                     ),
-#                     html.li(
-#                         html.button(
-#                             {
-#                                 "on_click": equipos_state.get("trigger_sync"),
-#                                 "disabled": equipos_state.get("is_syncing", False),
-#                                 "aria-busy": str(equipos_state.get("is_syncing", False)).lower(),
-#                                 "class_name": "pico-background-purple-500",
-#                                 "data-tooltip": "Sincronizar Equipos",
-#                                 "data-placement": "bottom",
-#                             },
-#                             html.i({"class_name": "fa-solid fa-desktop"}),
-#                         )
-#                     ),
-#                     html.li(ThemeSwitcher(is_dark=theme_is_dark, on_toggle=on_theme_toggle)),
-#                 ),
-#             ),
-#         ),
-#     )
-
-
-# # --- Layout Wrapper para las páginas ---
-# @component
-# def PageWithLayout(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state, children):
-#     """Wrapper que incluye el header y la estructura principal en cada página."""
-#     return html._(
-#         HeaderNav(
-#             theme_is_dark=theme_is_dark,
-#             on_theme_toggle=on_theme_toggle,
-#             robots_state=robots_state,
-#             equipos_state=equipos_state,
-#         ),
-#         html.main({"class_name": "container"}, children),
-#     )
 
 
 # --- Componentes de Página (Lógica de cada ruta) ---
@@ -346,19 +284,19 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
     is_searching = debounced_search != search_input
 
     page_controls = EquiposControls(
-        search_term=search_input,
-        on_search_change=set_search_input,
+        search=search_input,
+        on_search=set_search_input,
         is_searching=is_searching,
         active_filter="all"
         if equipos_state["filters"].get("active") is None
         else str(equipos_state["filters"].get("active")).lower(),
-        on_active_change=lambda value: equipos_state["set_filters"](
+        on_active=lambda value: equipos_state["set_filters"](
             lambda prev: {**prev, "active": None if value == "all" else value == "true"}
         ),
         balanceable_filter="all"
         if equipos_state["filters"].get("balanceable") is None
         else str(equipos_state["filters"].get("balanceable")).lower(),
-        on_balanceable_change=lambda value: equipos_state["set_filters"](
+        on_balanceable=lambda value: equipos_state["set_filters"](
             lambda prev: {**prev, "balanceable": None if value == "all" else value == "true"}
         ),
         on_create_equipo=handle_create_click,
@@ -383,51 +321,270 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
 
 
 @component
-def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
+def SchedulesPage_old(theme_is_dark: bool, on_theme_toggle):
     """Lógica y UI para la página de Programaciones."""
+    # --- Hooks de estado ---
     robots_state = use_robots()
     equipos_state = use_equipos()
     schedules_state = use_schedules()
 
-    # Estado para filtros (como RobotsPage)
+    # --- Estado de los filtros ---
     search_input, set_search_input = use_state("")
-    debounced_search = use_debounced_value(search_input, 300)
     robot_filter, set_robot_filter = use_state(None)
     tipo_filter, set_tipo_filter = use_state(None)
+    debounced_search = use_debounced_value(search_input, delay=500)
 
-    # Estado para modal
+    # --- Estado del Dropdown de Robots (Lista Completa) ---
+    dropdown_robots, set_dropdown_robots = use_state([])
+
+    # Estado de modales
     modal_sid, set_modal_sid = use_state(None)
-    modal_schedule, set_modal_schedule = use_state({})
+    modal_row, set_modal_row = use_state({})
 
-    # Efecto para sincronizar búsqueda
+    assign_modal_robot, set_assign_modal_robot = use_state(None)  # Para asignar robot->equipos
+    assign_equipos_sid, set_assign_equipos_sid = use_state(None)  # Para asignar schedule->equipos
+
+    notification_ctx = use_context(NotificationContext)
+    show_notification = notification_ctx["show_notification"]
+
+    # --- Cargar TODOS los robots para el filtro ---
+    @use_effect(dependencies=[])
+    def load_all_robots_for_filter():
+        async def fetch():
+            api = get_api_client()
+            try:
+                params = {"page": 1, "size": 200}
+                data = await api.get_robots(params)
+                # Ordenamos alfabéticamente
+                sorted_robots = sorted(data.get("robots", []), key=lambda r: r["Robot"])
+                set_dropdown_robots(sorted_robots)
+            except Exception as e:
+                print(f"Error cargando lista de robots: {e}")
+
+        asyncio.create_task(fetch())
+
+    # Manejo de filtros
+    def set_robot_id_and_filter(rid):
+        set_robot_filter(rid)
+        # Reseteamos página a 1 al filtrar
+        schedules_state["set_filters"](
+            {"robot": rid, "tipo": tipo_filter, "activo": schedules_state["filters"]["activo"], "search": search_input}
+        )
+
+    def set_tipo_and_filter(t):
+        set_tipo_filter(t)
+        schedules_state["set_filters"](
+            {"robot": robot_filter, "tipo": t, "activo": schedules_state["filters"]["activo"], "search": search_input}
+        )
+
+    # Efecto para el buscador (debounce)
     @use_effect(dependencies=[debounced_search])
-    def sync_search():
-        schedules_state["set_filters"](lambda prev: {**prev, "search": debounced_search or None})
+    def on_search_change():
+        # Solo actualizamos si el filtro real cambió para evitar loops
+        if debounced_search != schedules_state["filters"]["search"]:
+            schedules_state["set_filters"](
+                {
+                    "robot": robot_filter,
+                    "tipo": tipo_filter,
+                    "activo": schedules_state["filters"]["activo"],
+                    "search": debounced_search,
+                }
+            )
 
-    # Efecto para sincronizar filtro de robot
-    @use_effect(dependencies=[robot_filter])
-    def sync_robot():
-        schedules_state["set_filters"](lambda prev: {**prev, "robot": robot_filter})
-
-    # Efecto para sincronizar filtro de tipo
-    @use_effect(dependencies=[tipo_filter])
-    def sync_tipo():
-        schedules_state["set_filters"](lambda prev: {**prev, "tipo": tipo_filter})
-
+    # --- Handlers de Modales ---
     def open_edit_modal(sid: int):
-        schedule = next((s for s in schedules_state["schedules"] if s["ProgramacionId"] == sid), None)
-        if schedule:
-            set_modal_schedule(schedule)
+        row = next((s for s in schedules_state["schedules"] if s["ProgramacionId"] == sid), None)
+        if row:
+            set_modal_row(row)
             set_modal_sid(sid)
+        else:
+            show_notification("No se encontró la programación", "error")
 
-    # Renderizado directo (SIN condicionales complejos)
+    def open_assign_modal(robot_info: dict):
+        # Este es para el botón 'Asignar' (Robot -> Equipos) si lo hubiera
+        if robot_info and robot_info.get("RobotId"):
+            set_assign_modal_robot(robot_info)
+
+    def handle_close_assign_modal():
+        set_assign_modal_robot(None)
+        schedules_state["refresh"]()
+
+    # Handler para el nuevo modal "Schedule -> Equipos"
+    def open_schedule_equipos_modal(schedule_data):
+        # Guardamos el ID de la programación
+        sid = schedule_data.get("ProgramacionId")
+        if sid:
+            set_assign_equipos_sid(sid)
+
+    # from .shared.common_components import PageWithLayout
+
     return PageWithLayout(
         theme_is_dark=theme_is_dark,
         on_theme_toggle=on_theme_toggle,
         robots_state=robots_state,
         equipos_state=equipos_state,
         children=html._(
-            # Controles primero
+            SchedulesControls(
+                search=search_input,
+                on_search=set_search_input,
+                robot_filter=robot_filter,
+                on_robot=set_robot_id_and_filter,
+                tipo_filter=tipo_filter,
+                on_tipo=set_tipo_and_filter,
+                on_new=lambda: show_notification("Función no implementada", "warning"),
+                robots_list=dropdown_robots,
+                is_searching=schedules_state["loading"],
+            ),
+            html.div(
+                {"style": {"display": "block" if schedules_state["error"] else "none"}},
+                html.article(
+                    {"aria_invalid": "true", "style": {"color": "var(--pico-color-red-600)"}},
+                    f"Error: {schedules_state['error']}",
+                ),
+            ),
+            html.div(
+                {
+                    "style": {
+                        "display": "block"
+                        if not schedules_state["loading"] and not schedules_state["error"]
+                        else "none"
+                    }
+                },
+                SchedulesDashboard(
+                    schedules=schedules_state["schedules"],
+                    on_toggle=schedules_state["toggle_active"],
+                    on_edit=open_edit_modal,
+                    on_assign_equipos=open_schedule_equipos_modal,
+                    current_page=schedules_state["current_page"],
+                    total_pages=schedules_state["total_pages"],
+                    on_page_change=schedules_state["set_page"],
+                    total_count=schedules_state["total_count"],
+                    loading=schedules_state["loading"],
+                    error=schedules_state["error"],
+                ),
+            ),
+            # 1. Modal Editar Programación (Detalles)
+            ScheduleEditModal(
+                schedule_id=modal_sid,
+                schedule=modal_row,
+                is_open=modal_sid is not None,
+                on_close=lambda: set_modal_sid(None),
+                on_save=schedules_state["save_schedule"],
+            ),
+            # 2. Modal Asignar Equipos a Programación (NUEVO)
+            ScheduleEquiposModal(
+                schedule_id=assign_equipos_sid,
+                schedule=modal_row,
+                is_open=assign_equipos_sid is not None,
+                on_close=lambda: set_assign_equipos_sid(None),
+                on_save=schedules_state["save_schedule_equipos"],
+            ),
+            # 3. Modal Asignar Equipos a Robot (Antiguo, opcional si lo usas en esta vista)
+            AssignmentsModal(
+                robot=assign_modal_robot,
+                is_open=assign_modal_robot is not None,
+                on_close=handle_close_assign_modal,
+                on_save_success=handle_close_assign_modal,
+            ),
+        ),
+    )
+
+
+@component
+def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
+    """Lógica y UI para la página de Programaciones con filtros en cascada."""
+    # --- Hooks de estado ---
+    robots_state = use_robots()
+    equipos_state = use_equipos()
+    schedules_state = use_schedules()
+
+    # --- Estado de los filtros UI ---
+    search_input, set_search_input = use_state("")
+    debounced_search = use_debounced_value(search_input, delay=500)
+
+    robot_filter, set_robot_filter = use_state(None)
+    tipo_filter, set_tipo_filter = use_state(None)
+
+    # --- Estado del Dropdown de Robots (Dinámico) ---
+    dropdown_robots, set_dropdown_robots = use_state([])
+
+    # --- Estado de Modales ---
+    modal_sid, set_modal_sid = use_state(None)  # ID para Edición
+    modal_row, set_modal_row = use_state({})  # Datos para Edición
+
+    assign_equipos_sid, set_assign_equipos_sid = use_state(None)  # ID para Asignar Equipos
+
+    notification_ctx = use_context(NotificationContext)
+    show_notification = notification_ctx["show_notification"]
+
+    # --- LÓGICA 1: Cargar robots dinámicamente según el Tipo (CASCADA) ---
+    @use_effect(dependencies=[tipo_filter])
+    def load_robots_based_on_type():
+        async def fetch():
+            api = get_api_client()
+            try:
+                # Solicitamos programaciones filtradas por tipo para extraer los robots relevantes
+                params = {"page": 1, "size": 300}
+                if tipo_filter:
+                    params["tipo"] = tipo_filter
+
+                data = await api.get_schedules(params)
+                items = data.get("items") or data.get("schedules", [])
+                unique_robots = {}
+                for s in items:
+                    rid = s.get("RobotId")
+                    rname = s.get("RobotNombre") or s.get("Robot", {}).get("Nombre")
+
+                    if rid and rname and rid not in unique_robots:
+                        unique_robots[rid] = {"RobotId": rid, "Robot": rname}
+
+                sorted_robots = sorted(unique_robots.values(), key=lambda r: r["Robot"])
+                set_dropdown_robots(sorted_robots)
+
+            except Exception as e:
+                print(f"Error cargando filtro de robots: {e}")
+
+        asyncio.create_task(fetch())
+
+    # --- LÓGICA 2: Sincronizar UI -> Hook de Datos (Filtros) ---
+
+    # A) Búsqueda (con Debounce)
+    @use_effect(dependencies=[debounced_search])
+    def sync_search():
+        schedules_state["set_filters"](lambda prev: {**prev, "search": debounced_search or None})
+
+    # B) Filtro Robot
+    @use_effect(dependencies=[robot_filter])
+    def sync_robot():
+        schedules_state["set_filters"](lambda prev: {**prev, "robot": robot_filter})
+
+    # C) Filtro Tipo
+    @use_effect(dependencies=[tipo_filter])
+    def sync_tipo():
+        # Al cambiar el tipo, actualizamos el filtro principal
+        schedules_state["set_filters"](lambda prev: {**prev, "tipo": tipo_filter})
+
+    # --- Handlers de Modales ---
+    def open_edit_modal(sid: int):
+        row = next((s for s in schedules_state["schedules"] if s["ProgramacionId"] == sid), None)
+        if row:
+            set_modal_row(row)
+            set_modal_sid(sid)
+        else:
+            show_notification("No se encontró la programación", "error")
+
+    def open_schedule_equipos_modal(schedule_data):
+        sid = schedule_data.get("ProgramacionId")
+        if sid:
+            set_assign_equipos_sid(sid)
+            set_modal_row(schedule_data)
+
+    return PageWithLayout(
+        theme_is_dark=theme_is_dark,
+        on_theme_toggle=on_theme_toggle,
+        robots_state=robots_state,
+        equipos_state=equipos_state,
+        children=html._(
             SchedulesControls(
                 search=search_input,
                 on_search=set_search_input,
@@ -435,30 +592,56 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
                 on_robot=set_robot_filter,
                 tipo_filter=tipo_filter,
                 on_tipo=set_tipo_filter,
-                on_new=lambda: None,  # Placeholder
-                robots_list=robots_state["robots"],
+                on_new=lambda: show_notification("Función no implementada", "warning"),
+                robots_list=dropdown_robots,
                 is_searching=schedules_state["loading"],
             ),
-            # Dashboard con props directas (como las otras páginas)
-            SchedulesDashboard(
-                schedules=schedules_state["schedules"],
-                on_toggle=schedules_state["toggle_active"],
-                on_edit=open_edit_modal,
-                current_page=schedules_state["current_page"],
-                total_pages=schedules_state["total_pages"],
-                on_page_change=schedules_state["set_page"],
-                total_count=schedules_state["total_count"],
-                loading=schedules_state["loading"],
-                error=schedules_state["error"],
+            html.div(
+                {"style": {"display": "block" if schedules_state["error"] else "none"}},
+                html.article(
+                    {"aria_invalid": "true", "style": {"color": "var(--pico-color-red-600)"}},
+                    f"Error: {schedules_state['error']}",
+                ),
             ),
-            # Modal
+            html.div(
+                {
+                    "style": {
+                        "display": "block"
+                        if not schedules_state["loading"] and not schedules_state["error"]
+                        else "none"
+                    }
+                },
+                SchedulesDashboard(
+                    schedules=schedules_state["schedules"],
+                    on_toggle=schedules_state["toggle_active"],
+                    on_edit=open_edit_modal,
+                    on_assign_equipos=open_schedule_equipos_modal,
+                    current_page=schedules_state["current_page"],
+                    total_pages=schedules_state["total_pages"],
+                    on_page_change=schedules_state["set_page"],
+                    total_count=schedules_state["total_count"],
+                    loading=schedules_state["loading"],
+                    error=schedules_state["error"],
+                ),
+            ),
+            # 1. Modal Editar Programación (Detalles)
             ScheduleEditModal(
                 schedule_id=modal_sid,
-                schedule=modal_schedule,
+                schedule=modal_row,
                 is_open=modal_sid is not None,
                 on_close=lambda: set_modal_sid(None),
                 on_save=schedules_state["save_schedule"],
             ),
+            # 2. Modal Asignar Equipos a Programación (NUEVO)
+            ScheduleEquiposModal(
+                schedule_id=assign_equipos_sid,
+                schedule=modal_row,
+                is_open=assign_equipos_sid is not None,
+                on_close=lambda: set_assign_equipos_sid(None),
+                on_save=schedules_state["save_schedule_equipos"],
+            )
+            if assign_equipos_sid is not None
+            else None,
         ),
     )
 

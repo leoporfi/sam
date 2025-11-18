@@ -20,50 +20,71 @@ def SchedulesControls(
     robots_list: List[Dict],
     is_searching: bool,
 ):
-    expanded, set_expanded = use_state(False)
-    panel = f"collapsible-panel {'is-expanded' if expanded else ''}"
+    is_expanded, set_is_expanded = use_state(False)
+    collapsible_panel_class = f"collapsible-panel {'is-expanded' if is_expanded else ''}"
 
     return html.div(
         {"class_name": "dashboard-controls"},
         html.div(
             {"class_name": "controls-header"},
-            # CORRECCIÓN DE UI: Se eliminó el html.h2("Gestión de Programaciones") de aquí
+            html.h2("Gestión de Programaciones"),
             html.button(
                 {
                     "class_name": "mobile-controls-toggle outline secondary",
-                    "on_click": lambda e: set_expanded(not expanded),
+                    "on_click": lambda e: set_is_expanded(not is_expanded),
                 },
-                html.i({"class_name": f"fa-solid fa-chevron-{'up' if expanded else 'down'}"}),
-                " Filtros",
+                html.i({"class_name": f"fa-solid fa-chevron-{'up' if is_expanded else 'down'}"}),
+                " Controles",
             ),
         ),
         html.div(
-            {"class_name": panel},
+            {"class_name": collapsible_panel_class},
             html.div(
-                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr 2fr 2fr"}},
+                {
+                    "class_name": "master-controls-grid",
+                    "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"},
+                },
                 html.input(
                     {
                         "type": "search",
-                        "placeholder": "Buscar robots por nombres...",
+                        "name": "search-schedule",
+                        "placeholder": "Buscar robots por nombre...",
                         "value": search,
                         "on_change": lambda e: on_search(e["target"]["value"]),
+                        "aria-busy": str(is_searching).lower(),
                     }
                 ),
                 html.select(
                     {
-                        "value": robot_filter or "",
-                        "on_change": lambda e: on_robot(int(e["target"]["value"]) if e["target"]["value"] else None),
+                        "name": "filter-activo",
+                        "value": tipo_filter or "",
+                        "on_change": lambda e: on_tipo(e["target"]["value"] or None),
                     },
-                    html.option({"value": ""}, "Robot: Todos"),
-                    *[html.option({"value": r["RobotId"]}, r["Robot"]) for r in robots_list],
-                ),
-                html.select(
-                    {"value": tipo_filter or "", "on_change": lambda e: on_tipo(e["target"]["value"] or None)},
                     html.option({"value": ""}, "Tipo: Todos"),
                     *[html.option({"value": t}, t) for t in ["Diaria", "Semanal", "Mensual", "Especifica"]],
                 ),
+                html.select(
+                    {
+                        "name": "filter-robot",
+                        "value": str(robot_filter) if robot_filter else "",
+                        "on_change": lambda e: on_robot(int(e["target"]["value"]) if e["target"]["value"] else None),
+                    },
+                    html.option({"value": ""}, "Robot: Todos"),
+                    *[html.option({"value": str(r["RobotId"])}, r["Robot"]) for r in robots_list],
+                ),
                 html.button(
-                    {"on_click": on_new, "disabled": True, "data-tooltip": "Próximamente"},
+                    {
+                        "on_click": on_new,
+                        "disabled": True,
+                        "data-tooltip": "Próximamente",
+                        # Añadimos estilo para centrar ícono
+                        "style": {
+                            "display": "flex",
+                            "alignItems": "center",
+                            "justifyContent": "center",
+                            "gap": "0.5rem",
+                        },
+                    },
                     html.i({"class_name": "fa-solid fa-plus"}),
                     " Nueva",
                 ),
@@ -77,6 +98,7 @@ def SchedulesDashboard(
     schedules: List[ScheduleData],
     on_toggle: Callable,
     on_edit: Callable,
+    on_assign_equipos: Callable,
     current_page: int,
     total_pages: int,
     on_page_change: Callable,
@@ -99,8 +121,21 @@ def SchedulesDashboard(
     return html._(
         Pagination(current_page, total_pages, len(schedules), total_count, on_page_change),
         html.div(
+            {"className": "cards-container"},
+            [
+                ScheduleCard(
+                    schedule=s,
+                    on_toggle=on_toggle,
+                    on_edit=on_edit,
+                    on_assign_equipos=on_assign_equipos,
+                    key=s["ProgramacionId"],  # Importante para el rendimiento de renderizado
+                )
+                for s in schedules
+            ],
+        ),
+        html.div(
             {"className": "table-container"},
-            SchedulesTable(schedules, on_toggle, on_edit),
+            SchedulesTable(schedules, on_toggle, on_edit, on_assign_equipos),
         ),
     )
 
@@ -118,7 +153,7 @@ def _format_schedule_details(s: ScheduleData) -> str:
 
 
 @component
-def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: Callable):
+def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable):
     headers = ["Robot", "Tipo", "Hora", "Días / Fecha", "Tol.", "Equipos", "Activo", "Acciones"]
 
     return html.article(
@@ -153,16 +188,42 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                             )
                         ),
                         html.td(
-                            html.a(
-                                {
-                                    "href": "#",
-                                    "on_click": event(
-                                        lambda e, sid=s["ProgramacionId"]: on_edit(sid), prevent_default=True
-                                    ),
-                                    "data-tooltip": "Editar",
-                                },
-                                html.i({"class_name": "fa-solid fa-pencil"}),
-                            )
+                            html.div(
+                                {"class_name": "grid"},
+                                html.a(
+                                    {
+                                        "href": "#",
+                                        "on_click": event(
+                                            lambda e, sid=s["ProgramacionId"]: on_edit(sid), prevent_default=True
+                                        ),
+                                        "data-tooltip": "Editar",
+                                        "class_name": "secondary",
+                                    },
+                                    html.i({"class_name": "fa-solid fa-pencil"}),
+                                ),
+                                html.a(
+                                    {
+                                        "href": "#",
+                                        "on_click": event(
+                                            lambda e, sched=s: on_assign_equipos(sched),
+                                            prevent_default=True,
+                                        ),
+                                        "data-tooltip": "Asignar Equipos",
+                                        "class_name": "secondary",
+                                    },
+                                    html.i({"class_name": "fa-solid fa-computer"}),
+                                ),
+                                html.a(
+                                    {
+                                        "href": "#",
+                                        "data-tooltip": "Eliminar Programacion",
+                                        "data-placement": "left",
+                                        "class_name": "secondary",
+                                        "disabled": True,
+                                    },
+                                    html.i({"class_name": "fa-solid fa-trash-alt"}),
+                                ),
+                            ),
                         ),
                     )
                     for s in schedules
@@ -173,7 +234,7 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
 
 
 @component
-def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable):
+def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable):
     return html.article(
         {"class_name": "schedule-card"},
         html.header(
@@ -233,6 +294,17 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable)
                         }
                     ),
                     html.span({"style": {"marginLeft": "8px"}}, "Activa"),
+                ),
+                html.button(
+                    {
+                        "class_name": "outline secondary",
+                        # Pasa un dict con la info del robot
+                        "on_click": lambda e, s=schedule: on_assign_equipos(
+                            {"RobotId": s["RobotId"], "Robot": s["RobotNombre"]}
+                        ),
+                        "aria-label": "Asignar Equipos",
+                    },
+                    html.i({"class_name": "fa-solid fa-computer"}),
                 ),
                 html.button(
                     {

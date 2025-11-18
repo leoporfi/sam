@@ -250,8 +250,8 @@ def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state)
                     html.li(html.strong("SAM")),
                     html.li(link({"to": "/"}, "Robots")),
                     html.li(link({"to": "/equipos"}, "Equipos")),
-                    html.li(link({"to": "/pools"}, "Pools")),
                     html.li(link({"to": "/programaciones"}, "Programaciones")),
+                    html.li(link({"to": "/pools"}, "Pools")),
                 ),
                 html.ul(
                     html.li(

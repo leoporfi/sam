@@ -113,9 +113,6 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     api_service = get_api_client()
     is_edit_mode = bool(robot and robot.get("RobotId") is not None)
 
-    if robot is None:
-        return None
-
     @use_effect(dependencies=[robot])
     def populate_form_data():
         if robot is None:
@@ -168,7 +165,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
         finally:
             set_is_loading(False)
 
-    if not is_open:
+    if not is_open or robot is None:
         return None
 
     return html.dialog(
@@ -352,9 +349,6 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
     search_assigned, set_search_assigned = use_state("")
     search_available, set_search_available = use_state("")
 
-    if not robot:
-        return None
-
     def sort_devices(devices: List[Dict]) -> List[Dict]:
         """Ordena una lista de diccionarios de equipos por el campo 'Equipo'."""
         return sorted(devices, key=lambda x: x.get("Equipo", "").lower())
@@ -474,11 +468,11 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
         # Abre el modal de confirmación si hay cambios que guardar.
         set_confirmation_data({"assign": ids_to_assign, "unassign": ids_to_unassign})
 
-    if not is_open:
+    if not is_open or not robot:
         return None
 
     return html.dialog(
-        {"open": True, "style": {"width": "90vw", "maxWidth": "1000px"}},
+        {"open": True},  # "style": {"width": "90vw", "maxWidth": "1000px"}},
         html.article(
             html.header(
                 html.button({"aria-label": "Close", "rel": "prev", "on_click": event(on_close, prevent_default=True)}),
@@ -488,7 +482,12 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
             html.div(
                 {
                     "class_name": "grid",
-                    "style": {"gridTemplateColumns": "5fr 1fr 5fr", "alignItems": "center", "gap": "1rem"},
+                    "style": {
+                        "gridTemplateColumns": "5fr 1fr 5fr",
+                        "alignItems": "center",
+                        "gap": "1rem",
+                        "height": "400px",
+                    },
                 },
                 DeviceList(
                     title="Equipos Disponibles",
@@ -541,9 +540,13 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
                 ),
             ),
             html.footer(
-                html.button({"class_name": "secondary", "on_click": on_close, "disabled": is_loading}, "Cancelar"),
-                html.button(
-                    {"aria-busy": str(is_loading).lower(), "on_click": handle_save, "disabled": is_loading}, "Guardar"
+                html.div(
+                    {"class_name": "grid"},
+                    html.button({"class_name": "secondary", "on_click": on_close, "disabled": is_loading}, "Cancelar"),
+                    html.button(
+                        {"aria-busy": str(is_loading).lower(), "on_click": handle_save, "disabled": is_loading},
+                        "Guardar",
+                    ),
                 ),
             ),
         ),
@@ -569,9 +572,6 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     all_robot_devices, set_all_robot_devices = use_state([])
     form_data, set_form_data = use_state(DEFAULT_FORM_STATE)
     is_loading, set_is_loading = use_state(False)
-
-    if robot is None:
-        return None
 
     @use_effect(dependencies=[robot])
     def load_data():
@@ -654,7 +654,7 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     def handle_cancel():
         set_view_mode("list")
 
-    if not is_open:
+    if not is_open or not robot:
         return None
 
     return html.dialog(

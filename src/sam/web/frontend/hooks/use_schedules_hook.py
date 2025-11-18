@@ -1,5 +1,5 @@
 import asyncio
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 
 from reactpy import use_callback, use_context, use_effect, use_memo, use_state
 
@@ -108,6 +108,23 @@ def use_schedules():
         except Exception as e:
             show(f"Error al guardar: {e}", "error")
 
+    @use_callback
+    async def save_schedule_equipos(schedule_id: int, equipo_ids: List[int]):
+        """
+        Guarda únicamente la lista de equipos para una programación.
+        """
+        if not schedule_id:
+            show("No se pudo guardar: ID de programación no encontrado.", "error")
+            return
+
+        try:
+            # Llama al nuevo método del API Client que creamos antes
+            await api.update_schedule_devices(schedule_id, equipo_ids)
+            show("Equipos de la programación actualizados", "success")
+            await load()  # Recargar datos
+        except Exception as e:
+            show(f"Error al guardar equipos: {e}", "error")
+
     total_pages = use_memo(lambda: max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE), [total, PAGE_SIZE])
 
     return {
@@ -122,5 +139,6 @@ def use_schedules():
         "total_pages": total_pages,
         "toggle_active": toggle_active,
         "save_schedule": save_schedule,
+        "save_schedule_equipos": save_schedule_equipos,
         "refresh": load,
     }
