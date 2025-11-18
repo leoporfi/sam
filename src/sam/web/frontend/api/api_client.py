@@ -104,16 +104,28 @@ class ApiClient:
         return await self._request("GET", f"/api/equipos/disponibles/{robot_id}")
 
     async def update_robot_assignments(self, robot_id: int, assign_ids: List[int], unassign_ids: List[int]) -> Dict:
-        # RFR-34: Se usan los nombres de campo en español que el backend espera.
         data = {"asignar_equipo_ids": assign_ids, "desasignar_equipo_ids": unassign_ids}
         return await self._request("POST", f"/api/robots/{robot_id}/asignaciones", json_data=data)
 
     # MÉTODOS PARA PROGRAMACIONES (SCHEDULES)
     async def get_schedules(self, params: Optional[Dict] = None) -> Dict:
         """
-        Obtiene la lista paginada de programaciones.
+        Obtiene la lista paginada de programaciones con validación y compatibilidad.
         """
-        return await self._request("GET", "/api/schedules", params=params)
+        try:
+            data = await self._request("GET", "/api/schedules", params=params)
+
+            if not isinstance(data, dict):
+                error_preview = str(data)[:200]
+                raise APIException(f"Respuesta inválida (no es JSON válido). Inicio: '{error_preview}...'")
+
+            return {"schedules": data.get("schedules", []), "total_count": data.get("total_count", 0)}
+
+        except Exception as e:
+            # Si es una excepción nuestra la dejamos pasar, sino la envolvemos
+            if isinstance(e, APIException):
+                raise e
+            raise APIException(f"Error al obtener programaciones: {str(e)}")
 
     async def toggle_schedule_status(self, schedule_id: int, activo: bool) -> Dict:
         """
@@ -149,6 +161,22 @@ class ApiClient:
 
     async def delete_schedule(self, schedule_id: int, robot_id: int) -> Dict:
         return await self._request("DELETE", f"/api/schedules/{schedule_id}/robot/{robot_id}")
+
+    # --- Métodos para Asignaciones de Programaciones (NUEVOS) ---
+
+    async def get_schedule_devices(self, schedule_id: int) -> Dict:
+        """
+        Obtiene los equipos asignados y disponibles para una programación específica.
+        Endpoint: GET /api/schedules/{id}/devices
+        """
+        return await self._request("GET", f"/api/schedules/{schedule_id}/devices")
+
+    async def update_schedule_devices(self, schedule_id: int, device_ids: List[int]):
+        """
+        Actualiza la lista de equipos asignados a una programación.
+        Endpoint: PUT /api/schedules/{id}/devices
+        """
+        return await self._request("PUT", f"/api/schedules/{schedule_id}/devices", json_data=device_ids)
 
     # MÉTODOS PARA POOLS
     async def get_pools(self) -> List[Dict]:
