@@ -518,6 +518,74 @@ def toggle_schedule_active(db: DatabaseConnector, schedule_id: int, activo: bool
     sql = "UPDATE dbo.Programaciones SET Activo=? WHERE ProgramacionId=?"
     db.ejecutar_consulta(sql, (activo, schedule_id), es_select=False)
 
+def get_schedule_devices_data(db: DatabaseConnector, schedule_id: int) -> Dict[str, List[Dict]]:
+    """
+    Obtiene los equipos asignados a una programación específica y los disponibles.
+    """
+    # 1. Obtener los asignados a ESTA programación
+    query_assigned = """
+        SELECT e.EquipoId AS ID, e.Equipo AS Nombre, e.Licencia
+        FROM Equipos e
+        INNER JOIN Asignaciones a ON e.EquipoId = a.EquipoId
+        WHERE a.ProgramacionId = ?
+    """
+    assigned = db.ejecutar_consulta(query_assigned, (schedule_id,), es_select=True)
+
+    # 2. Obtener TODOS los disponibles (que estén activos en SAM)
+    # Excluimos los que ya están asignados a esta programación para no duplicar
+    assigned_ids = [item["ID"] for item in assigned]
+
+    # Si hay asignados, construimos los placeholders (?,?,?)
+    if assigned_ids:
+        placeholders = ",".join("?" * len(assigned_ids))
+        query_available = f"""
+            SELECT EquipoId AS ID, Equipo AS Nombre, Licencia
+            FROM Equipos
+            WHERE Activo_SAM = 1
+              AND EquipoId NOT IN ({placeholders})
+            ORDER BY Equipo ASC
+        """
+        params = tuple(assigned_ids)
+    else:
+        # Si no hay nadie asignado, traemos todos los activos
+        query_available = """
+            SELECT EquipoId AS ID, Equipo AS Nombre, Licencia
+            FROM Equipos
+            WHERE Activo_SAM = 1
+            ORDER BY Equipo ASC
+        """
+        params = ()
+
+    available = db.ejecutar_consulta(query_available, params, es_select=True)
+
+    return {"assigned": assigned, "available": available}
+
+
+def update_schedule_devices_db(db: DatabaseConnector, schedule_id: int, equipo_ids: List[int]):
+    """
+    Actualiza las asignaciones usando el Stored Procedure 'ActualizarEquiposProgramacion'.
+    Requiere que el SP exista en la base de datos.
+    """
+    try:
+        # 1. Preparamos la lista para el TVP (Table-Valued Parameter)
+        # Tu tipo 'dbo.IdListType' espera una columna [ID], así que pasamos tuplas de un elemento: (id,)
+        devices_tvp = [(eid,) for eid in equipo_ids]
+
+        # 2. Preparamos los parámetros del SP
+        params = {
+            "ProgramacionId": schedule_id,
+            "EquiposIds": devices_tvp,  # Esto se mapea automáticamente al tipo TVP en SQL
+        }
+
+        # 3. Ejecutamos el SP usando el método especializado de tu conector
+        db.ejecutar_sp_con_tvp("dbo.ActualizarEquiposProgramacion", params)
+
+        # Nota: ejecutar_sp_con_tvp ya maneja el commit internamente.
+
+    except Exception as e:
+        # Capturamos cualquier error de SQL (ej. ID inválido) y lo relanzamos limpio
+        raise Exception(f"Error al ejecutar SP ActualizarEquiposProgramacion: {e}")
+
 
 # Pool
 def get_pools(db: DatabaseConnector) -> List[Dict]:

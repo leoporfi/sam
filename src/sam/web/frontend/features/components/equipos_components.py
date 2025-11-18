@@ -10,12 +10,12 @@ from ...shared.common_components import LoadingSpinner, Pagination
 
 @component
 def EquiposControls(
-    search_term: str,
-    on_search_change: Callable,
+    search: str,
+    on_search: Callable,
     active_filter: str,
-    on_active_change: Callable,
+    on_active: Callable,
     balanceable_filter: str,
-    on_balanceable_change: Callable,
+    on_balanceable: Callable,
     is_searching: bool,
     on_create_equipo: Callable,
 ):
@@ -40,14 +40,14 @@ def EquiposControls(
         html.div(
             {"class_name": collapsible_panel_class},
             html.div(
-                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr 2fr 2fr"}},
+                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"}},
                 html.input(
                     {
                         "type": "search",
                         "name": "search-device",
                         "placeholder": "Buscar equipos por nombre...",
-                        "value": search_term,
-                        "on_change": lambda event: on_search_change(event["target"]["value"]),
+                        "value": search,
+                        "on_change": lambda event: on_search(event["target"]["value"]),
                         "aria-busy": str(is_searching).lower(),
                     }
                 ),
@@ -55,7 +55,7 @@ def EquiposControls(
                     {
                         "name": "filter-activo",
                         "value": active_filter,
-                        "on_change": lambda e: on_active_change(e["target"]["value"]),
+                        "on_change": lambda e: on_active(e["target"]["value"]),
                     },
                     html.option({"value": "all"}, "Activo: Todos"),
                     html.option({"value": "true"}, "Solo Activos"),
@@ -65,7 +65,7 @@ def EquiposControls(
                     {
                         "name": "filter-balanceable",
                         "value": balanceable_filter,
-                        "on_change": lambda e: on_balanceable_change(e["target"]["value"]),
+                        "on_change": lambda e: on_balanceable(e["target"]["value"]),
                     },
                     html.option({"value": "all"}, "Balanceo: Todos"),
                     html.option({"value": "true"}, "Permite Balanceo"),
