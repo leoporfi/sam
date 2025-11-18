@@ -49,7 +49,7 @@ def RobotsControls(
         html.div(
             {"class_name": collapsible_panel_class},
             html.div(
-                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr 2fr 2fr"}},
+                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"}},
                 html.input(
                     {
                         "type": "search",
@@ -79,7 +79,7 @@ def RobotsControls(
                     },
                     html.option({"value": "all"}, "Online: Todos"),
                     html.option({"value": "true"}, "Solo Online"),
-                    html.option({"value": "false"}, "Solo No Online"),
+                    html.option({"value": "false"}, "Solo Programados"),
                 ),
                 html.button(
                     {"on_click": on_create_robot, "type": "button", "class_name": "primary"},
@@ -267,7 +267,7 @@ def RobotRow(robot: Robot, on_action: Callable):
                         "data-tooltip": "Asignar Equipos",
                         "class_name": "secondary",
                     },
-                    html.i({"class_name": "fa-solid fa-users"}),
+                    html.i({"class_name": "fa-solid fa-computer"}),
                 ),
                 html.a(
                     {

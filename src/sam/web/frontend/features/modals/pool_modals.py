@@ -154,9 +154,11 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
         return None
 
     return html.dialog(
-        {"open": True, "style": {"maxWidth": "90vw", "width": "1200px"}},
+        {
+            "open": True,
+        },
         html.article(
-            {"aria-busy": str(is_loading).lower()},
+            {"aria-busy": str(is_loading).lower(), "style": {"maxWidth": "90vw", "width": "900px"}},
             html.header(
                 html.button({"aria-label": "Close", "rel": "prev", "on_click": lambda e: on_close()}),
                 html.h3(f"Asignar Recursos a: {pool.get('Nombre')}"),
@@ -282,12 +284,8 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
     search, set_search = use_state("")
     sorted_items = use_memo(lambda: sorted(items, key=lambda x: x.get("Nombre", "").lower()), [items])
     filtered_items = use_memo(
-        lambda: [
-            item
-            for item in sorted_items  # <-- Usamos la lista ya ordenada
-            if search.lower() in item["Nombre"].lower()
-        ],
-        [sorted_items, search],  # <-- Actualizamos la dependencia
+        lambda: [item for item in sorted_items if search.lower() in item["Nombre"].lower()],
+        [sorted_items, search],
     )
 
     selected_ids_set = use_memo(lambda: set(selected_ids), [selected_ids])
