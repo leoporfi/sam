@@ -1,6 +1,6 @@
 # sam/web/api.py
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import pyodbc
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request, status
@@ -159,7 +159,7 @@ def get_robots_with_assignments(
     active: Optional[bool] = None,
     online: Optional[bool] = None,
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(20, ge=1, le=300),
     sort_by: Optional[str] = Query("Robot"),
     sort_dir: Optional[str] = Query("asc"),
 ):
@@ -213,7 +213,7 @@ def create_robot(robot_data: RobotCreateRequest, db: DatabaseConnector = Depends
 
 
 # ------------------------------------------------------------------
-# Schedules
+# Programaciones
 # ------------------------------------------------------------------
 # ------------------------------------------------------------------
 # Schedules  (legacy – usado por SchedulesList en el modal)
@@ -237,7 +237,7 @@ def get_schedules(
     search: Optional[str] = Query(None),
     activo: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(20, ge=1, le=300),
 ):
     """Listado paginado de programaciones con filtros."""
     try:
@@ -321,6 +321,28 @@ def update_schedule_details(
         db_service.update_schedule_simple(db, schedule_id, data)
     except Exception as e:
         _handle_endpoint_errors("update_schedule_details", e, "Programación", schedule_id)
+
+
+# --- Asignaciones por Programación ---
+
+
+@router.get("/api/schedules/{schedule_id}/devices", tags=["Programaciones"])
+def get_schedule_devices(schedule_id: int, db: DatabaseConnector = Depends(get_db)):
+    try:
+        return db_service.get_schedule_devices_data(db, schedule_id)
+    except Exception as e:
+        _handle_endpoint_errors("get_schedule_devices", e, "Schedules", schedule_id)
+
+
+@router.put("/api/schedules/{schedule_id}/devices", tags=["Programaciones"])
+def update_schedule_devices(
+    schedule_id: int, equipo_ids: List[int] = Body(...), db: DatabaseConnector = Depends(get_db)
+):
+    try:
+        db_service.update_schedule_devices_db(db, schedule_id, equipo_ids)
+        return {"message": "Asignaciones actualizadas"}
+    except Exception as e:
+        _handle_endpoint_errors("update_schedule_devices", e, "Schedules", schedule_id)
 
 
 # ------------------------------------------------------------------
