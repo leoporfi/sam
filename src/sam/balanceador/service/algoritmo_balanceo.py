@@ -45,8 +45,14 @@ class Balanceo:
         """
         with self._lock:
             estado_global = self._obtener_estado_inicial_global(carga_consolidada)
+            # 1. Limpieza estándar
             self.ejecutar_limpieza_global(estado_global)
 
+            # 2. FASE NUEVA: Prioridad Estricta (Preemption)
+            if self._leer_modo_prioridad_estricta():
+                self.ejecutar_desalojo_por_prioridad_estricta(estado_global)
+
+            # 3. Asignación Normal (Balanceo Interno)
             pool_ids = [p["PoolId"] for p in pools_activos]
             if None not in pool_ids:
                 pool_ids.append(None)
@@ -54,7 +60,115 @@ class Balanceo:
             for pool_id in pool_ids:
                 self.ejecutar_balanceo_interno_de_pool(pool_id, estado_global)
 
+            # 4. Desborde
             self.ejecutar_fase_de_desborde_global(estado_global)
+
+    def _leer_modo_prioridad_estricta(self) -> bool:
+        """Consulta rápida a BD para ver si el modo agresivo está activo."""
+        try:
+            res = self.db_sam.ejecutar_consulta(
+                "SELECT Valor FROM dbo.ConfiguracionSistema WHERE Clave = 'BALANCEO_PREEMPTION_MODE'", es_select=True
+            )
+            return res and res[0]["Valor"].upper() == "TRUE"
+        except Exception as e:
+            logger.error(f"Error leyendo configuración de Preemption: {e}")
+            return False
+
+    def ejecutar_desalojo_por_prioridad_estricta(self, estado_global: Dict[str, Any]):
+        """
+        Modo 'Prioridad Estricta': Desaloja equipos de robots de Baja Prioridad
+        si existen robots de Alta Prioridad con demanda insatisfecha y sin equipos disponibles.
+        """
+        logger.info(">>> Ejecutando FASE DE PRIORIDAD ESTRICTA (Preemption) <<<")
+
+        mapa_config = estado_global["mapa_config_robots"]
+        carga = estado_global["carga_trabajo_por_robot"]
+        asignaciones = estado_global["mapa_asignaciones_dinamicas"]
+
+        # 1. Identificar robots con "Hambre" (Demanda insatisfecha)
+        robots_hambrientos = []
+        for rid, tickets in carga.items():
+            config = mapa_config.get(rid, {})
+            necesarios = self._calcular_equipos_necesarios_para_robot(rid, tickets, config)
+            actuales = len(asignaciones.get(rid, []))
+
+            if necesarios > actuales:
+                # Guardamos tupla: (prioridad, robot_id, deficit)
+                robots_hambrientos.append(
+                    {
+                        "id": rid,
+                        "prio": config.get("PrioridadBalanceo", 100),
+                        "deficit": necesarios - actuales,
+                        "pool": config.get("PoolId"),
+                    }
+                )
+
+        # Ordenar: Los más prioritarios (menor número) primero
+        robots_hambrientos.sort(key=lambda x: x["prio"])
+
+        if not robots_hambrientos:
+            return
+
+        # 2. Buscar víctimas para cada hambriento
+        for robot_vip in robots_hambrientos:
+            # Si ya satisfizo su déficit en este ciclo, continuar
+            if robot_vip["deficit"] <= 0:
+                continue
+
+            # Buscar candidatos a ser desalojados:
+            # - Deben ser de MENOR prioridad (numero mayor)
+            # - Deben tener equipos asignados dinámicamente
+            # - Deben estar en el mismo Pool (o compatibles si implementamos lógica cross-pool compleja,
+            #   pero por seguridad empezamos por el mismo pool o global si es None)
+
+            victimas_potenciales = []
+            for rid_victima, equipos_victima in asignaciones.items():
+                if not equipos_victima:
+                    continue
+
+                cfg_victima = mapa_config.get(rid_victima, {})
+                prio_victima = cfg_victima.get("PrioridadBalanceo", 100)
+                pool_victima = cfg_victima.get("PoolId")
+
+                # Condición de desalojo:
+                # 1. Victima tiene PEOR prioridad (Mayor número)
+                # 2. Están en el mismo Pool (o ambos None)
+                if prio_victima > robot_vip["prio"] and pool_victima == robot_vip["pool"]:
+                    victimas_potenciales.append(
+                        {
+                            "id": rid_victima,
+                            "prio": prio_victima,
+                            "equipos": list(equipos_victima),  # Copia de la lista
+                        }
+                    )
+
+            # Ordenar víctimas: Desalojar primero a los de PEOR prioridad (mayor número)
+            victimas_potenciales.sort(key=lambda x: x["prio"], reverse=True)
+
+            # 3. Ejecutar desalojo
+            for victima in victimas_potenciales:
+                while robot_vip["deficit"] > 0 and victima["equipos"]:
+                    equipo_a_robar = victima["equipos"].pop()
+
+                    logger.warning(
+                        f"[PREEMPTION] Desalojando Equipo {equipo_a_robar} del Robot {victima['id']} (Prio {victima['prio']}) "
+                        f"para favorecer al Robot {robot_vip['id']} (Prio {robot_vip['prio']})"
+                    )
+
+                    # Desasignamos forzosamente
+                    exito = self._realizar_desasignacion_db(
+                        victima["id"], equipo_a_robar, "DESALOJO_POR_PRIORIDAD_ESTRICTA", estado_global
+                    )
+
+                    if exito:
+                        # Reducimos el déficit.
+                        # NOTA: No asignamos inmediatamente aquí. Al liberar el equipo,
+                        # la siguiente fase "Balanceo Interno" lo verá como "Libre"
+                        # y se lo dará al robot_vip porque tiene mejor prioridad.
+                        robot_vip["deficit"] -= 1
+                    else:
+                        # Si falló el desalojo (ej. cooling), paramos con esta víctima
+                        break
 
     def _obtener_estado_inicial_global(self, carga_consolidada: Dict[int, int]) -> Dict[str, Any]:
         """
@@ -188,8 +302,10 @@ class Balanceo:
         Asigna equipos del Pool General a robots con necesidades no cubiertas.
         """
         logger.info("Iniciando ETAPA DE DESBORDE Y DEMANDA ADICIONAL GLOBAL...")
-        if self.aislamiento_estricto_pool:
-            logger.info("Aislamiento estricto activado, no se realizará desborde.")
+        # CAMBIO: Leer configuración dinámica en lugar de self.aislamiento_estricto_pool
+        # if self.aislamiento_estricto_pool:
+        if self._leer_config_aislamiento():
+            logger.info("Aislamiento estricto activado (Configuración BD), no se realizará desborde entre pools.")
             return
 
         equipos_asignados_globalmente = {
@@ -322,3 +438,17 @@ class Balanceo:
         except Exception as e:
             logger.error(f"Error al desasignar RobotId {robot_id} de EquipoId {equipo_id}: {e}")
             return False
+
+    def _leer_config_aislamiento(self) -> bool:
+        """Lee si el aislamiento estricto está activo en BD. Default: True (Conservador)"""
+        try:
+            res = self.db_sam.ejecutar_consulta(
+                "SELECT Valor FROM dbo.ConfiguracionSistema WHERE Clave = 'BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO'",
+                es_select=True,
+            )
+            if not res:
+                return True
+            return res[0]["Valor"].upper() == "TRUE"
+        except Exception as e:
+            logger.error(f"Error leyendo config aislamiento: {e}")
+            return True

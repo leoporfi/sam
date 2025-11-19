@@ -17,6 +17,8 @@ from .schemas import (
     AssignmentUpdateRequest,
     EquipoCreateRequest,
     EquipoStatusUpdate,
+    MapeoRobotCreate,
+    MapeoRobotResponse,
     PoolAssignmentsRequest,
     PoolCreate,
     PoolUpdate,
@@ -159,7 +161,7 @@ def get_robots_with_assignments(
     active: Optional[bool] = None,
     online: Optional[bool] = None,
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=300),
+    size: int = Query(20, ge=1, le=1000),
     sort_by: Optional[str] = Query("Robot"),
     sort_dir: Optional[str] = Query("asc"),
 ):
@@ -507,3 +509,78 @@ def set_pool_assignments(pool_id: int, data: PoolAssignmentsRequest, db: Databas
         return {"message": f"Asignaciones para el Pool {pool_id} actualizadas."}
     except Exception as e:
         _handle_endpoint_errors("set_pool_assignments", e, "Pools", pool_id)
+
+
+# --- Configuración del Sistema ---
+
+
+@router.get("/api/config/preemption", tags=["Configuracion"])
+def get_preemption_mode(db: DatabaseConnector = Depends(get_db)):
+    try:
+        val = db_service.get_system_config(db, "BALANCEO_PREEMPTION_MODE")
+        # Retornamos true si el string es 'TRUE' (case-insensitive)
+        is_enabled = (val or "").upper() == "TRUE"
+        return {"enabled": is_enabled}
+    except Exception as e:
+        _handle_endpoint_errors("get_preemption_mode", e, "Configuracion")
+
+
+@router.put("/api/config/preemption", tags=["Configuracion"])
+def set_preemption_mode(enabled: bool = Body(..., embed=True), db: DatabaseConnector = Depends(get_db)):
+    try:
+        val = "TRUE" if enabled else "FALSE"
+        db_service.set_system_config(db, "BALANCEO_PREEMPTION_MODE", val)
+        return {"message": f"Modo Prioridad Estricta {'activado' if enabled else 'desactivado'}"}
+    except Exception as e:
+        _handle_endpoint_errors("set_preemption_mode", e, "Configuracion")
+
+
+@router.get("/api/config/isolation", tags=["Configuracion"])
+def get_isolation_mode(db: DatabaseConnector = Depends(get_db)):
+    try:
+        val = db_service.get_system_config(db, "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO")
+        # Default es TRUE si no existe
+        is_enabled = (val or "TRUE").upper() == "TRUE"
+        return {"enabled": is_enabled}
+    except Exception as e:
+        _handle_endpoint_errors("get_isolation_mode", e, "Configuracion")
+
+
+@router.put("/api/config/isolation", tags=["Configuracion"])
+def set_isolation_mode(enabled: bool = Body(..., embed=True), db: DatabaseConnector = Depends(get_db)):
+    try:
+        val = "TRUE" if enabled else "FALSE"
+        db_service.set_system_config(db, "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", val)
+        mode_text = "Aislamiento Estricto (Sin Desborde)" if enabled else "Desborde Permitido (Cross-Pool)"
+        return {"message": f"Modo {mode_text} activado."}
+    except Exception as e:
+        _handle_endpoint_errors("set_isolation_mode", e, "Configuracion")
+
+
+# --- Endpoints de Mapeos ---
+
+
+@router.get("/api/mappings", tags=["Configuracion"], response_model=List[MapeoRobotResponse])
+def get_mappings(db: DatabaseConnector = Depends(get_db)):
+    try:
+        return db_service.get_all_mappings(db)
+    except Exception as e:
+        _handle_endpoint_errors("get_mappings", e, "Mapeos")
+
+
+@router.post("/api/mappings", tags=["Configuracion"])
+def create_mapping_endpoint(mapping: MapeoRobotCreate, db: DatabaseConnector = Depends(get_db)):
+    try:
+        db_service.create_mapping(db, mapping.dict())
+        return {"message": "Mapeo creado correctamente"}
+    except Exception as e:
+        _handle_endpoint_errors("create_mapping", e, "Mapeos")
+
+
+@router.delete("/api/mappings/{mapeo_id}", tags=["Configuracion"])
+def delete_mapping_endpoint(mapeo_id: int, db: DatabaseConnector = Depends(get_db)):
+    try:
+        db_service.delete_mapping(db, mapeo_id)
+        return {"message": "Mapeo eliminado"}
+    except Exception as e:
+        _handle_endpoint_errors("delete_mapping", e, "Mapeos", mapeo_id)

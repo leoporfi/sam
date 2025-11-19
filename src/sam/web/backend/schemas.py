@@ -123,3 +123,25 @@ class EquipoCreateRequest(BaseModel):
     PermiteBalanceoDinamico: bool = 0
     RobotAsignado: Optional[str] = None
     Pool: Optional[str] = None
+
+
+# --- Schemas para Mapeo de Robots ---
+
+
+class MapeoRobotCreate(BaseModel):
+    Proveedor: str
+    NombreExterno: str
+    RobotId: int
+    Descripcion: Optional[str] = None
+
+
+class MapeoRobotUpdate(BaseModel):
+    Proveedor: Optional[str] = None
+    NombreExterno: Optional[str] = None
+    RobotId: Optional[int] = None
+    Descripcion: Optional[str] = None
+
+
+class MapeoRobotResponse(MapeoRobotCreate):
+    MapeoId: int
+    RobotNombre: Optional[str] = None  # Para mostrar el nombre interno en la UI

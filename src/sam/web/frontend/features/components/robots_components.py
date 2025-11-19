@@ -84,7 +84,7 @@ def RobotsControls(
                 html.button(
                     {"on_click": on_create_robot, "type": "button", "class_name": "primary"},
                     html.i({"class_name": "fa-solid fa-plus"}),
-                    " Agregar Robot",
+                    " Robot",
                 ),
             ),
         ),

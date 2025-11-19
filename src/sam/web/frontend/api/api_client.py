@@ -228,6 +228,32 @@ class ApiClient:
         """Sincroniza robots y equipos desde A360 (legacy)."""
         return await self._request("POST", "/api/sync")
 
+    # MÉTODOS DE CONFIGURACIÓN DEL SISTEMA
+    async def get_preemption_mode(self) -> Dict:
+        """Obtiene el estado actual del modo Prioridad Estricta."""
+        return await self._request("GET", "/api/config/preemption")
+
+    async def set_preemption_mode(self, enabled: bool) -> Dict:
+        """Activa o desactiva el modo Prioridad Estricta."""
+        # El backend espera un JSON con la clave "enabled"
+        return await self._request("PUT", "/api/config/preemption", json_data={"enabled": enabled})
+
+    async def get_isolation_mode(self) -> Dict:
+        return await self._request("GET", "/api/config/isolation")
+
+    async def set_isolation_mode(self, enabled: bool) -> Dict:
+        return await self._request("PUT", "/api/config/isolation", json_data={"enabled": enabled})
+
+    # 
+    async def get_mappings(self) -> List[Dict]:
+        return await self._request("GET", "/api/mappings")
+
+    async def create_mapping(self, data: Dict) -> Dict:
+        return await self._request("POST", "/api/mappings", json_data=data)
+
+    async def delete_mapping(self, mapeo_id: int) -> Dict:
+        return await self._request("DELETE", f"/api/mappings/{mapeo_id}")
+
     async def close(self):
         if self._client:
             await self._client.aclose()

@@ -74,7 +74,7 @@ def EquiposControls(
                 html.button(
                     {"on_click": lambda e: on_create_equipo()},
                     html.i({"class_name": "fa-solid fa-plus"}),
-                    " Agregar Equipo",
+                    " Equipo",
                 ),
             ),
         ),

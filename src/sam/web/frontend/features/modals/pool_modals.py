@@ -322,7 +322,7 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
             ),
         ),
         html.div(
-            {"class_name": "device-list-table"},
+            {"class_name": "device-list-table compact-assignment-table"},
             html.table(
                 {"role": "grid"},
                 html.thead(
