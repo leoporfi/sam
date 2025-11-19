@@ -18,7 +18,7 @@ datalist = make_vdom_constructor("datalist")
 def MappingsPage(theme_is_dark: bool, on_theme_toggle):
     mappings, set_mappings = use_state([])
     robots, set_robots = use_state([])
-    known_providers, set_known_providers = use_state(["A360", "UiPath", "General"])
+    known_providers, set_known_providers = use_state(["A360", "Orquestador","RPA360", "Tisam", "General"])
     loading, set_loading = use_state(True)
 
     # Form State
@@ -41,7 +41,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
 
             # Extraer proveedores existentes
             existing_providers = sorted(list(set(m["Proveedor"] for m in m_data)))
-            all_providers = sorted(list(set(existing_providers + ["A360", "UiPath", "General"])))
+            all_providers = sorted(list(set(existing_providers + ["A360", "Orquestador","RPA360", "Tisam", "General"])))
             set_known_providers(all_providers)
 
         except Exception as e:
@@ -105,7 +105,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
         equipos_state={},
         children=html.div(
             html.h2("Mapeo de Robots (Alias)"),
-            html.p("Asocia nombres externos (de correos, APIs, excels) con los Robots reales de SAM."),
+            html.p("Asocia nombres externos con los Robots reales de SAM."),
             html.article(
                 html.header(html.h4("Nuevo Alias / Mapeo")),
                 html.div(
@@ -127,7 +127,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                     ),
                     # 2. Nombre Externo
                     html.label(
-                        "Nombre Externo (El que recibes)",
+                        "Nombre Externo (Cómo lo llaman)",
                         html.input(
                             {
                                 "type": "text",
