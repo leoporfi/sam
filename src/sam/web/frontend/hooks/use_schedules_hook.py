@@ -84,46 +84,53 @@ def use_schedules():
         pass
 
     @use_callback
-    async def toggle_active(schedule_id: int, activo: bool):
-        try:
-            # UI optimista (deshabilitado por simplicidad, recargamos)
-            await api.toggle_schedule_status(schedule_id, activo)
-            show("Estado cambiado", "success")
-            await load()  # Recargar datos
-        except Exception as e:
-            show(str(e), "error")
-            await load()  # Revertir si la UI fuera optimista
+    def toggle_active(schedule_id: int, activo: bool):
+        async def _logic():
+            try:
+                # UI optimista (deshabilitado por simplicidad, recargamos)
+                await api.toggle_schedule_status(schedule_id, activo)
+                show("Estado cambiado", "success")
+                await load()
+            except Exception as e:
+                show(str(e), "error")
+                await load()
+
+        asyncio.create_task(_logic())
 
     @use_callback
-    async def save_schedule(data: dict):
-        schedule_id = data.get("ProgramacionId")
-        if not schedule_id:
-            show("No se pudo guardar: ID de programación no encontrado.", "error")
-            return
+    def save_schedule(data: dict):
+        async def _logic():
+            schedule_id = data.get("ProgramacionId")
+            if not schedule_id:
+                show("No se pudo guardar: ID de programación no encontrado.", "error")
+                return
 
-        try:
-            await api.update_schedule_details(schedule_id, data)
-            show("Programación actualizada", "success")
-            await load()  # Recargar datos
-        except Exception as e:
-            show(f"Error al guardar: {e}", "error")
+            try:
+                await api.update_schedule_details(schedule_id, data)
+                show("Programación actualizada", "success")
+                await load()  # Recargar datos
+            except Exception as e:
+                show(f"Error al guardar: {e}", "error")
+
+        asyncio.create_task(_logic())
 
     @use_callback
-    async def save_schedule_equipos(schedule_id: int, equipo_ids: List[int]):
+    def save_schedule_equipos(schedule_id: int, equipo_ids: List[int]):
         """
         Guarda únicamente la lista de equipos para una programación.
         """
-        if not schedule_id:
-            show("No se pudo guardar: ID de programación no encontrado.", "error")
-            return
+        async def _logic():
+            if not schedule_id:
+                show("No se pudo guardar: ID de programación no encontrado.", "error")
+                return
 
-        try:
-            # Llama al nuevo método del API Client que creamos antes
-            await api.update_schedule_devices(schedule_id, equipo_ids)
-            show("Equipos de la programación actualizados", "success")
-            await load()  # Recargar datos
-        except Exception as e:
-            show(f"Error al guardar equipos: {e}", "error")
+            try:
+                # Llama al nuevo método del API Client que creamos antes
+                await api.update_schedule_devices(schedule_id, equipo_ids)
+                show("Equipos de la programación actualizados", "success")
+                await load()  # Recargar datos
+            except Exception as e:
+                show(f"Error al guardar equipos: {e}", "error")
 
     total_pages = use_memo(lambda: max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE), [total, PAGE_SIZE])
 
@@ -140,5 +147,5 @@ def use_schedules():
         "toggle_active": toggle_active,
         "save_schedule": save_schedule,
         "save_schedule_equipos": save_schedule_equipos,
-        "refresh": load,
+        "refresh": load, # load sigue siendo async, pero refresh suele manejarse distinto o no usarse en lambdas directas sin wrapper
     }
