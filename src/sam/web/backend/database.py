@@ -727,3 +727,56 @@ def set_system_config(db: DatabaseConnector, key: str, value: str):
     """
     db.ejecutar_consulta(query, (str(value), key), es_select=False)
 
+# --- Gestión de Mapeos ---
+
+
+def get_all_mappings(db: DatabaseConnector) -> List[Dict]:
+    """Obtiene todos los mapeos con el nombre del robot interno asociado."""
+    query = """
+        SELECT m.*, r.Robot as RobotNombre 
+        FROM dbo.MapeoRobots m
+        LEFT JOIN dbo.Robots r ON m.RobotId = r.RobotId
+        ORDER BY m.Proveedor, m.NombreExterno
+    """
+    return db.ejecutar_consulta(query, es_select=True)
+
+
+def create_mapping(db: DatabaseConnector, data: dict):
+    query = """
+        INSERT INTO dbo.MapeoRobots (Proveedor, NombreExterno, RobotId, Descripcion)
+        VALUES (?, ?, ?, ?)
+    """
+    db.ejecutar_consulta(
+        query, (data["Proveedor"], data["NombreExterno"], data["RobotId"], data.get("Descripcion")), es_select=False
+    )
+
+
+def delete_mapping(db: DatabaseConnector, mapeo_id: int):
+    db.ejecutar_consulta("DELETE FROM dbo.MapeoRobots WHERE MapeoId = ?", (mapeo_id,), es_select=False)
+
+
+# --- LÓGICA CORE DE RESOLUCIÓN ---
+
+
+def resolver_robot_id(db: DatabaseConnector, nombre_externo: str, proveedor: str = "A360") -> Optional[int]:
+    """
+    Lógica de Resolución Inteligente:
+    1. Busca coincidencia exacta en la tabla Robots (nombre interno == nombre externo).
+    2. Si falla, busca en la tabla MapeoRobots usando el proveedor.
+    3. Retorna RobotId o None.
+    """
+    # 1. Intento Directo
+    row = db.ejecutar_consulta("SELECT RobotId FROM dbo.Robots WHERE Robot = ?", (nombre_externo,), es_select=True)
+    if row:
+        return row[0]["RobotId"]
+
+    # 2. Intento por Mapeo
+    row_map = db.ejecutar_consulta(
+        "SELECT RobotId FROM dbo.MapeoRobots WHERE NombreExterno = ? AND Proveedor = ?",
+        (nombre_externo, proveedor),
+        es_select=True,
+    )
+    if row_map:
+        return row_map[0]["RobotId"]
+
+    return None
