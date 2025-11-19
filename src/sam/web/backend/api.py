@@ -507,3 +507,48 @@ def set_pool_assignments(pool_id: int, data: PoolAssignmentsRequest, db: Databas
         return {"message": f"Asignaciones para el Pool {pool_id} actualizadas."}
     except Exception as e:
         _handle_endpoint_errors("set_pool_assignments", e, "Pools", pool_id)
+# --- Configuración del Sistema ---
+
+
+@router.get("/api/config/preemption", tags=["Configuracion"])
+def get_preemption_mode(db: DatabaseConnector = Depends(get_db)):
+    try:
+        val = db_service.get_system_config(db, "BALANCEO_PREEMPTION_MODE")
+        # Retornamos true si el string es 'TRUE' (case-insensitive)
+        is_enabled = (val or "").upper() == "TRUE"
+        return {"enabled": is_enabled}
+    except Exception as e:
+        _handle_endpoint_errors("get_preemption_mode", e, "Configuracion")
+
+
+@router.put("/api/config/preemption", tags=["Configuracion"])
+def set_preemption_mode(enabled: bool = Body(..., embed=True), db: DatabaseConnector = Depends(get_db)):
+    try:
+        val = "TRUE" if enabled else "FALSE"
+        db_service.set_system_config(db, "BALANCEO_PREEMPTION_MODE", val)
+        return {"message": f"Modo Prioridad Estricta {'activado' if enabled else 'desactivado'}"}
+    except Exception as e:
+        _handle_endpoint_errors("set_preemption_mode", e, "Configuracion")
+
+
+@router.get("/api/config/isolation", tags=["Configuracion"])
+def get_isolation_mode(db: DatabaseConnector = Depends(get_db)):
+    try:
+        val = db_service.get_system_config(db, "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO")
+        # Default es TRUE si no existe
+        is_enabled = (val or "TRUE").upper() == "TRUE"
+        return {"enabled": is_enabled}
+    except Exception as e:
+        _handle_endpoint_errors("get_isolation_mode", e, "Configuracion")
+
+
+@router.put("/api/config/isolation", tags=["Configuracion"])
+def set_isolation_mode(enabled: bool = Body(..., embed=True), db: DatabaseConnector = Depends(get_db)):
+    try:
+        val = "TRUE" if enabled else "FALSE"
+        db_service.set_system_config(db, "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", val)
+        mode_text = "Aislamiento Estricto (Sin Desborde)" if enabled else "Desborde Permitido (Cross-Pool)"
+        return {"message": f"Modo {mode_text} activado."}
+    except Exception as e:
+        _handle_endpoint_errors("set_isolation_mode", e, "Configuracion")
+
