@@ -17,6 +17,8 @@ from .schemas import (
     AssignmentUpdateRequest,
     EquipoCreateRequest,
     EquipoStatusUpdate,
+    MapeoRobotCreate,
+    MapeoRobotResponse,
     PoolAssignmentsRequest,
     PoolCreate,
     PoolUpdate,
@@ -552,3 +554,30 @@ def set_isolation_mode(enabled: bool = Body(..., embed=True), db: DatabaseConnec
     except Exception as e:
         _handle_endpoint_errors("set_isolation_mode", e, "Configuracion")
 
+# --- Endpoints de Mapeos ---
+
+
+@router.get("/api/mappings", tags=["Configuracion"], response_model=List[MapeoRobotResponse])
+def get_mappings(db: DatabaseConnector = Depends(get_db)):
+    try:
+        return db_service.get_all_mappings(db)
+    except Exception as e:
+        _handle_endpoint_errors("get_mappings", e, "Mapeos")
+
+
+@router.post("/api/mappings", tags=["Configuracion"])
+def create_mapping_endpoint(mapping: MapeoRobotCreate, db: DatabaseConnector = Depends(get_db)):
+    try:
+        db_service.create_mapping(db, mapping.dict())
+        return {"message": "Mapeo creado correctamente"}
+    except Exception as e:
+        _handle_endpoint_errors("create_mapping", e, "Mapeos")
+
+
+@router.delete("/api/mappings/{mapeo_id}", tags=["Configuracion"])
+def delete_mapping_endpoint(mapeo_id: int, db: DatabaseConnector = Depends(get_db)):
+    try:
+        db_service.delete_mapping(db, mapeo_id)
+        return {"message": "Mapeo eliminado"}
+    except Exception as e:
+        _handle_endpoint_errors("delete_mapping", e, "Mapeos", mapeo_id)

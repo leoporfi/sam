@@ -10,7 +10,7 @@ from sam.web.frontend.api.api_client import get_api_client
 
 # Componentes de páginas
 from .features.components.equipos_components import EquiposControls, EquiposDashboard
-from .features.components.pools_components import PoolsControls, PoolsDashboard
+from .features.components.mappings_page import MappingsPage
 from .features.components.robots_components import RobotsControls, RobotsDashboard
 from .features.components.schedules_components import SchedulesControls, SchedulesDashboard
 
@@ -700,6 +700,7 @@ def App():
                 route("/equipos", EquiposPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                 route("/programaciones", SchedulesPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                 route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                route("/mapeos", MappingsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                 route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
             ),
             ToastContainer(),
