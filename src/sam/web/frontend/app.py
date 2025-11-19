@@ -11,6 +11,9 @@ from sam.web.frontend.api.api_client import get_api_client
 # Componentes de páginas
 from .features.components.equipos_components import EquiposControls, EquiposDashboard
 from .features.components.mappings_page import MappingsPage
+
+# Busca esta línea y agrega el nuevo componente:
+from .features.components.pools_components import BalanceadorStrategyPanel, PoolsControls, PoolsDashboard
 from .features.components.robots_components import RobotsControls, RobotsDashboard
 from .features.components.schedules_components import SchedulesControls, SchedulesDashboard
 
@@ -206,6 +209,7 @@ def PoolsPage(theme_is_dark: bool, on_theme_toggle):
         equipos_state=equipos_state,
         children=html._(
             page_controls,
+            BalanceadorStrategyPanel(),
             PoolsDashboard(
                 pools=filtered_pools,
                 on_edit=handle_edit_click,

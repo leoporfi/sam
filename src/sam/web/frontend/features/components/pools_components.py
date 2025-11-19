@@ -1,10 +1,13 @@
 # /src/sam/web/features/pools/pool_components.py
 
+import asyncio
 from typing import Callable, Dict, List
 
-from reactpy import component, event, html, use_state
+from reactpy import component, event, html, use_effect, use_state
 
-from ...shared.common_components import LoadingSpinner
+from sam.web.frontend.api.api_client import get_api_client
+
+from ...shared.common_components import ConfirmationModal, LoadingSpinner
 
 
 @component
@@ -22,7 +25,7 @@ def PoolsControls(
         {"class_name": "dashboard-controls"},
         html.div(
             {"class_name": "controls-header"},
-            html.h2("Gestión de Pools de Recursos"),
+            html.h2("Gestión de Pools"),
             html.button(
                 {
                     "class_name": "mobile-controls-toggle outline secondary",
@@ -50,7 +53,7 @@ def PoolsControls(
                 html.button(
                     {"on_click": on_create_pool},
                     html.i({"class_name": "fa-solid fa-plus"}),
-                    " Agregar Pool",
+                    " Pool",
                 ),
             ),
         ),
@@ -175,6 +178,7 @@ def PoolCard(pool: Dict, on_edit: Callable, on_assign: Callable, on_delete: Call
             html.button({"class_name": "outline secondary", "on_click": lambda e: on_delete(pool)}, "Eliminar"),
         ),
     )
+
 
 @component
 def BalanceadorStrategyPanel():
