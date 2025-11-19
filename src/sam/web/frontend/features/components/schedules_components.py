@@ -86,7 +86,7 @@ def SchedulesControls(
                         },
                     },
                     html.i({"class_name": "fa-solid fa-plus"}),
-                    " Nueva",
+                    " Programación",
                 ),
             ),
         ),
