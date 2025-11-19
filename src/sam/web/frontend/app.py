@@ -3,7 +3,7 @@ import asyncio
 import uuid
 
 # app.py - SECCIÓN DE IMPORTS
-from reactpy import component, html, use_context, use_effect, use_state
+from reactpy import component, html, use_context, use_effect, use_location, use_state
 from reactpy_router import browser_router, link, route
 
 from sam.web.frontend.api.api_client import get_api_client
@@ -712,6 +712,15 @@ def App():
         value=context_value,
     )
 
+
+@component
+def TestLocation():
+    location = use_location()
+    return html.div(f"Current location: {location.pathname}")
+
+
+# Agrégalo temporalmente en una ruta:
+route("/test", TestLocation())
 
 # --- Elementos del <head> ---
 head = html.head(
