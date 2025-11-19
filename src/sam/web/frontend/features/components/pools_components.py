@@ -175,3 +175,136 @@ def PoolCard(pool: Dict, on_edit: Callable, on_assign: Callable, on_delete: Call
             html.button({"class_name": "outline secondary", "on_click": lambda e: on_delete(pool)}, "Eliminar"),
         ),
     )
+
+@component
+def BalanceadorStrategyPanel():
+    """Panel para configurar estrategias globales con confirmación."""
+    # Estados de configuración
+    preemption_enabled, set_preemption_enabled = use_state(False)
+    isolation_enabled, set_isolation_enabled = use_state(True)
+    is_loading, set_is_loading = use_state(True)
+
+    # Estados para el modal de confirmación
+    confirm_open, set_confirm_open = use_state(False)
+    pending_change, set_pending_change = use_state(None)  # Dict con 'type' y 'value'
+
+    # Cargar estado inicial
+    @use_effect(dependencies=[])
+    def load_config():
+        async def fetch():
+            try:
+                api = get_api_client()
+                p_data = await api.get_preemption_mode()
+                i_data = await api.get_isolation_mode()
+                set_preemption_enabled(p_data.get("enabled", False))
+                set_isolation_enabled(i_data.get("enabled", True))
+            except Exception as e:
+                print(f"Error cargando configuración: {e}")
+            finally:
+                set_is_loading(False)
+
+        asyncio.create_task(fetch())
+
+    # Prepara el cambio pero pide confirmación
+    def request_change(setting_type, new_value):
+        set_pending_change({"type": setting_type, "value": new_value})
+        set_confirm_open(True)
+
+    # Ejecuta el cambio tras confirmar
+    async def execute_change():
+        if not pending_change:
+            return
+
+        setting = pending_change["type"]
+        val = pending_change["value"]
+
+        try:
+            api = get_api_client()
+            if setting == "preemption":
+                await api.set_preemption_mode(val)
+                set_preemption_enabled(val)
+            elif setting == "isolation":
+                await api.set_isolation_mode(val)
+                set_isolation_enabled(val)
+        except Exception as e:
+            print(f"Error guardando configuración: {e}")
+        finally:
+            set_confirm_open(False)
+            set_pending_change(None)
+
+    def get_confirm_message():
+        if not pending_change:
+            return ""
+        val = pending_change["value"]
+        if pending_change["type"] == "preemption":
+            return (
+                "activar el Modo Prioridad Estricta. Esto podría detener robots en ejecución."
+                if val
+                else "desactivar la Prioridad Estricta."
+            )
+        else:
+            return (
+                "activar el Aislamiento Estricto. Los robots NO podrán usar equipos de otros pools."
+                if val
+                else "permitir el Desborde. Los robots podrán usar equipos libres de otros pools."
+            )
+
+    if is_loading:
+        return html.div({"style": {"padding": "1rem"}}, LoadingSpinner())
+
+    return html.article(
+        {"class_name": "card", "style": {"marginBottom": "2rem"}},
+        html.header(
+            html.h4(
+                html.i({"class_name": "fa-solid fa-sliders", "style": {"marginRight": "10px"}}),
+                "Estrategia Global de Balanceo",
+            )
+        ),
+        html.div(
+            {"class_name": "grid"},
+            # Opción 1: Prioridad Estricta (Preemption)
+            html.div(
+                html.label(
+                    html.input(
+                        {
+                            "type": "checkbox",
+                            "role": "switch",
+                            "checked": preemption_enabled,
+                            "on_change": lambda e: request_change("preemption", e["target"]["checked"]),
+                        }
+                    ),
+                    html.strong("Prioridad Estricta (Preemption)"),
+                ),
+                html.small(
+                    {"style": {"display": "block", "marginTop": "0.5rem", "color": "var(--pico-muted-color)"}},
+                    "Permite detener robots de baja prioridad para liberar recursos inmediatamente.",
+                ),
+            ),
+            # Opción 2: Aislamiento Estricto (Pool Isolation)
+            html.div(
+                html.label(
+                    html.input(
+                        {
+                            "type": "checkbox",
+                            "role": "switch",
+                            "checked": isolation_enabled,
+                            "on_change": lambda e: request_change("isolation", e["target"]["checked"]),
+                        }
+                    ),
+                    html.strong("Aislamiento de Pool Estricto"),
+                ),
+                html.small(
+                    {"style": {"display": "block", "marginTop": "0.5rem", "color": "var(--pico-muted-color)"}},
+                    "Si está activo, impide que los robots tomen equipos prestados de otros pools (Desborde).",
+                ),
+            ),
+        ),
+        # Modal de Confirmación
+        ConfirmationModal(
+            is_open=confirm_open,
+            title="Confirmar Cambio de Estrategia",
+            message=f"¿Estás seguro de que deseas {get_confirm_message()}",
+            on_confirm=execute_change,
+            on_cancel=lambda: set_confirm_open(False),
+        ),
+    )

@@ -708,3 +708,22 @@ def create_equipo(db: DatabaseConnector, equipo_data: EquipoCreateRequest) -> Di
     except Exception as e:
         logger.error(f"Error inesperado al crear equipo {equipo_data.EquipoId}: {e}", exc_info=True)
         raise
+# Configuración
+
+
+def get_system_config(db: DatabaseConnector, key: str) -> str:
+    """Obtiene el valor de una configuración del sistema."""
+    query = "SELECT Valor FROM dbo.ConfiguracionSistema WHERE Clave = ?"
+    row = db.ejecutar_consulta(query, (key,), es_select=True)
+    return row[0]["Valor"] if row else None
+
+
+def set_system_config(db: DatabaseConnector, key: str, value: str):
+    """Actualiza el valor de una configuración."""
+    query = """
+        UPDATE dbo.ConfiguracionSistema 
+        SET Valor = ?, FechaActualizacion = GETDATE() 
+        WHERE Clave = ?
+    """
+    db.ejecutar_consulta(query, (str(value), key), es_select=False)
+
