@@ -161,7 +161,7 @@ def get_robots_with_assignments(
     active: Optional[bool] = None,
     online: Optional[bool] = None,
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=300),
+    size: int = Query(20, ge=1, le=1000),
     sort_by: Optional[str] = Query("Robot"),
     sort_dir: Optional[str] = Query("asc"),
 ):
@@ -509,6 +509,8 @@ def set_pool_assignments(pool_id: int, data: PoolAssignmentsRequest, db: Databas
         return {"message": f"Asignaciones para el Pool {pool_id} actualizadas."}
     except Exception as e:
         _handle_endpoint_errors("set_pool_assignments", e, "Pools", pool_id)
+
+
 # --- Configuración del Sistema ---
 
 
@@ -553,6 +555,7 @@ def set_isolation_mode(enabled: bool = Body(..., embed=True), db: DatabaseConnec
         return {"message": f"Modo {mode_text} activado."}
     except Exception as e:
         _handle_endpoint_errors("set_isolation_mode", e, "Configuracion")
+
 
 # --- Endpoints de Mapeos ---
 
