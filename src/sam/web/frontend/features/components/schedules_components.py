@@ -288,8 +288,7 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                             "role": "switch",
                             "checked": schedule["Activo"],
                             "on_click": event(
-                                lambda e, sid=schedule["ProgramacionId"]: on_edit(sid),
-                                prevent_default=True,
+                                lambda e, sid=schedule["ProgramacionId"]: on_toggle(sid, e["target"]["checked"])
                             ),
                         }
                     ),

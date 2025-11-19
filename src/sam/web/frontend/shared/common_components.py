@@ -1,7 +1,11 @@
+# sam/web/frontend/shared/common_components.py
+import logging
 from typing import Callable, List, Optional
 
 from reactpy import component, html
 from reactpy_router import link
+
+logger = logging.getLogger(__name__)
 
 
 @component
@@ -239,52 +243,185 @@ def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Calla
 
 
 @component
-def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state):
+def HeaderNav_old(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state):
     """Header de navegación con botones de sincronización globales."""
-    return html.header(
-        {"class_name": "sticky-header"},
-        html.div(
-            {"class_name": "container"},
-            html.nav(
-                html.ul(
-                    html.li(html.strong("SAM")),
-                    html.li(link({"to": "/"}, "Robots")),
-                    html.li(link({"to": "/equipos"}, "Equipos")),
-                    html.li(link({"to": "/programaciones"}, "Programaciones")),
-                    html.li(link({"to": "/pools"}, "Pools")),
-                    html.li(link({"to": "/mapeos"}, "Mapeos")),
-                ),
-                html.ul(
-                    html.li(
-                        html.button(
-                            {
-                                "on_click": robots_state.get("trigger_sync"),
-                                "disabled": robots_state.get("is_syncing", False),
-                                "aria-busy": str(robots_state.get("is_syncing", False)).lower(),
-                                "class_name": "pico-background-fuchsia-500",
-                                "data-tooltip": "Sincronizar Robots",
-                                "data-placement": "bottom",
-                            },
-                            html.i({"class_name": "fa-solid fa-robot"}),
-                        )
+
+    return html._(
+        html.header(
+            {"class_name": "sticky-header"},
+            html.div(
+                {"class_name": "container"},
+                html.nav(
+                    html.ul(
+                        html.li(html.strong("SAM")),
+                        html.li(link({"to": "/", "data-route": "/"}, "Robots")),
+                        html.li(link({"to": "/equipos", "data-route": "/equipos"}, "Equipos")),
+                        html.li(link({"to": "/programaciones", "data-route": "/programaciones"}, "Programaciones")),
+                        html.li(link({"to": "/pools", "data-route": "/pools"}, "Pools")),
+                        html.li(link({"to": "/mapeos", "data-route": "/mapeos"}, "Mapeos")),
                     ),
-                    html.li(
-                        html.button(
-                            {
-                                "on_click": equipos_state.get("trigger_sync"),
-                                "disabled": equipos_state.get("is_syncing", False),
-                                "aria-busy": str(equipos_state.get("is_syncing", False)).lower(),
-                                "class_name": "pico-background-purple-500",
-                                "data-tooltip": "Sincronizar Equipos",
-                                "data-placement": "bottom",
-                            },
-                            html.i({"class_name": "fa-solid fa-desktop"}),
-                        )
+                    html.ul(
+                        html.li(
+                            html.button(
+                                {
+                                    "on_click": robots_state.get("trigger_sync"),
+                                    "disabled": robots_state.get("is_syncing", False),
+                                    "aria-busy": str(robots_state.get("is_syncing", False)).lower(),
+                                    "class_name": "pico-background-fuchsia-500",
+                                    "data-tooltip": "Sincronizar Robots",
+                                    "data-placement": "bottom",
+                                },
+                                html.i({"class_name": "fa-solid fa-robot"}),
+                            )
+                        ),
+                        html.li(
+                            html.button(
+                                {
+                                    "on_click": equipos_state.get("trigger_sync"),
+                                    "disabled": equipos_state.get("is_syncing", False),
+                                    "aria-busy": str(equipos_state.get("is_syncing", False)).lower(),
+                                    "class_name": "pico-background-purple-500",
+                                    "data-tooltip": "Sincronizar Equipos",
+                                    "data-placement": "bottom",
+                                },
+                                html.i({"class_name": "fa-solid fa-desktop"}),
+                            )
+                        ),
+                        html.li(ThemeSwitcher(is_dark=theme_is_dark, on_toggle=on_theme_toggle)),
                     ),
-                    html.li(ThemeSwitcher(is_dark=theme_is_dark, on_toggle=on_theme_toggle)),
                 ),
             ),
         ),
+        # Script para marcar el link activo
+        html.script(
+            """
+            (function() {
+                const path = window.location.pathname;
+                document.querySelectorAll('nav a[data-route]').forEach(link => {
+                    const route = link.getAttribute('data-route');
+                    if (path === route || (route !== '/' && path.startsWith(route))) {
+                        link.classList.add('active');
+                    } else {
+                        link.classList.remove('active');
+                    }
+                });
+            })();
+            """
+        ),
+    )
+
+
+@component
+def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state):
+    """Header de navegación con botones de sincronización globales."""
+
+    return html._(
+        html.header(
+            {"class_name": "sticky-header"},
+            html.div(
+                {"class_name": "container"},
+                html.nav(
+                    html.ul(
+                        html.li(html.strong("SAM")),
+                        html.li(link({"to": "/", "data-route": "/"}, "Robots")),
+                        html.li(link({"to": "/equipos", "data-route": "/equipos"}, "Equipos")),
+                        html.li(link({"to": "/programaciones", "data-route": "/programaciones"}, "Programaciones")),
+                        html.li(link({"to": "/pools", "data-route": "/pools"}, "Pools")),
+                        html.li(link({"to": "/mapeos", "data-route": "/mapeos"}, "Mapeos")),
+                    ),
+                    html.ul(
+                        html.li(
+                            html.button(
+                                {
+                                    "on_click": robots_state.get("trigger_sync"),
+                                    "disabled": robots_state.get("is_syncing", False),
+                                    "aria-busy": str(robots_state.get("is_syncing", False)).lower(),
+                                    "class_name": "pico-background-fuchsia-500",
+                                    "data-tooltip": "Sincronizar Robots",
+                                    "data-placement": "bottom",
+                                },
+                                html.i({"class_name": "fa-solid fa-robot"}),
+                            )
+                        ),
+                        html.li(
+                            html.button(
+                                {
+                                    "on_click": equipos_state.get("trigger_sync"),
+                                    "disabled": equipos_state.get("is_syncing", False),
+                                    "aria-busy": str(equipos_state.get("is_syncing", False)).lower(),
+                                    "class_name": "pico-background-purple-500",
+                                    "data-tooltip": "Sincronizar Equipos",
+                                    "data-placement": "bottom",
+                                },
+                                html.i({"class_name": "fa-solid fa-desktop"}),
+                            )
+                        ),
+                        html.li(ThemeSwitcher(is_dark=theme_is_dark, on_toggle=on_theme_toggle)),
+                    ),
+                ),
+            ),
+        ),
+        # Script Mejorado: Escucha eventos de navegación
+        html.script(
+            """
+            (function() {
+                function updateActiveLinks() {
+                    // Pequeño delay para permitir que el Router actualice la URL primero
+                    setTimeout(() => {
+                        const path = window.location.pathname;
+                        document.querySelectorAll('nav a[data-route]').forEach(link => {
+                            const route = link.getAttribute('data-route');
+                            // Lógica: Coincidencia exacta O sub-ruta (evitando que '/' coincida con todo)
+                            if (path === route || (route !== '/' && path.startsWith(route))) {
+                                link.classList.add('active');
+                                link.setAttribute('aria-current', 'page');
+                            } else {
+                                link.classList.remove('active');
+                                link.removeAttribute('aria-current');
+                            }
+                        });
+                    }, 50); 
+                }
+
+                // 1. Ejecutar al cargar la página
+                updateActiveLinks();
+
+                // 2. Escuchar clics en el documento para detectar navegación SPA
+                document.addEventListener('click', function(e) {
+                    // Si el clic fue en un link del nav o dentro de él
+                    if (e.target.closest('nav a')) {
+                        updateActiveLinks();
+                    }
+                });
+
+                // 3. Escuchar botones de "Atrás" / "Adelante" del navegador
+                window.addEventListener('popstate', updateActiveLinks);
+            })();
+            """
+        ),
+    )
+
+
+@component
+def ThemeSwitcher(is_dark: bool, on_toggle: Callable):
+    """Un interruptor para cambiar entre tema claro y oscuro."""
+
+    def handle_change(event):
+        on_toggle(not is_dark)
+
+    return html.label(
+        {"htmlFor": "theme-switcher", "class_name": "theme-switcher"},
+        html.span({"class_name": "material-symbols-outlined"}, "light_mode"),
+        html.input(
+            {
+                "type": "checkbox",
+                "id": "theme-switcher",
+                "role": "switch",
+                "checked": is_dark,
+                "on_change": handle_change,
+            }
+        ),
+        html.span({"class_name": "material-symbols-outlined"}, "dark_mode"),
     )
 
 

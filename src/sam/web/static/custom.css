@@ -80,6 +80,11 @@ button[aria-busy="true"]::before {
   padding-top: var(--pico-spacing);
 }
 
+
+nav ul li a.active {
+    font-weight: 800 !important;
+    color: var(--pico-primary) !important;
+}
 /* -------------------------------------------------------------------------- */
 /* 4. COMPONENTES UI GENERALES                                                */
 /* -------------------------------------------------------------------------- */

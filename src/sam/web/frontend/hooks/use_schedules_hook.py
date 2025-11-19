@@ -9,7 +9,6 @@ from ..shared.notifications import NotificationContext
 PAGE_SIZE = 20
 INITIAL_FILTERS = {"robot": None, "tipo": None, "activo": None, "search": None}
 
-# Reducimos el polling para desarrollo, el plan original era 120
 POLL_INTERVAL = 120
 
 
@@ -24,21 +23,17 @@ def use_schedules():
     total, set_total = use_state(0)
     filters, set_filters = use_state(INITIAL_FILTERS)
     page, set_page = use_state(1)
-    # Los hooks de ordenamiento no se usan en el plan, pero los dejamos
     sort_by, set_sort = use_state("Robot")
     sort_dir, set_dir = use_state("asc")
 
-    @use_callback
     async def load():
         set_loading(True)
         set_error(None)
         try:
-            # Construye los params
             params: Dict[str, Optional[str | int | bool]] = {
                 "page": page,
                 "size": PAGE_SIZE,
             }
-            # Añadir filtros solo si tienen valor
             if filters["robot"]:
                 params["robot"] = filters["robot"]
             if filters["tipo"]:
@@ -64,66 +59,80 @@ def use_schedules():
 
     @use_effect(dependencies=[])
     def _setup_polling():
-        # Polling para mantener los datos frescos
         async def poll_loop():
             while True:
                 await asyncio.sleep(POLL_INTERVAL)
                 try:
-                    # Recarga silenciosa
                     params = {**filters, "page": page, "size": PAGE_SIZE}
                     data = await api.get_schedules(params)
                     set_schedules(data.get("schedules", []))
                     set_total(data.get("total_count", 0))
                 except Exception:
-                    # No mostrar error en polling, solo log en consola (si tuviéramos)
                     pass
 
-        # Descomentar para activar el polling
         # task = asyncio.create_task(poll_loop())
         # return lambda: task.cancel()
         pass
 
     @use_callback
-    async def toggle_active(schedule_id: int, activo: bool):
-        try:
-            # UI optimista (deshabilitado por simplicidad, recargamos)
-            await api.toggle_schedule_status(schedule_id, activo)
-            show("Estado cambiado", "success")
-            await load()  # Recargar datos
-        except Exception as e:
-            show(str(e), "error")
-            await load()  # Revertir si la UI fuera optimista
+    def toggle_active(schedule_id: int, activo: bool):
+        async def _logic():
+            try:
+                await api.toggle_schedule_status(schedule_id, activo)
+                show("Estado cambiado", "success")
+                await load()
+            except Exception as e:
+                show(str(e), "error")
+                await load()
+
+        asyncio.create_task(_logic())
 
     @use_callback
-    async def save_schedule(data: dict):
-        schedule_id = data.get("ProgramacionId")
-        if not schedule_id:
-            show("No se pudo guardar: ID de programación no encontrado.", "error")
-            return
+    def save_schedule(data: dict):
+        async def _logic():
+            schedule_id = data.get("ProgramacionId")
+            if not schedule_id:
+                show("No se pudo guardar: ID de programación no encontrado.", "error")
+                return
 
-        try:
-            await api.update_schedule_details(schedule_id, data)
-            show("Programación actualizada", "success")
-            await load()  # Recargar datos
-        except Exception as e:
-            show(f"Error al guardar: {e}", "error")
+            try:
+                await api.update_schedule_details(schedule_id, data)
+                show("Programación actualizada", "success")
+                await load()
+            except Exception as e:
+                show(f"Error al guardar: {e}", "error")
+
+        asyncio.create_task(_logic())
 
     @use_callback
-    async def save_schedule_equipos(schedule_id: int, equipo_ids: List[int]):
+    async def save_schedule_equipos(schedule_id: int, equipo_ids: List[int], on_success: Optional[Callable] = None):
         """
         Guarda únicamente la lista de equipos para una programación.
+        Retomamos async/await directo para que el Modal pueda esperar a que termine.
         """
         if not schedule_id:
             show("No se pudo guardar: ID de programación no encontrado.", "error")
             return
 
         try:
-            # Llama al nuevo método del API Client que creamos antes
+            # Llama al API
             await api.update_schedule_devices(schedule_id, equipo_ids)
             show("Equipos de la programación actualizados", "success")
+
+            # Ejecutamos el callback si existe
+            if on_success:
+                if asyncio.iscoroutinefunction(on_success):
+                    await on_success()
+                else:
+                    on_success()
+
             await load()  # Recargar datos
+
         except Exception as e:
             show(f"Error al guardar equipos: {e}", "error")
+            # Opcional: Si quieres que el modal NO se cierre si hay error real de API,
+            # descomenta la siguiente línea para relanzar la excepción hacia el modal.
+            # raise e
 
     total_pages = use_memo(lambda: max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE), [total, PAGE_SIZE])
 
