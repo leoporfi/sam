@@ -20,14 +20,14 @@ class AutomationAnywhereClient:
     _ENDPOINT_DEVICES_LIST_V2 = "/v2/devices/list"
     _ENDPOINT_FILES_LIST_V2 = "/v2/repository/workspaces/public/files/list"
 
-    CONCILIADOR_BATCH_SIZE = 50  # Procesar de 50 en 50 para evitar timeouts
+    CONCILIADOR_BATCH_SIZE = 25
 
     def __init__(self, cr_url: str, cr_user: str, cr_pwd: Optional[str] = None, **kwargs):
         self.cr_url = cr_url.strip("/")
         self.cr_user = cr_user
         self.cr_pwd = cr_pwd
         self.cr_api_key = kwargs.get("cr_api_key")
-        self.cr_api_timeout = kwargs.get("api_timeout_seconds", 60)
+        self.cr_api_timeout = kwargs.get("cr_api_timeout", 60)
         self.callback_url_deploy = kwargs.get("callback_url_deploy")
 
         self._token: Optional[str] = None
