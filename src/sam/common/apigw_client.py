@@ -22,7 +22,7 @@ class ApiGatewayClient:
         self.grant_type = config["grant_type"]
         self.scope = config["scope"]
         self.timeout = config.get("timeout_seconds", 30)
-        self.expiration_buffer = timedelta(seconds=config.get("token_expiration_buffer_sec", 300))
+        self.expiration_buffer = timedelta(seconds=config.get("token_expiration_buffer_sec", 120))
 
         self._token: Optional[str] = None
         self._token_type: str = "Bearer"
@@ -61,10 +61,13 @@ class ApiGatewayClient:
             self._token_type = token_data.get("token_type", "Bearer")
             expires_in_seconds = token_data.get("expires_in", 3600)
 
-            # Calculamos el tiempo de expiración real con un margen de seguridad
-            self._expires_at = datetime.now() + timedelta(seconds=expires_in_seconds) - self.expiration_buffer
+            # OPCIÓN RECOMENDADA: Sin buffer
+            # La división / 2 ya nos da un margen de seguridad gigante.
+            self._expires_at = datetime.now() + timedelta(seconds=expires_in_seconds / 2)
 
-            logger.info(f"Nuevo token de API Gateway obtenido. Válido hasta: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(
+                f"Nuevo token de API Gateway obtenido. Válido hasta: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
         except httpx.HTTPStatusError as e:
             logger.error(f"Error HTTP al obtener token del API Gateway: {e.response.status_code} - {e.response.text}")
             raise

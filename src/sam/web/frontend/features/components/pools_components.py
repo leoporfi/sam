@@ -141,12 +141,12 @@ def PoolRow(pool: Dict, on_edit: Callable, on_assign: Callable, on_delete: Calla
                 html.a(
                     {
                         "href": "#",
-                        "on_click": event(lambda e: on_delete(pool), prevent_default=True),
                         "data-tooltip": "Eliminar Pool",
                         "data-placement": "left",
                         "class_name": "secondary",
+                        "on_click": event(lambda e: on_delete(pool), prevent_default=True),
                     },
-                    html.i({"class_name": "fa-solid fa-trash-alt"}),
+                    html.i({"class_name": "fa-solid fa-trash"}),
                 ),
             )
         ),

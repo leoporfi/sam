@@ -131,6 +131,7 @@ class ConfigManager:
             "max_reintentos_deploy": int(cls._get_env_with_warning("LANZADOR_MAX_REINTENTOS_DEPLOY", 1)),
             "delay_reintentos_deploy_seg": int(cls._get_env_with_warning("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 15)),
             "dias_tolerancia_unknown": int(cls._get_env_with_warning("CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN", 30)),
+            "conciliador_batch_size": int(cls._get_env_with_warning("LANZADOR_CONCILIADOR_BATCH_SIZE", 25)),
             "shutdown_timeout_seg": int(cls._get_env_with_warning("LANZADOR_SHUTDOWN_TIMEOUT_SEG", 60)),
             "habilitar_sync": os.getenv("LANZADOR_HABILITAR_SYNC", "True").lower() == "true",
             "repeticiones": int(cls._get_env_with_warning("LANZADOR_BOT_INPUT_VUELTAS", 3)),

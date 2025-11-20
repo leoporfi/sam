@@ -18,11 +18,11 @@ datalist = make_vdom_constructor("datalist")
 def MappingsPage(theme_is_dark: bool, on_theme_toggle):
     mappings, set_mappings = use_state([])
     robots, set_robots = use_state([])
-    known_providers, set_known_providers = use_state(["A360", "Orquestador","RPA360", "Tisam", "General"])
+    known_providers, set_known_providers = use_state(["A360", "Orquestador", "RPA360", "Tisam", "General"])
     loading, set_loading = use_state(True)
 
     # Form State
-    new_proveedor, set_new_proveedor = use_state("General")
+    new_proveedor, set_new_proveedor = use_state("")
     new_externo, set_new_externo = use_state("")
 
     # ESTADO PARA EL BUSCADOR DE ROBOTS
@@ -41,7 +41,9 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
 
             # Extraer proveedores existentes
             existing_providers = sorted(list(set(m["Proveedor"] for m in m_data)))
-            all_providers = sorted(list(set(existing_providers + ["A360", "Orquestador","RPA360", "Tisam", "General"])))
+            all_providers = sorted(
+                list(set(existing_providers + ["A360", "Orquestador", "RPA360", "Tisam", "General"]))
+            )
             set_known_providers(all_providers)
 
         except Exception as e:
@@ -107,7 +109,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
             html.h2("Mapeo de Robots (Alias)"),
             html.p("Asocia nombres externos con los Robots reales de SAM."),
             html.article(
-                html.header(html.h4("Nuevo Alias / Mapeo")),
+                # html.header(html.h4("Nuevo Alias / Mapeo")),
                 html.div(
                     {"class_name": "grid"},
                     # 1. Proveedor (Con sugerencias)
@@ -118,23 +120,25 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                                 {
                                     "list": "providers-list",
                                     "value": new_proveedor,
-                                    "on_change": lambda e: set_new_proveedor(e["target"]["value"]),
                                     "placeholder": "Escribe o selecciona...",
+                                    "on_change": lambda e: set_new_proveedor(e["target"]["value"]),
                                 }
                             ),
                             datalist({"id": "providers-list"}, [html.option({"value": p}) for p in known_providers]),
                         )
                     ),
                     # 2. Nombre Externo
-                    html.label(
-                        "Nombre Externo (Cómo lo llaman)",
-                        html.input(
-                            {
-                                "type": "text",
-                                "value": new_externo,
-                                "on_change": lambda e: set_new_externo(e["target"]["value"]),
-                                "placeholder": "Ej: Bot_Cobranzas_V1",
-                            }
+                    html.div(
+                        html.label(
+                            "Nombre Externo",
+                            html.input(
+                                {
+                                    "type": "text",
+                                    "value": new_externo,
+                                    "placeholder": "Ej: Bot_Cobranzas_V1",
+                                    "on_change": lambda e: set_new_externo(e["target"]["value"]),
+                                }
+                            ),
                         ),
                     ),
                     # 3. ROBOT INTERNO (BUSCADOR)
@@ -145,9 +149,9 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                                 {
                                     "list": "robots-list",  # Vinculamos al datalist de robots
                                     "value": robot_search,
-                                    "on_change": handle_robot_search,
                                     "placeholder": "Escribe para buscar robot...",
                                     "autocomplete": "off",
+                                    "on_change": handle_robot_search,
                                     # Feedback visual: Borde rojo si hay texto pero no ID válido
                                     "style": {"borderColor": "var(--pico-form-element-invalid-border-color)"}
                                     if robot_search and not new_robot_id
@@ -156,8 +160,8 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                             ),
                             # Lista de Robots filtrable
                             datalist({"id": "robots-list"}, [html.option({"value": r["Robot"]}) for r in robots]),
+                            # Pequeño texto de ayuda para confirmar selección
                         ),
-                        # Pequeño texto de ayuda para confirmar selección
                         html.small(
                             {"style": {"color": "var(--pico-primary)" if new_robot_id else "var(--pico-muted-color)"}},
                             f"ID Seleccionado: {new_robot_id}" if new_robot_id else "Selecciona un robot de la lista.",
@@ -165,55 +169,64 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                     ),
                 ),
                 html.button(
-                    {"on_click": handle_create, "disabled": not new_robot_id or not new_externo},
+                    {
+                        "type": "button",
+                        "on_click": handle_create,
+                        "disabled": not new_robot_id or not new_externo,
+                    },
                     html.i({"class_name": "fa-solid fa-plus", "style": {"marginRight": "8px"}}),
-                    "Crear Mapeo",
+                    "Crear",
                 ),
             ),
             LoadingSpinner()
             if loading
-            else html.table(
-                html.thead(
-                    html.tr(
-                        html.th("Nombre Externo (Alias)"),
-                        html.th("Proveedor"),
-                        html.th("Se ejecuta como"),
-                        html.th("Acciones"),
-                    )
-                ),
-                html.tbody(
-                    *[
+            else html.article(
+                html.table(
+                    html.thead(
                         html.tr(
-                            {"key": m["MapeoId"]},
-                            html.td(html.strong(m["NombreExterno"])),
-                            html.td(html.small(m["Proveedor"])),
-                            html.td(
-                                html.span(
-                                    {"style": {"color": "var(--pico-primary)"}},
-                                    html.i({"class_name": "fa-solid fa-robot", "style": {"marginRight": "5px"}}),
-                                    m.get("RobotNombre") or f"ID: {m['RobotId']}",
-                                )
-                            ),
-                            html.td(
-                                html.button(
-                                    {
-                                        "class_name": "outline secondary",
-                                        "on_click": lambda e, mid=m["MapeoId"]: asyncio.create_task(handle_delete(mid)),
-                                        "data-tooltip": "Eliminar Alias",
-                                    },
-                                    html.i({"class_name": "fa-solid fa-trash"}),
-                                )
-                            ),
+                            html.th("Nombre Externo (Alias)"),
+                            html.th("Proveedor"),
+                            html.th("Se ejecuta como"),
+                            html.th("Acciones"),
                         )
-                        for m in mappings
-                    ]
-                    if mappings
-                    else html.tr(
-                        html.td(
-                            {"colspan": 4, "style": {"text-align": "center", "padding": "2rem"}},
-                            "No hay mapeos definidos aún.",
+                    ),
+                    html.tbody(
+                        *[
+                            html.tr(
+                                {"key": m["MapeoId"]},
+                                html.td(html.strong(m["NombreExterno"])),
+                                html.td(html.p(m["Proveedor"])),
+                                html.td(
+                                    html.span(
+                                        {"style": {"color": "var(--pico-primary)"}},
+                                        html.i({"class_name": "fa-solid fa-robot", "style": {"marginRight": "5px"}}),
+                                        m.get("RobotNombre") or f"ID: {m['RobotId']}",
+                                    )
+                                ),
+                                html.td(
+                                    html.a(
+                                        {
+                                            "href": "#",
+                                            "class_name": "secondary",
+                                            "data-tooltip": "Eliminar Alias",
+                                            "on_click": lambda e, mid=m["MapeoId"]: asyncio.create_task(
+                                                handle_delete(mid)
+                                            ),
+                                        },
+                                        html.i({"class_name": "fa-solid fa-trash"}),
+                                    )
+                                ),
+                            )
+                            for m in mappings
+                        ]
+                        if mappings
+                        else html.tr(
+                            html.td(
+                                {"colspan": 4, "style": {"text-align": "center", "padding": "2rem"}},
+                                "No hay mapeos definidos aún.",
+                            )
                         )
-                    )
+                    ),
                 ),
             ),
         ),

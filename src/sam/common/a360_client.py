@@ -20,8 +20,6 @@ class AutomationAnywhereClient:
     _ENDPOINT_DEVICES_LIST_V2 = "/v2/devices/list"
     _ENDPOINT_FILES_LIST_V2 = "/v2/repository/workspaces/public/files/list"
 
-    CONCILIADOR_BATCH_SIZE = 25
-
     def __init__(self, cr_url: str, cr_user: str, cr_pwd: Optional[str] = None, **kwargs):
         self.cr_url = cr_url.strip("/")
         self.cr_user = cr_user
@@ -29,6 +27,7 @@ class AutomationAnywhereClient:
         self.cr_api_key = kwargs.get("cr_api_key")
         self.cr_api_timeout = kwargs.get("cr_api_timeout", 60)
         self.callback_url_deploy = kwargs.get("callback_url_deploy")
+        self.CONCILIADOR_BATCH_SIZE = kwargs.get("conciliador_batch_size", 50)
 
         self._token: Optional[str] = None
         self._token_lock = asyncio.Lock()
@@ -139,7 +138,6 @@ class AutomationAnywhereClient:
     def _crear_filtro_deployment_ids(self, deployment_ids: List[str]) -> Dict:
         """Crea el payload de filtro para buscar por deployment IDs."""
         return {
-            "sort": [{"field": "startDateTime", "direction": "desc"}],
             "filter": {
                 "operator": "or",
                 "operands": [{"operator": "eq", "field": "deploymentId", "value": dep_id} for dep_id in deployment_ids],
@@ -151,14 +149,12 @@ class AutomationAnywhereClient:
     async def obtener_devices(self) -> List[Dict]:
         logger.info("Obteniendo devices de A360...")
         payload = {"filter": {"operator": "eq", "field": "status", "value": "CONNECTED"}}
-        # RFR-27: Se elimina el mapeo. El cliente devuelve los datos en bruto de la API.
         devices_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_DEVICES_LIST_V2, payload)
         logger.info(f"Se encontraron {len(devices_api)} devices conectados.")
         return devices_api
 
     async def obtener_usuarios_detallados(self) -> List[Dict]:
         logger.info("Obteniendo usuarios detallados de A360...")
-        # RFR-27: Se elimina el mapeo. El cliente devuelve los datos en bruto de la API.
         usuarios_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_USERS_LIST_V2, {})
         logger.info(f"Se encontraron {len(usuarios_api)} usuarios.")
         return usuarios_api
@@ -240,13 +236,6 @@ class AutomationAnywhereClient:
             batch_ids = deployment_ids[i : i + self.CONCILIADOR_BATCH_SIZE]
             logger.debug(f"Procesando lote {i // self.CONCILIADOR_BATCH_SIZE + 1} con {len(batch_ids)} IDs.")
             payload = self._crear_filtro_deployment_ids(batch_ids)
-            # payload = {
-            #     "sort": [{"field": "startDateTime", "direction": "desc"}],
-            #     "filter": {
-            #         "operator": "or",
-            #         "operands": [{"operator": "eq", "field": "deploymentId", "value": dep_id} for dep_id in batch_ids],
-            #     },
-            # }
             try:
                 response_json = await self._realizar_peticion_api("POST", self._ENDPOINT_ACTIVITY_LIST_V3, json=payload)
                 all_details.extend(response_json.get("list", []))
