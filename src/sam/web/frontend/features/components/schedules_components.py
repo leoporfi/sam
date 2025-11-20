@@ -221,7 +221,7 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                                         "class_name": "secondary",
                                         "disabled": True,
                                     },
-                                    html.i({"class_name": "fa-solid fa-trash-alt"}),
+                                    html.i({"class_name": "fa-solid fa-trash"}),
                                 ),
                             ),
                         ),
