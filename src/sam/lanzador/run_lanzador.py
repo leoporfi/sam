@@ -100,6 +100,7 @@ def _setup_dependencies() -> Dict[str, Any]:
         contrasena=cfg_sql_sam["contrasena"],
     )
 
+    cfg_lanzador = ConfigManager.get_lanzador_config()
     cfg_aa = ConfigManager.get_aa360_config()
     _aa_client = AutomationAnywhereClient(
         cr_url=cfg_aa["cr_url"],
@@ -108,6 +109,7 @@ def _setup_dependencies() -> Dict[str, Any]:
         cr_api_key=cfg_aa["cr_api_key"],
         cr_api_timeout=cfg_aa["api_timeout_seconds"],
         callback_url_deploy=cfg_aa.get("callback_url_deploy"),
+        conciliador_batch_size=cfg_lanzador.get("conciliador_batch_size"),
     )
 
     cfg_apigw = ConfigManager.get_apigw_config()
