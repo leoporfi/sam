@@ -1,0 +1,369 @@
+diff --git a/.env.example b/.env.example
+index 0b71df6..9a2dcf6 100644
+--- a/.env.example
++++ b/.env.example
+@@ -74,9 +74,10 @@ LANZADOR_PAUSA_FIN_HHMM=21:15
+ LANZADOR_HABILITAR_SYNC=false
+ LANZADOR_SHUTDOWN_TIMEOUT_SEG=60
+ LANZADOR_UMBRAL_ALERTAS_412=20
+-CONCILIADOR_MAX_INTENTOS_FALLIDOS=3
++LANZADOR_CONCILIADOR_BATCH_SIZE=25
+ CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN=90
+ 
++
+ # --- Configuración Balanceador ---
+ BALANCEADOR_COOLING_PERIOD_SEG=300
+ BALANCEADOR_INTERVALO_CICLO_SEG=120
+diff --git a/src/sam/common/a360_client.py b/src/sam/common/a360_client.py
+index 77e3c2f..5661c4f 100644
+--- a/src/sam/common/a360_client.py
++++ b/src/sam/common/a360_client.py
+@@ -20,8 +20,6 @@ class AutomationAnywhereClient:
+     _ENDPOINT_DEVICES_LIST_V2 = "/v2/devices/list"
+     _ENDPOINT_FILES_LIST_V2 = "/v2/repository/workspaces/public/files/list"
+ 
+-    CONCILIADOR_BATCH_SIZE = 25
+-
+     def __init__(self, cr_url: str, cr_user: str, cr_pwd: Optional[str] = None, **kwargs):
+         self.cr_url = cr_url.strip("/")
+         self.cr_user = cr_user
+@@ -29,6 +27,7 @@ class AutomationAnywhereClient:
+         self.cr_api_key = kwargs.get("cr_api_key")
+         self.cr_api_timeout = kwargs.get("cr_api_timeout", 60)
+         self.callback_url_deploy = kwargs.get("callback_url_deploy")
++        self.CONCILIADOR_BATCH_SIZE = kwargs.get("conciliador_batch_size", 50)
+ 
+         self._token: Optional[str] = None
+         self._token_lock = asyncio.Lock()
+@@ -139,7 +138,6 @@ class AutomationAnywhereClient:
+     def _crear_filtro_deployment_ids(self, deployment_ids: List[str]) -> Dict:
+         """Crea el payload de filtro para buscar por deployment IDs."""
+         return {
+-            "sort": [{"field": "startDateTime", "direction": "desc"}],
+             "filter": {
+                 "operator": "or",
+                 "operands": [{"operator": "eq", "field": "deploymentId", "value": dep_id} for dep_id in deployment_ids],
+@@ -151,14 +149,12 @@ class AutomationAnywhereClient:
+     async def obtener_devices(self) -> List[Dict]:
+         logger.info("Obteniendo devices de A360...")
+         payload = {"filter": {"operator": "eq", "field": "status", "value": "CONNECTED"}}
+-        # RFR-27: Se elimina el mapeo. El cliente devuelve los datos en bruto de la API.
+         devices_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_DEVICES_LIST_V2, payload)
+         logger.info(f"Se encontraron {len(devices_api)} devices conectados.")
+         return devices_api
+ 
+     async def obtener_usuarios_detallados(self) -> List[Dict]:
+         logger.info("Obteniendo usuarios detallados de A360...")
+-        # RFR-27: Se elimina el mapeo. El cliente devuelve los datos en bruto de la API.
+         usuarios_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_USERS_LIST_V2, {})
+         logger.info(f"Se encontraron {len(usuarios_api)} usuarios.")
+         return usuarios_api
+@@ -240,13 +236,6 @@ class AutomationAnywhereClient:
+             batch_ids = deployment_ids[i : i + self.CONCILIADOR_BATCH_SIZE]
+             logger.debug(f"Procesando lote {i // self.CONCILIADOR_BATCH_SIZE + 1} con {len(batch_ids)} IDs.")
+             payload = self._crear_filtro_deployment_ids(batch_ids)
+-            # payload = {
+-            #     "sort": [{"field": "startDateTime", "direction": "desc"}],
+-            #     "filter": {
+-            #         "operator": "or",
+-            #         "operands": [{"operator": "eq", "field": "deploymentId", "value": dep_id} for dep_id in batch_ids],
+-            #     },
+-            # }
+             try:
+                 response_json = await self._realizar_peticion_api("POST", self._ENDPOINT_ACTIVITY_LIST_V3, json=payload)
+                 all_details.extend(response_json.get("list", []))
+diff --git a/src/sam/common/apigw_client.py b/src/sam/common/apigw_client.py
+index 1ce59e9..a3f069a 100644
+--- a/src/sam/common/apigw_client.py
++++ b/src/sam/common/apigw_client.py
+@@ -22,7 +22,7 @@ class ApiGatewayClient:
+         self.grant_type = config["grant_type"]
+         self.scope = config["scope"]
+         self.timeout = config.get("timeout_seconds", 30)
+-        self.expiration_buffer = timedelta(seconds=config.get("token_expiration_buffer_sec", 300))
++        self.expiration_buffer = timedelta(seconds=config.get("token_expiration_buffer_sec", 120))
+ 
+         self._token: Optional[str] = None
+         self._token_type: str = "Bearer"
+@@ -61,10 +61,13 @@ class ApiGatewayClient:
+             self._token_type = token_data.get("token_type", "Bearer")
+             expires_in_seconds = token_data.get("expires_in", 3600)
+ 
+-            # Calculamos el tiempo de expiración real con un margen de seguridad
+-            self._expires_at = datetime.now() + timedelta(seconds=expires_in_seconds) - self.expiration_buffer
++            # OPCIÓN RECOMENDADA: Sin buffer
++            # La división / 2 ya nos da un margen de seguridad gigante.
++            self._expires_at = datetime.now() + timedelta(seconds=expires_in_seconds / 2)
+ 
+-            logger.info(f"Nuevo token de API Gateway obtenido. Válido hasta: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S')}")
++            logger.info(
++                f"Nuevo token de API Gateway obtenido. Válido hasta: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S')}"
++            )
+         except httpx.HTTPStatusError as e:
+             logger.error(f"Error HTTP al obtener token del API Gateway: {e.response.status_code} - {e.response.text}")
+             raise
+diff --git a/src/sam/common/config_manager.py b/src/sam/common/config_manager.py
+index cbb4b0b..9b4c704 100644
+--- a/src/sam/common/config_manager.py
++++ b/src/sam/common/config_manager.py
+@@ -131,6 +131,7 @@ class ConfigManager:
+             "max_reintentos_deploy": int(cls._get_env_with_warning("LANZADOR_MAX_REINTENTOS_DEPLOY", 1)),
+             "delay_reintentos_deploy_seg": int(cls._get_env_with_warning("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 15)),
+             "dias_tolerancia_unknown": int(cls._get_env_with_warning("CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN", 30)),
++            "conciliador_batch_size": int(cls._get_env_with_warning("LANZADOR_CONCILIADOR_BATCH_SIZE", 25)),
+             "shutdown_timeout_seg": int(cls._get_env_with_warning("LANZADOR_SHUTDOWN_TIMEOUT_SEG", 60)),
+             "habilitar_sync": os.getenv("LANZADOR_HABILITAR_SYNC", "True").lower() == "true",
+             "repeticiones": int(cls._get_env_with_warning("LANZADOR_BOT_INPUT_VUELTAS", 3)),
+diff --git a/src/sam/lanzador/run_lanzador.py b/src/sam/lanzador/run_lanzador.py
+index 8e5dae3..46a396b 100644
+--- a/src/sam/lanzador/run_lanzador.py
++++ b/src/sam/lanzador/run_lanzador.py
+@@ -100,6 +100,7 @@ def _setup_dependencies() -> Dict[str, Any]:
+         contrasena=cfg_sql_sam["contrasena"],
+     )
+ 
++    cfg_lanzador = ConfigManager.get_lanzador_config()
+     cfg_aa = ConfigManager.get_aa360_config()
+     _aa_client = AutomationAnywhereClient(
+         cr_url=cfg_aa["cr_url"],
+@@ -108,6 +109,7 @@ def _setup_dependencies() -> Dict[str, Any]:
+         cr_api_key=cfg_aa["cr_api_key"],
+         cr_api_timeout=cfg_aa["api_timeout_seconds"],
+         callback_url_deploy=cfg_aa.get("callback_url_deploy"),
++        conciliador_batch_size=cfg_lanzador.get("conciliador_batch_size"),
+     )
+ 
+     cfg_apigw = ConfigManager.get_apigw_config()
+diff --git a/src/sam/web/frontend/features/components/mappings_page.py b/src/sam/web/frontend/features/components/mappings_page.py
+index 8c5e426..0771025 100644
+--- a/src/sam/web/frontend/features/components/mappings_page.py
++++ b/src/sam/web/frontend/features/components/mappings_page.py
+@@ -18,11 +18,11 @@ datalist = make_vdom_constructor("datalist")
+ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+     mappings, set_mappings = use_state([])
+     robots, set_robots = use_state([])
+-    known_providers, set_known_providers = use_state(["A360", "Orquestador","RPA360", "Tisam", "General"])
++    known_providers, set_known_providers = use_state(["A360", "Orquestador", "RPA360", "Tisam", "General"])
+     loading, set_loading = use_state(True)
+ 
+     # Form State
+-    new_proveedor, set_new_proveedor = use_state("General")
++    new_proveedor, set_new_proveedor = use_state("")
+     new_externo, set_new_externo = use_state("")
+ 
+     # ESTADO PARA EL BUSCADOR DE ROBOTS
+@@ -41,7 +41,9 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+ 
+             # Extraer proveedores existentes
+             existing_providers = sorted(list(set(m["Proveedor"] for m in m_data)))
+-            all_providers = sorted(list(set(existing_providers + ["A360", "Orquestador","RPA360", "Tisam", "General"])))
++            all_providers = sorted(
++                list(set(existing_providers + ["A360", "Orquestador", "RPA360", "Tisam", "General"]))
++            )
+             set_known_providers(all_providers)
+ 
+         except Exception as e:
+@@ -107,7 +109,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+             html.h2("Mapeo de Robots (Alias)"),
+             html.p("Asocia nombres externos con los Robots reales de SAM."),
+             html.article(
+-                html.header(html.h4("Nuevo Alias / Mapeo")),
++                # html.header(html.h4("Nuevo Alias / Mapeo")),
+                 html.div(
+                     {"class_name": "grid"},
+                     # 1. Proveedor (Con sugerencias)
+@@ -118,23 +120,25 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+                                 {
+                                     "list": "providers-list",
+                                     "value": new_proveedor,
+-                                    "on_change": lambda e: set_new_proveedor(e["target"]["value"]),
+                                     "placeholder": "Escribe o selecciona...",
++                                    "on_change": lambda e: set_new_proveedor(e["target"]["value"]),
+                                 }
+                             ),
+                             datalist({"id": "providers-list"}, [html.option({"value": p}) for p in known_providers]),
+                         )
+                     ),
+                     # 2. Nombre Externo
+-                    html.label(
+-                        "Nombre Externo (Cómo lo llaman)",
+-                        html.input(
+-                            {
+-                                "type": "text",
+-                                "value": new_externo,
+-                                "on_change": lambda e: set_new_externo(e["target"]["value"]),
+-                                "placeholder": "Ej: Bot_Cobranzas_V1",
+-                            }
++                    html.div(
++                        html.label(
++                            "Nombre Externo",
++                            html.input(
++                                {
++                                    "type": "text",
++                                    "value": new_externo,
++                                    "placeholder": "Ej: Bot_Cobranzas_V1",
++                                    "on_change": lambda e: set_new_externo(e["target"]["value"]),
++                                }
++                            ),
+                         ),
+                     ),
+                     # 3. ROBOT INTERNO (BUSCADOR)
+@@ -145,9 +149,9 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+                                 {
+                                     "list": "robots-list",  # Vinculamos al datalist de robots
+                                     "value": robot_search,
+-                                    "on_change": handle_robot_search,
+                                     "placeholder": "Escribe para buscar robot...",
+                                     "autocomplete": "off",
++                                    "on_change": handle_robot_search,
+                                     # Feedback visual: Borde rojo si hay texto pero no ID válido
+                                     "style": {"borderColor": "var(--pico-form-element-invalid-border-color)"}
+                                     if robot_search and not new_robot_id
+@@ -156,8 +160,8 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+                             ),
+                             # Lista de Robots filtrable
+                             datalist({"id": "robots-list"}, [html.option({"value": r["Robot"]}) for r in robots]),
++                            # Pequeño texto de ayuda para confirmar selección
+                         ),
+-                        # Pequeño texto de ayuda para confirmar selección
+                         html.small(
+                             {"style": {"color": "var(--pico-primary)" if new_robot_id else "var(--pico-muted-color)"}},
+                             f"ID Seleccionado: {new_robot_id}" if new_robot_id else "Selecciona un robot de la lista.",
+@@ -165,55 +169,64 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+                     ),
+                 ),
+                 html.button(
+-                    {"on_click": handle_create, "disabled": not new_robot_id or not new_externo},
++                    {
++                        "type": "button",
++                        "on_click": handle_create,
++                        "disabled": not new_robot_id or not new_externo,
++                    },
+                     html.i({"class_name": "fa-solid fa-plus", "style": {"marginRight": "8px"}}),
+-                    "Crear Mapeo",
++                    "Crear",
+                 ),
+             ),
+             LoadingSpinner()
+             if loading
+-            else html.table(
+-                html.thead(
+-                    html.tr(
+-                        html.th("Nombre Externo (Alias)"),
+-                        html.th("Proveedor"),
+-                        html.th("Se ejecuta como"),
+-                        html.th("Acciones"),
+-                    )
+-                ),
+-                html.tbody(
+-                    *[
++            else html.article(
++                html.table(
++                    html.thead(
+                         html.tr(
+-                            {"key": m["MapeoId"]},
+-                            html.td(html.strong(m["NombreExterno"])),
+-                            html.td(html.small(m["Proveedor"])),
+-                            html.td(
+-                                html.span(
+-                                    {"style": {"color": "var(--pico-primary)"}},
+-                                    html.i({"class_name": "fa-solid fa-robot", "style": {"marginRight": "5px"}}),
+-                                    m.get("RobotNombre") or f"ID: {m['RobotId']}",
+-                                )
+-                            ),
+-                            html.td(
+-                                html.button(
+-                                    {
+-                                        "class_name": "outline secondary",
+-                                        "on_click": lambda e, mid=m["MapeoId"]: asyncio.create_task(handle_delete(mid)),
+-                                        "data-tooltip": "Eliminar Alias",
+-                                    },
+-                                    html.i({"class_name": "fa-solid fa-trash"}),
+-                                )
+-                            ),
++                            html.th("Nombre Externo (Alias)"),
++                            html.th("Proveedor"),
++                            html.th("Se ejecuta como"),
++                            html.th("Acciones"),
+                         )
+-                        for m in mappings
+-                    ]
+-                    if mappings
+-                    else html.tr(
+-                        html.td(
+-                            {"colspan": 4, "style": {"text-align": "center", "padding": "2rem"}},
+-                            "No hay mapeos definidos aún.",
++                    ),
++                    html.tbody(
++                        *[
++                            html.tr(
++                                {"key": m["MapeoId"]},
++                                html.td(html.strong(m["NombreExterno"])),
++                                html.td(html.p(m["Proveedor"])),
++                                html.td(
++                                    html.span(
++                                        {"style": {"color": "var(--pico-primary)"}},
++                                        html.i({"class_name": "fa-solid fa-robot", "style": {"marginRight": "5px"}}),
++                                        m.get("RobotNombre") or f"ID: {m['RobotId']}",
++                                    )
++                                ),
++                                html.td(
++                                    html.a(
++                                        {
++                                            "href": "#",
++                                            "class_name": "secondary",
++                                            "data-tooltip": "Eliminar Alias",
++                                            "on_click": lambda e, mid=m["MapeoId"]: asyncio.create_task(
++                                                handle_delete(mid)
++                                            ),
++                                        },
++                                        html.i({"class_name": "fa-solid fa-trash"}),
++                                    )
++                                ),
++                            )
++                            for m in mappings
++                        ]
++                        if mappings
++                        else html.tr(
++                            html.td(
++                                {"colspan": 4, "style": {"text-align": "center", "padding": "2rem"}},
++                                "No hay mapeos definidos aún.",
++                            )
+                         )
+-                    )
++                    ),
+                 ),
+             ),
+         ),
+diff --git a/src/sam/web/frontend/features/components/pools_components.py b/src/sam/web/frontend/features/components/pools_components.py
+index fb9b9aa..a85d9eb 100644
+--- a/src/sam/web/frontend/features/components/pools_components.py
++++ b/src/sam/web/frontend/features/components/pools_components.py
+@@ -141,12 +141,12 @@ def PoolRow(pool: Dict, on_edit: Callable, on_assign: Callable, on_delete: Calla
+                 html.a(
+                     {
+                         "href": "#",
+-                        "on_click": event(lambda e: on_delete(pool), prevent_default=True),
+                         "data-tooltip": "Eliminar Pool",
+                         "data-placement": "left",
+                         "class_name": "secondary",
++                        "on_click": event(lambda e: on_delete(pool), prevent_default=True),
+                     },
+-                    html.i({"class_name": "fa-solid fa-trash-alt"}),
++                    html.i({"class_name": "fa-solid fa-trash"}),
+                 ),
+             )
+         ),
+diff --git a/src/sam/web/frontend/features/components/schedules_components.py b/src/sam/web/frontend/features/components/schedules_components.py
+index 5105f3b..846507d 100644
+--- a/src/sam/web/frontend/features/components/schedules_components.py
++++ b/src/sam/web/frontend/features/components/schedules_components.py
+@@ -221,7 +221,7 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit:
+                                         "class_name": "secondary",
+                                         "disabled": True,
+                                     },
+-                                    html.i({"class_name": "fa-solid fa-trash-alt"}),
++                                    html.i({"class_name": "fa-solid fa-trash"}),
+                                 ),
+                             ),
+                         ),
