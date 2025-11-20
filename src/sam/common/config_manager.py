@@ -219,7 +219,7 @@ class ConfigManager:
             "cr_pwd": cls._get_env_with_warning("AA_CR_PWD"),  # Optional
             "cr_api_key": cls._get_env_with_warning("AA_CR_API_KEY"),
             "verify_ssl": cls._get_env_with_warning("AA_VERIFY_SSL", "false").lower() == "false",
-            "api_timeout_seconds": int(cls._get_env_with_warning("AA_API_TIMEOUT_SECONDS", 60)),
+            "api_timeout_seconds": int(cls._get_env_with_warning("AA_API_TIMEOUT_SECONDS", 120)),
             "callback_url_deploy": cls._get_env_with_warning("AA_URL_CALLBACK"),
         }
 
