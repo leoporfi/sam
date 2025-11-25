@@ -1,88 +1,55 @@
 [project]
 name = "sam"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.8"
+description = "Sistema Automático de Robots - RPA Orchestration"
+requires-python = ">=3.9"
 dependencies = [
-    "bcrypt==4.3.0",
-    "certifi==2025.1.31",
-    "cffi==1.17.1",
-    "charset-normalizer==3.4.1",
-    "cryptography==44.0.2",
-    "fastapi>=0.115.12",
-    "httpx>=0.28.1",
-    "idna==3.10",
-    "mysql-connector-python>=9.0.0",
-    "paramiko==3.5.1",
-    "playwright>=1.48.0",
-    "pycparser==2.22",
-    "pynacl==1.5.0",
-    "pyodbc==5.2.0",
-    "pytest>=8.3.5",
-    "pytest-asyncio>=0.24.0",
-    "python-dateutil==2.9.0.post0",
-    "python-dotenv==1.0.1",
-    "pytz==2025.2",
-    "reactpy>=1.0.0",
-    "reactpy-router>=0.0.1",
-    "requests==2.32.3",
-    "requests-mock==1.12.1",
-    "schedule==1.2.2",
-    "six==1.17.0",
-    "sshtunnel>=0.4.0",
-    "urllib3==2.2.3",
-    "uvicorn[standard]>=0.33.0",
-    "waitress==3.0.0",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "httpx>=0.25.0",
+    "pyodbc>=5.0.0",
+    "python-dotenv>=1.0.0",
+    "urllib3>=2.0.0",
+    "schedule>=1.2.2",
+    "pytz>=2025.2",
+    "python-dateutil>=2.9.0.post0",
+    "reactpy[fastapi]>=1.0.0",
+    "reactpy-router>=2.0.0",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.12.0",
+    "httpx>=0.25.0",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+testpaths = ["tests"]
+pythonpath = [".","src"]
+addopts = "-v --cov=sam --cov-report=term-missing"
+asyncio_mode = "auto"
 
 [tool.ruff]
-# Directorios comunes a excluir
-exclude = [
-  ".git",
-  "__pycache__",
-  ".venv",
-  "env",
-  "venv",
-  ".mypy_cache",
-  ".ruff_cache",
-  "build",
-  "dist",
-  "migrations"
-]
+line-length = 120
+target-version = "py38"
+src = ["src"]
 
-# Archivos a analizar (por defecto todos los .py)
-include = ["*.py"]
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
 
-# Ignorar reglas específicas
-extend-ignore = [
-  "E402", # importaciones no al inicio del archivo
-  "F401", # imports sin usar (útil en __init__.py)
-  "F841",  # variables asignadas pero no usadas
-  "E501",
-  "W291"
-]
-
-# Estilo y formato
-line-length = 150
-indent-width = 4
-
-# Selección de linter (esto ya está activado por defecto en versiones nuevas)                                                                   
-select = [
-  "E",    # pycodestyle errors
-  "F",    # pyflakes
-  "W",    # warnings
-  "I",    # isort
-  "UP",   # pyupgrade
-  "C90",  # mccabe
-]
-
-# Ordenar imports al guardar si usas ruff-format
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-line-ending = "auto"
-
+[project.scripts]
+sam-lanzador = "sam.lanzador.run_lanzador:main"
+sam-balanceador = "sam.balanceador.run_balanceador:main"
+sam-callback = "sam.callback.run_callback:main"
+sam-web = "sam.web.run_dashboard:main"
