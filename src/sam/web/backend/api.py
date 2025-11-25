@@ -161,7 +161,7 @@ def get_robots_with_assignments(
     active: Optional[bool] = None,
     online: Optional[bool] = None,
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=1000),
+    size: int = Query(100, ge=1, le=1000),
     sort_by: Optional[str] = Query("Robot"),
     sort_dir: Optional[str] = Query("asc"),
 ):
@@ -239,7 +239,7 @@ def get_schedules(
     search: Optional[str] = Query(None),
     activo: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=300),
+    size: int = Query(100, ge=1, le=300),
 ):
     """Listado paginado de programaciones con filtros."""
     try:
@@ -370,7 +370,7 @@ def get_all_equipos(
     active: Optional[bool] = Query(None),
     balanceable: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(100, ge=1, le=100),
     sort_by: Optional[str] = Query("Equipo"),
     sort_dir: Optional[str] = Query("asc"),
 ):
