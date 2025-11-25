@@ -171,7 +171,7 @@ class Conciliador:
 
     def _marcar_unknown_por_antiguedad(self):
         """Marca como UNKNOWN ejecuciones que superan el umbral de días de tolerancia."""
-        dias_tolerancia = self._config.get("dias_tolerancia_unknown", 90)
+        dias_tolerancia = self._config.get("dias_tolerancia_unknown", 30)
 
         query_select = """
             SELECT EjecucionId, DeploymentId, Hora
