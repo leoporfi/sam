@@ -2376,7 +2376,7 @@ CREATE PROCEDURE [dbo].[ListarProgramacionesPaginadas]
     @Tipo NVARCHAR(50) = NULL,
     @Activo BIT = NULL,
     @Search NVARCHAR(100) = NULL,
-    @PageSize INT = 20,
+    @PageSize INT = 100,
     @Offset INT = 0
 AS
 BEGIN
