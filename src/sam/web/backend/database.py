@@ -88,7 +88,7 @@ def get_robots(
     active: Optional[bool] = None,
     online: Optional[bool] = None,
     page: int = 1,
-    size: int = 20,
+    size: int = 100,
     sort_by: str = "Robot",
     sort_dir: str = "asc",
 ) -> Dict:
@@ -314,7 +314,7 @@ def get_devices(
     active: Optional[bool] = None,
     balanceable: Optional[bool] = None,
     page: int = 1,
-    size: int = 20,
+    size: int = 100,
     sort_by: str = "Equipo",
     sort_dir: str = "asc",
 ) -> Dict:

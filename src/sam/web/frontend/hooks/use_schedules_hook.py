@@ -6,7 +6,7 @@ from reactpy import use_callback, use_context, use_effect, use_memo, use_state
 from ..api.api_client import get_api_client
 from ..shared.notifications import NotificationContext
 
-PAGE_SIZE = 20
+PAGE_SIZE = 100
 INITIAL_FILTERS = {"robot": None, "tipo": None, "activo": None, "search": None}
 
 POLL_INTERVAL = 120

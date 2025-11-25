@@ -6,7 +6,7 @@ from reactpy import use_callback, use_context, use_effect, use_memo, use_state
 from ..api.api_client import get_api_client
 from ..shared.notifications import NotificationContext
 
-PAGE_SIZE = 20
+PAGE_SIZE = 100
 INITIAL_FILTERS = {"name": None, "active": None, "balanceable": None}
 POLLING_INTERVAL_SECONDS = 60
 SYNC_POLLING_INTERVAL_SECONDS = 3
