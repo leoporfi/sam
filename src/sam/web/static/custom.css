@@ -1,0 +1,646 @@
+/* ==========================================================================
+   INDICE DE CONTENIDOS
+   1. Tokens & Configuración Global
+   2. Reset & Tipografía Base
+   3. Layout Principal
+   4. Componentes UI Generales (Botones, Tags, Tabs, Paginación)
+   5. Componentes: Modales & Toasts
+   6. Componentes: Formularios (Selectores, Inputs)
+   7. Módulo: Panel de Control (Dashboard Controls)
+   8. Módulo: Vistas de Datos (Tablas vs Cards Responsive)
+   ========================================================================== */
+
+/* -------------------------------------------------------------------------- */
+/* 1. TOKENS & CONFIGURACIÓN GLOBAL                                           */
+/* -------------------------------------------------------------------------- */
+:root {
+  /* Dimensiones PicoCSS */
+  --pico-border-radius: 1rem;
+  --pico-typography-spacing-vertical: 1.5rem;
+  --pico-form-element-spacing-vertical: 1rem;
+  --pico-font-size: 0.9rem;
+
+  /* Gestión de Capas (Z-Index) */
+  --z-table-header: 10;
+  --z-sticky-nav: 1000;
+  --z-modal: 1100;
+  --z-toast: 9999;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 2. RESET & TIPOGRAFÍA BASE                                                 */
+/* -------------------------------------------------------------------------- */
+* {
+  scroll-behavior: smooth;
+}
+
+h1, h2, h3, h4, h5, h6,
+button {
+  --pico-font-weight: 700;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* Spinner en botones con aria-busy */
+button[aria-busy="true"] {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+button[aria-busy="true"]::before {
+  margin-right: 0 !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3. LAYOUT PRINCIPAL                                                        */
+/* -------------------------------------------------------------------------- */
+.container {
+  max-width: 1400px;
+}
+
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky-nav);
+  background-color: var(--pico-background-color);
+  margin-bottom: var(--pico-spacing);
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] .sticky-header {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.page-controls-container {
+  padding-top: var(--pico-spacing);
+}
+
+
+nav ul li a.active {
+    font-weight: 800 !important;
+    color: var(--pico-primary) !important;
+}
+/* -------------------------------------------------------------------------- */
+/* 4. COMPONENTES UI GENERALES                                                */
+/* -------------------------------------------------------------------------- */
+
+/* --- Theme Switcher --- */
+.theme-switcher {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  --pico-font-size: 1rem;
+}
+.theme-switcher .material-symbols-outlined {
+  font-size: 1.25em;
+}
+
+/* --- Botones Personalizados --- */
+.secondary-ghost {
+  --pico-color: var(--pico-primary);
+  --pico-background-color: var(--pico-primary-background);
+  --pico-border-color: transparent;
+  --pico-box-shadow: none;
+}
+.secondary-ghost:hover {
+  --pico-background-color: var(--pico-primary-hover-background);
+}
+
+.pico-background-fuchsia-500 {
+  --pico-background-color: var(--pico-color-fuchsia-500);
+  --pico-border-color: var(--pico-color-fuchsia-500);
+  --pico-color: white;
+  font-weight: 600;
+}
+.pico-background-fuchsia-500:hover {
+  --pico-background-color: var(--pico-color-fuchsia-600);
+  --pico-border-color: var(--pico-color-fuchsia-600);
+}
+
+.pico-background-purple-500 {
+  --pico-background-color: var(--pico-color-purple-500);
+  --pico-border-color: var(--pico-color-purple-500);
+  --pico-color: white;
+  font-weight: 600;
+}
+.pico-background-purple-500:hover {
+  --pico-background-color: var(--pico-color-purple-600);
+  --pico-border-color: var(--pico-color-purple-600);
+}
+
+/* --- Tabs (Solapas) --- */
+.tabs-container {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--pico-muted-border-color);
+  margin-bottom: 1.5rem;
+}
+
+.tab-button {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--pico-muted-color);
+  transition: all 0.2s ease;
+  margin-bottom: -2px;
+}
+
+.tab-button:hover {
+  background: none;
+  color: var(--pico-color);
+  border-bottom-color: var(--pico-muted-border-color);
+}
+
+.tab-button.active {
+  color: var(--pico-primary);
+  border-bottom-color: var(--pico-primary);
+  background: none;
+}
+
+.tab-content {
+  animation: fadeIn 0.3s ease;
+}
+
+/* --- Tags & Badges --- */
+.tag {
+  background-color: var(--pico-primary-background);
+  color: var(--pico-primary-inverse);
+  padding: 0.25rem 0.6rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-block;
+  text-align: center;
+}
+.tag.secondary {
+  background-color: var(--pico-secondary-background);
+  color: var(--pico-secondary-inverse);
+}
+
+/* Estados de Equipos */
+.tag-programado { background-color: var(--pico-color-blue-500); color: white; }
+.tag-reservado  { background-color: var(--pico-color-orange-500); color: white; }
+.tag-dinamico   { background-color: var(--pico-color-green-500); color: white; }
+
+/* Tipos de Ejecución */
+.tag-ejecucion-programado { background-color: var(--pico-color-pink-550); color: white; }
+.tag-ejecucion-demanda    { background-color: var(--pico-color-azure-550); color: white; }
+
+/* --- Paginación --- */
+.pagination-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.pagination-summary {
+  font-size: 0.9em;
+  color: var(--pico-muted-color);
+}
+.pagination-controls {
+  margin: 0;
+  display: flex;
+  gap: 0.25rem;
+}
+.pagination-controls li a {
+  min-width: 2.5rem;
+  text-align: center;
+}
+.pagination-controls li a[aria-current="page"] {
+  background-color: var(--pico-primary);
+  color: var(--pico-primary-inverse);
+}
+.pagination-controls li a[disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 5. COMPONENTES: MODALES & TOASTS                                           */
+/* -------------------------------------------------------------------------- */
+
+/* --- Modales (Dialog) --- */
+dialog[open] {
+  max-width: 85vw;
+  width: auto;
+  z-index: var(--z-modal);
+}
+
+dialog header h2,
+.dialog footer {
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  dialog[open] {
+    max-width: 95vw;
+  }
+}
+
+/* --- Toast Notifications --- */
+.toast-container {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: var(--z-toast) !important;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.toast {
+  padding: 1rem 1.5rem;
+  border-radius: var(--pico-border-radius);
+  box-shadow: var(--pico-card-box-shadow);
+  display: flex;
+  position: relative;
+  padding-right: 3rem;
+  width: 350px;
+  max-width: 90vw;
+  font-weight: 500;
+  animation: toast-fade-in 0.3s ease;
+}
+
+.toast-success { background-color: var(--pico-color-jade-500); color: whitesmoke; border: 1px solid var(--pico-color-jade-700); }
+.toast-error   { background-color: var(--pico-color-red-500); color: whitesmoke; border: 1px solid var(--pico-color-red-700); }
+.toast-info    { background-color: var(--pico-color-blue-500); color: whitesmoke; border: 1px solid var(--pico-color-blue-700); }
+.toast-warning { background-color: var(--pico-color-orange-500); color: whitesmoke; border: 1px solid var(--pico-color-orange-700); }
+
+.toast-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  font-size: 1.2rem;
+  padding: 0;
+  width: auto;
+  line-height: 1;
+}
+.toast-close:hover { opacity: 1; }
+
+/* -------------------------------------------------------------------------- */
+/* 6. COMPONENTES: FORMULARIOS                                                */
+/* -------------------------------------------------------------------------- */
+
+/* --- Search Input --- */
+.search-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='currentColor' class='bi bi-search' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 0.75rem center;
+  padding-left: 2.5rem;
+  background-size: 1rem;
+}
+
+/* --- Weekday Selector (Tradicional) --- */
+.weekday-selector-traditional {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--pico-form-element-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0.75rem;
+}
+.weekday-selector-traditional legend {
+  font-weight: 600;
+  font-size: 0.9em;
+  padding: 0 0.5rem;
+}
+.weekday-grid {
+  display: grid;
+  grid-template-columns: repeat(7, auto);
+  gap: 0.5rem;
+  row-gap: 0.5rem;
+  justify-content: start;
+  width: fit-content;
+}
+.weekday-grid .weekday-header {
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.9em;
+  user-select: none;
+}
+.weekday-grid .weekday-checkbox-label {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+}
+.weekday-grid .weekday-checkbox-label input[type="checkbox"] {
+  margin: 0;
+  transform: scale(0.9);
+}
+
+/* --- Weekday Selector Wrapper (Override/Compacto) --- */
+/* Usado en schedule_edit_modal.py */
+.weekday-selector-wrapper {
+  display: grid !important;
+  grid-template-columns: repeat(7, 1fr) !important;
+  gap: 0.25rem !important;
+  padding-top: 0.25rem !important;
+}
+.weekday-selector-wrapper > label {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.25rem !important;
+  font-size: 0.8em;
+  font-weight: bold;
+  color: var(--pico-muted-color);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--pico-border-radius);
+  transition: background-color 0.2s ease-in-out;
+}
+.weekday-selector-wrapper > label:hover {
+  background-color: var(--pico-muted-background-color);
+}
+.weekday-selector-wrapper input[type="checkbox"] {
+  margin: 0 !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 7. MÓDULO: PANEL DE CONTROL (Dashboard Controls)                           */
+/* -------------------------------------------------------------------------- */
+
+.dashboard-controls {
+  border-radius: var(--pico-border-radius);
+  border: 1px solid var(--pico-card-border-color);
+  padding: var(--pico-spacing);
+  margin-bottom: var(--pico-typography-spacing-vertical);
+  background-color: var(--pico-card-background-color);
+}
+
+.controls-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.controls-header h2 {
+  margin-bottom: 0;
+}
+
+/* Contenedores internos */
+.filters-container,
+.buttons-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+/* --- Comportamiento Móvil (Default) --- */
+.mobile-controls-toggle {
+  display: block; /* Visible en móvil */
+}
+
+.collapsible-panel {
+  display: none; /* Oculto por defecto en móvil */
+}
+
+.collapsible-panel.is-expanded {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.master-controls-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-top: var(--pico-spacing);
+  border-top: 1px solid var(--pico-form-element-border-color);
+  margin-top: var(--pico-spacing);
+}
+
+.master-controls-grid > button {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+/* --- Comportamiento Escritorio (>= 1024px) --- */
+@media (min-width: 1024px) {
+  .mobile-controls-toggle {
+    display: none;
+  }
+  
+  .collapsible-panel {
+    display: block; /* Siempre visible */
+  }
+  
+  .master-controls-grid {
+    display: grid;
+    grid-template-columns: 3fr repeat(2, 2fr) repeat(2, 1.5fr);
+    gap: 1rem;
+    align-items: stretch; 
+    border-top: none;
+    padding-top: 0;
+    margin-top: 0.5em;
+  }
+  
+  .master-controls-grid select, 
+  .master-controls-grid input,
+  .master-controls-grid .search-input {
+    height: 100%;
+    margin-bottom: 0; 
+  }
+
+  .master-controls-grid.six-columns {
+    grid-template-columns: 3fr repeat(2, 2fr) repeat(3, 1.5fr);
+    align-items: stretch;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* 8. MÓDULO: VISTAS DE DATOS (Tablas vs Cards Responsive)                    */
+/* -------------------------------------------------------------------------- */
+
+/* === 8.1 VISTA CARD (Mobile First) === */
+.cards-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.robot-card, .pool-card {
+  margin-bottom: 0;
+}
+.robot-card-header {
+  border-bottom: 1px solid var(--pico-card-border-color);
+  padding-bottom: 0.75rem;
+}
+.robot-card-header h5, .pool-card h5 {
+  margin-bottom: 0;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+.robot-card-body p {
+  margin-bottom: 0.75rem;
+}
+.robot-card-footer {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--pico-card-border-color);
+}
+.robot-card-footer button {
+  flex-grow: 1;
+  margin-bottom: 0;
+}
+
+/* Ajuste Tablet para Cards */
+@media (min-width: 768px) {
+  .robot-cards,
+  .pool-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* === 8.2 VISTA TABLA (Desktop) === */
+.table-container {
+  display: none; /* Oculta en móvil */
+}
+
+/* Estilos de Tablas Compactas & Modales */
+.compact-schedule-table th,
+.compact-schedule-table td {
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+  vertical-align: middle;
+}
+.compact-schedule-table td .grid a,
+.compact-schedule-table td .grid button {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8em;
+  margin-bottom: 0;
+}
+.compact-schedule-table td .grid {
+  gap: 0.25rem;
+}
+
+/* Tabla de Asignación (Modal) */
+.compact-assignment-table {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--pico-table-border-color);
+  border-radius: var(--pico-border-radius);
+}
+.compact-assignment-table table { margin-bottom: 0; border: none; }
+.compact-assignment-table th {
+  position: sticky;
+  top: 0;
+  background-color: var(--pico-table-header-background-color);
+  z-index: var(--z-table-header);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  font-size: 0.9em;
+}
+.compact-assignment-table td {
+  padding: 0.25rem 0.75rem;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.95em;
+}
+.compact-assignment-table td:first-child {
+  width: 40px;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+.compact-assignment-table .tag {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.75em;
+}
+
+/* Listas de Equipos en Modales */
+.device-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+}
+.device-list-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.device-list-header h5 { margin-bottom: 0; }
+
+.device-list-table {
+  /* height: 35vh; */
+  overflow-y: auto;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+}
+
+.device-list-table table { margin-bottom: 0; font-size: 1rem; }
+.device-list-table thead {
+  position: sticky;
+  top: 0;
+  background-color: var(--pico-background-color);
+  z-index: var(--z-table-header);
+  box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+}
+.device-list-table thead th {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 2px solid var(--pico-muted-border-color);
+}
+.device-list-table tbody td {
+  /* padding: 0.75rem 0.5rem; */
+  vertical-align: middle;
+}
+.device-list-table tbody tr:hover {
+  background-color: var(--pico-table-row-stripped-background-color);
+}
+
+/* === 8.3 SWITCH DE VISTAS (Desktop Trigger) === */
+@media (min-width: 1024px) {
+  .table-container {
+    display: block;
+    max-height: 65vh;
+    overflow-y: auto;
+  }
+  
+  .cards-container {
+    display: none;
+  }
+
+  /* Header Sticky específico de la tabla principal */
+  .table-container thead th {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-table-header);
+    background-color: var(--pico-background-color);
+    box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* 9. ANIMACIONES                                                             */
+/* -------------------------------------------------------------------------- */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
