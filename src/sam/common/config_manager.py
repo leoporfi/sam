@@ -123,13 +123,13 @@ class ConfigManager:
             )
             default_params = {}
         return {
-            "intervalo_lanzamiento": int(cls._get_env_with_warning("LANZADOR_INTERVALO_LANZAMIENTO_SEG", 120)),
+            "intervalo_lanzamiento": int(cls._get_env_with_warning("LANZADOR_INTERVALO_LANZAMIENTO_SEG", 15)),
             "intervalo_sincronizacion": int(cls._get_env_with_warning("LANZADOR_INTERVALO_SINCRONIZACION_SEG", 3600)),
-            "intervalo_conciliacion": int(cls._get_env_with_warning("LANZADOR_INTERVALO_CONCILIACION_SEG", 300)),
+            "intervalo_conciliacion": int(cls._get_env_with_warning("LANZADOR_INTERVALO_CONCILIACION_SEG", 900)),
             "pausa_lanzamiento": (pausa_inicio, pausa_fin),
             "max_workers_lanzador": int(cls._get_env_with_warning("LANZADOR_MAX_WORKERS", 10)),
-            "max_reintentos_deploy": int(cls._get_env_with_warning("LANZADOR_MAX_REINTENTOS_DEPLOY", 1)),
-            "delay_reintentos_deploy_seg": int(cls._get_env_with_warning("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 15)),
+            "max_reintentos_deploy": int(cls._get_env_with_warning("LANZADOR_MAX_REINTENTOS_DEPLOY", 2)),
+            "delay_reintentos_deploy_seg": int(cls._get_env_with_warning("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 5)),
             "dias_tolerancia_unknown": int(cls._get_env_with_warning("CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN", 30)),
             "conciliador_batch_size": int(cls._get_env_with_warning("LANZADOR_CONCILIADOR_BATCH_SIZE", 25)),
             "shutdown_timeout_seg": int(cls._get_env_with_warning("LANZADOR_SHUTDOWN_TIMEOUT_SEG", 60)),
