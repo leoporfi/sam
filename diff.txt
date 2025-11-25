@@ -1,0 +1,48 @@
+diff --git a/.env.example b/.env.example
+index 9a2dcf6..42bdeb2 100644
+--- a/.env.example
++++ b/.env.example
+@@ -75,7 +75,7 @@ LANZADOR_HABILITAR_SYNC=false
+ LANZADOR_SHUTDOWN_TIMEOUT_SEG=60
+ LANZADOR_UMBRAL_ALERTAS_412=20
+ LANZADOR_CONCILIADOR_BATCH_SIZE=25
+-CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN=90
++CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN=30
+ 
+ 
+ # --- Configuración Balanceador ---
+diff --git a/src/sam/common/config_manager.py b/src/sam/common/config_manager.py
+index 9b4c704..e4878e0 100644
+--- a/src/sam/common/config_manager.py
++++ b/src/sam/common/config_manager.py
+@@ -123,13 +123,13 @@ class ConfigManager:
+             )
+             default_params = {}
+         return {
+-            "intervalo_lanzamiento": int(cls._get_env_with_warning("LANZADOR_INTERVALO_LANZAMIENTO_SEG", 120)),
++            "intervalo_lanzamiento": int(cls._get_env_with_warning("LANZADOR_INTERVALO_LANZAMIENTO_SEG", 15)),
+             "intervalo_sincronizacion": int(cls._get_env_with_warning("LANZADOR_INTERVALO_SINCRONIZACION_SEG", 3600)),
+-            "intervalo_conciliacion": int(cls._get_env_with_warning("LANZADOR_INTERVALO_CONCILIACION_SEG", 300)),
++            "intervalo_conciliacion": int(cls._get_env_with_warning("LANZADOR_INTERVALO_CONCILIACION_SEG", 900)),
+             "pausa_lanzamiento": (pausa_inicio, pausa_fin),
+             "max_workers_lanzador": int(cls._get_env_with_warning("LANZADOR_MAX_WORKERS", 10)),
+-            "max_reintentos_deploy": int(cls._get_env_with_warning("LANZADOR_MAX_REINTENTOS_DEPLOY", 1)),
+-            "delay_reintentos_deploy_seg": int(cls._get_env_with_warning("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 15)),
++            "max_reintentos_deploy": int(cls._get_env_with_warning("LANZADOR_MAX_REINTENTOS_DEPLOY", 2)),
++            "delay_reintentos_deploy_seg": int(cls._get_env_with_warning("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 5)),
+             "dias_tolerancia_unknown": int(cls._get_env_with_warning("CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN", 30)),
+             "conciliador_batch_size": int(cls._get_env_with_warning("LANZADOR_CONCILIADOR_BATCH_SIZE", 25)),
+             "shutdown_timeout_seg": int(cls._get_env_with_warning("LANZADOR_SHUTDOWN_TIMEOUT_SEG", 60)),
+diff --git a/src/sam/lanzador/service/desplegador.py b/src/sam/lanzador/service/desplegador.py
+index ece8009..3b3b2de 100644
+--- a/src/sam/lanzador/service/desplegador.py
++++ b/src/sam/lanzador/service/desplegador.py
+@@ -186,7 +186,7 @@ class Desplegador:
+                     # Desactivar asignación problemática
+                     try:
+                         self._db_connector.ejecutar_consulta(
+-                            "UPDATE dbo.Asignaciones SET Activo = 0 WHERE RobotId = ? AND EquipoId = ?",
++                            "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ?",
+                             (robot_id, equipo_id),
+                             es_select=False,
+                         )
