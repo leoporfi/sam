@@ -186,7 +186,7 @@ class Desplegador:
                     # Desactivar asignación problemática
                     try:
                         self._db_connector.ejecutar_consulta(
-                            "UPDATE dbo.Asignaciones SET Activo = 0 WHERE RobotId = ? AND EquipoId = ?",
+                            "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ?",
                             (robot_id, equipo_id),
                             es_select=False,
                         )
