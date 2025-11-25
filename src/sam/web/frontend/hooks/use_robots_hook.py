@@ -8,7 +8,7 @@ from ..api.api_client import get_api_client
 from ..shared.notifications import NotificationContext
 
 # --- Constantes de configuración ---
-PAGE_SIZE = 20
+PAGE_SIZE = 100
 INITIAL_FILTERS = {"name": None, "active": True, "online": None}
 POLLING_INTERVAL_SECONDS = 120
 SYNC_POLLING_INTERVAL_SECONDS = 3

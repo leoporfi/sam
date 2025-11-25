@@ -107,7 +107,6 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
     available_equipos, set_available_equipos = use_state([])
     assigned_equipos, set_assigned_equipos = use_state([])
 
-    # RFR-20: Se cambia el estado de 'set' a 'list' para evitar errores de serialización JSON.
     selected_avail_robots, set_selected_avail_robots = use_state([])
     selected_asgn_robots, set_selected_asgn_robots = use_state([])
     selected_avail_equipos, set_selected_avail_equipos = use_state([])
