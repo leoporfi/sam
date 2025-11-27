@@ -1,77 +1,103 @@
 # **SAM: Sistema Automático de Robots**
 
-SAM es un ecosistema de orquestación de RPA (Robotic Process Automation) diseñado para gestionar, lanzar, balancear y monitorear la ejecución de robots construidos sobre la plataforma Automation 360 (Automation Anywhere). Su arquitectura modular y desacoplada permite una alta escalabilidad y un mantenimiento sencillo.
+SAM es un ecosistema de orquestación de RPA diseñado para gestionar, lanzar, balancear y monitorear la ejecución de robots construidos sobre la plataforma **Automation 360**.
 
-## **Arquitectura**
+A diferencia del agendador nativo de A360, SAM añade una capa de inteligencia para el manejo de colas, priorización dinámica y balanceo de carga entre pools de equipos.
 
-El sistema está compuesto por cuatro microservicios independientes que se comunican a través de una base de datos central:
+## **Arquitectura del Sistema**
 
-1. **Servicio Lanzador (sam.lanzador):** El corazón del sistema. Se encarga de consultar la base de datos en busca de robots pendientes de ejecución, los despliega a través de la API de A360 y sincroniza su estado final.  
-2. **Servicio Balanceador (sam.balanceador):** Monitorea la carga de trabajo y los recursos disponibles (pools de bots y máquinas) para tomar decisiones estratégicas sobre la asignación de licencias y la priorización de ejecuciones.  
-3. **Servicio de Callback (sam.callback):** Un servidor web FastAPI que expone un endpoint seguro para recibir notificaciones de A360 cuando un robot finaliza, permitiendo una actualización de estado casi en tiempo real.  
-4. **Interfaz Web (sam.web):** Un dashboard interactivo construido con ReactPy y FastAPI que permite a los usuarios monitorear el estado de los robots, gestionar pools y visualizar el rendimiento del sistema.
+El sistema opera mediante **4 microservicios independientes** que corren como servicios de Windows (NSSM) y se comunican a través de una base de datos central (SQL Server).
 
-## **🚀 Puesta en Marcha (Entorno de Desarrollo)**
+### **1\. Servicio Lanzador (sam.lanzador)**
 
-Sigue estos pasos para configurar y ejecutar el proyecto en tu máquina local.
+* **Rol:** El Motor.  
+* **Función:** Consulta la BD, despierta a los robots a través de la API de A360 y monitorea que terminen correctamente.  
+* **Punto Crítico:** Maneja la lógica de estados UNKNOWN (cuando A360 pierde conexión) y sincroniza los catálogos de robots.
 
-### **1. Prerrequisitos**
+### **2\. Servicio Balanceador (sam.balanceador)**
+
+* **Rol:** El Estratega.  
+* **Función:** Monitorea la demanda (tickets pendientes) y asigna/quita equipos a los robots dinámicamente.  
+* **Punto Crítico:** Maneja la **Preemption** (prioridad estricta) y el **Cooling** (tiempos de espera para estabilizar pools).
+
+### **3\. Servicio Callback (sam.callback)**
+
+* **Rol:** El Oído (Tiempo Real).  
+* **Función:** Recibe notificaciones inmediatas desde A360 cuando un bot termina, actualizando la BD al instante.  
+* **Punto Crítico:** Requiere que el puerto del servicio (default 8008\) esté accesible desde el Control Room de A360.
+
+### **4\. Interfaz de Gestión (sam.web)**
+
+* **Rol:** La Consola (ABM).  
+* **Función:** Permite al equipo de soporte configurar el sistema:  
+  * Alta/Baja de Robots y Equipos.  
+  * Asignación de Prioridades (1-10).  
+  * Gestión de Pools y Mapeos.  
+  * Programación de Tareas (Schedules).
+
+## **📍 Guía Rápida para Soporte y Operaciones**
+
+### **Ubicación de Componentes**
+
+* **Directorio de Instalación:** C:\\RPA\\sam (Verificar en servidor).  
+* **Logs:** C:\\RPA\\Logs\\SAM (Rotativos por servicio).  
+* **Gestor de Servicios:** Windows Services (services.msc).  
+* **Entorno Python:** Gestionado con uv.
+
+### **Comandos de Gestión (PowerShell Admin)**
+
+Los servicios se gestionan vía NSSM pero aparecen como servicios estándar de Windows.
+
+**Reiniciar un servicio (Ej. tras cambiar el .env):**
+
+Restart-Service SAM\_Lanzador  
+Restart-Service SAM\_Balanceador  
+Restart-Service SAM\_Callback  
+Restart-Service SAM\_Web
+
+**Ver estado de los servicios:**
+
+Get-Service SAM\_\*
+
+### **Diagnóstico Básico (Logs)**
+
+| Archivo Log | Qué buscar |
+| :---- | :---- |
+| lanzador.log | Fallos de despliegue ("DeviceNotActive"), errores de API A360, robots "zombies". |
+| balanceador.log | Por qué no se asignan máquinas ("Cooling", "Prioridad"), errores de conexión con Clouders. |
+| callback.log | Si llegan las peticiones de A360. Si hay errores 401 (Token inválido). |
+| web.log | Errores internos de la interfaz o fallos de validación de datos. |
+
+## **🚀 Instalación y Despliegue**
+
+### **Prerrequisitos**
 
 * **Python 3.9+**  
-* **Git**  
-* **UV:** Un instalador y gestor de paquetes de Python extremadamente rápido. Se recomienda su uso para este proyecto.  
-  pip install uv
+* **SQL Server** (Base de datos creada con SAM.sql).  
+* **NSSM** (Non-Sucking Service Manager) en el PATH.  
+* **UV** (pip install uv).
 
-### **2. Instalación**
+### **Instalación en Producción (Windows)**
 
-1. **Clona el repositorio:**  
-   git clone <URL_DEL_REPOSITORIO>  
-   cd rpa_sam
+1. Clonar el repositorio.  
+2. Configurar el archivo .env (usar .env.example como base).  
+3. Ejecutar el script de instalación (requiere permisos de Admin):  
+   .\\scripts\\install\_services.ps1
 
-2. **Crea y activa el entorno virtual:**  
-   uv venv  
-   source .venv/bin/activate  # En Windows: .venv\Scripts\activate
+   *Este script crea el entorno virtual, instala dependencias y registra los servicios de Windows.*
 
-3. Instala las dependencias:  
-   Este comando instala el proyecto en modo editable (-e .) junto con todas las dependencias de desarrollo ([dev]).  
-   uv pip install -e .[dev]
+### **Ejecución en Desarrollo**
 
-4. Configura las variables de entorno:  
-   Copia el archivo de ejemplo y rellénalo con tus credenciales y configuraciones locales.  
-   copy .env.example .env  
-   # Abre el archivo .env y edita los valores
+uv run \-m sam.lanzador  
+uv run \-m sam.balanceador  
+uv run \-m sam.callback  
+uv run \-m sam.web
 
-### **3. Ejecución de los Servicios**
+## **Documentación Detallada**
 
-Cada servicio se ejecuta como un módulo de Python. Abre una terminal separada para cada servicio que necesites ejecutar.
+Para profundizar en la lógica interna de cada módulo, consultar:
 
-* **Ejecutar el Servicio Lanzador:**  
-  uv run -m sam.lanzador
-
-* **Ejecutar el Servicio Balanceador:**  
-  uv run -m sam.balanceador
-
-* **Ejecutar el Servidor de Callback:**  
-  uv run -m sam.callback
-
-* **Ejecutar la Interfaz Web:**  
-  uv run -m sam.web
-
-### **4. Ejecución de Pruebas**
-
-Para validar la integridad del código, ejecuta la suite de pruebas con el siguiente comando:
-
-uv run pytest
-
-## **📦 Despliegue en Producción (Windows)**
-
-Para instalar los servicios de forma persistente en un servidor Windows, se proporciona un script de PowerShell que utiliza **NSSM (Non-Sucking Service Manager)**.
-
-1. **Prerrequisitos en el Servidor:**  
-   * Asegúrate de que nssm.exe esté instalado y accesible en el PATH del sistema.  
-   * Clona el repositorio y configura el archivo .env con los valores de producción.  
-2. Ejecución del Script:  
-   Abre una terminal de PowerShell como Administrador y ejecuta el script de instalación:  
-   .\scripts\install_services.ps1
-
-   El script se encargará de detener y eliminar versiones antiguas de los servicios antes de instalar y configurar las nuevas, apuntando a los logs en C:\RPA\Logs\SAM.
+* [Servicio Lanzador](docs/servicios/servicio_lanzador.md)  
+* [Servicio Balanceador](docs/servicios/servicio_balanceador.md)  
+* [Servicio Callback](docs/servicios/servicio_callback.md)  
+* [Interfaz Web](docs/servicios/servicio_web.md)
