@@ -1,105 +1,80 @@
-# **Documentación Técnica: Interfaz Web**
+# **Documentación Técnica: Interfaz de Gestión (Web)**
 
 **Módulo:** sam.web
 
 ## **1. Propósito**
 
-La **Interfaz Web** de SAM es un dashboard de monitoreo y gestión. Permite a los usuarios visualizar el estado de las ejecuciones de robots, el estado de los equipos (devices) y gestionar la configuración de los robots y su asignación a "Pools" de ejecución.
+La **Interfaz Web** de SAM actúa como la consola central de administración y operación del sistema. Más que un dashboard de métricas, es una herramienta de **Gestión (ABM)** que permite al equipo de soporte y a los administradores configurar el comportamiento del orquestador sin interactuar directamente con la base de datos.
+
+Sus funciones principales son:
+
+1. **Inventario:** Alta, baja y modificación de Robots y Equipos.  
+2. **Configuración:** Definición de prioridades, límites de concurrencia y ventanas de mantenimiento.  
+3. **Estrategia:** Creación de "Pools" de equipos y asignación (Mapeo) de robots a estos pools.  
+4. **Programación:** Gestión de los cronogramas de ejecución (Schedules).
 
 ## **2. Arquitectura y Componentes**
 
-El servicio es una **única aplicación FastAPI** que se ejecuta en un servidor uvicorn. Esta aplicación sirve dos componentes principales montados en rutas diferentes:
+El servicio opera como una aplicación monolítica ligera que sirve tanto la API como la UI.
 
-1. **Backend (API):** Un conjunto de endpoints API RESTful montados bajo el prefijo /api.  
-2. **Frontend (UI):** Una interfaz de usuario interactiva (un dashboard) montada en la ruta raíz (/).
+### **Backend (FastAPI)**
 
-### **Componentes Principales**
+Ubicado en src/sam/web/backend. Expone una API RESTful que actúa como pasarela hacia los Stored Procedures de la base de datos.
 
-* **Servidor (sam.web.run_web.py)**:  
-  * **Rol:** Lanzador del Servidor.  
-  * **Descripción:** Utiliza uvicorn para iniciar el servidor web, cargando la aplicación principal (app) desde sam.web.main.py.  
-* **App Principal (sam.web.main.py)**:  
-  * **Rol:** Orquestador Web.  
-  * **Descripción:** Es el corazón de la aplicación. Crea la instancia principal de FastAPI y:  
-    1. Monta el router del **Backend** (desde backend.api.router) bajo la ruta /api.  
-    2. Monta la aplicación **Frontend** de ReactPy (desde frontend.app.layout) en la ruta raíz (/).  
-    3. Configura el servicio de archivos estáticos (CSS, JS) en la ruta /static.  
-* **Backend (sam.web.backend/api.py)**:  
-  * **Rol:** API de Datos.  
-  * **Descripción:** Expone todos los endpoints RESTful que el frontend necesita (ej. /api/robots/, /api/pools/, /api/equipos/, /api/dashboard/stats). No contiene lógica de negocio; su función es recibir peticiones, llamar a la base de datos y devolver los datos como JSON.  
-* **Gestor de Base de Datos (sam.web.backend/database.py)**:  
-  * **Rol:** Capa de Acceso a Datos del Backend.  
-  * **Descripción:** Contiene los métodos que ejecutan las consultas y Stored Procedures (SPs) específicos contra la base de datos de SAM (ej. ObtenerRobotsDetalle, ObtenerEquiposDetalle, ActualizarRobotConfig).  
-* **Frontend (sam.web.frontend/app.py)**:  
-  * **Rol:** Interfaz de Usuario (UI).  
-  * **Descripción:** Es el dashboard interactivo construido con **ReactPy**. Define la estructura de las páginas (Robots, Equipos, Pools, Dashboard), los componentes visuales (tablas, modales) y la lógica de estado.  
-* **Cliente API (sam.web.frontend/api/api_client.py)**:  
-  * **Rol:** Conector Frontend ->> Backend.  
-  * **Descripción:** Un componente del *Frontend* que utiliza httpx para realizar las llamadas a los endpoints del *Backend* (ej. llama a /api/robots/ para obtener la lista de robots) y devolver los datos a la interfaz.
+* **api.py**: Router principal. Define endpoints como /api/robots, /api/equipos, /api/mappings, /api/schedules.  
+* **database.py**: Capa de acceso a datos. Ejecuta los procedimientos almacenados (ej. ActualizarRobotConfig, GuardarSchedule).
 
-## **3. Flujo de Datos**
+### **Frontend (ReactPy)**
 
-1. Un usuario accede a la URL del servicio (ej. http://localhost:8000/) en su navegador.  
-2. El servidor uvicorn recibe la petición y la dirige a la **App Principal (FastAPI)**.  
-3. Como la ruta es /, FastAPI la dirige al **Frontend (ReactPy)**.  
-4. ReactPy renderiza la página principal y la envía al navegador.  
-5. Los componentes de ReactPy (ej. la tabla de robots) se cargan e invocan al **Cliente API** del frontend.  
-6. El **Cliente API** realiza una petición GET a la ruta del backend (ej. GET /api/robots/).  
-7. FastAPI recibe esta petición /api/ y la dirige al **Backend (API)**.  
-8. El endpoint del Backend llama al **Gestor de Base de Datos** para ejecutar el Stored Procedure (ej. ObtenerRobotsDetalle).  
-9. La base de datos devuelve los datos al Backend, que los formatea como JSON y los devuelve en la respuesta.  
-10. El **Cliente API** recibe el JSON y se lo entrega a los componentes del **Frontend**.  
-11. El Frontend (ReactPy) actualiza la interfaz para mostrar los datos (ej. rellena la tabla de robots).
+Ubicado en src/sam/web/frontend. Construido con **ReactPy**, lo que permite definir la interfaz usando sintaxis Python. La UI se divide en módulos funcionales ("Features"):
+
+1. **Gestión de Robots (features/components/robots_components.py)**:  
+   * Tabla interactiva para ver el estado de los robots.  
+   * Modales para editar configuración crítica: **Prioridad** (1-10) y **Límites** (máx. equipos simultáneos).  
+2. **Gestión de Equipos (features/components/equipos_components.py)**:  
+   * Visualización de dispositivos conectados.  
+   * Control para **Habilitar/Deshabilitar** equipos manualmente (modo mantenimiento).  
+3. **Gestión de Pools (features/components/pools_components.py)**:  
+   * ABM de Pools (agrupaciones lógicas de máquinas).  
+   * Configuración de "Aislamiento" (si el pool acepta carga externa o no).  
+4. **Mapeos (features/components/mappings_page.py)**:  
+   * Interfaz para configurar la equivalencia entre nombres de robots externos e internos. Permite que el **Balanceador** reconozca un robot que no figura en la tabla principal con el mismo nombre que reportan los proveedores externos (como el Orquestador de Clouders, la base de datos RPA360 o futuras integraciones), asegurando la correcta asignación de carga.  
+5. **Programaciones (features/components/schedules_components.py)**:  
+   * Gestión de tareas programadas (CRON).  
+   * Permite definir cuándo debe SAM lanzar un proceso automáticamente.
+
+## **3. Flujo de Datos (Ejemplo: Edición de un Robot)**
+
+1. **Usuario**: En la pantalla "Robots", hace clic en "Editar" sobre un proceso y cambia la prioridad a '1'.  
+2. **Frontend (robots_modals.py)**: Captura el evento y llama a api_client.update_robot().  
+3. **Cliente API**: Envía un PUT /api/robots/{id} con el payload JSON.  
+4. **Backend (api.py)**: Recibe la petición, valida los datos con Pydantic (schemas.py).  
+5. **Base de Datos (database.py)**: Ejecuta el SP dbo.ActualizarRobotConfig con los nuevos parámetros.  
+6. **Confirmación**: La BD confirma el cambio, el Backend responde 200 OK, y el Frontend muestra una notificación "Toas" (notifications.py) de éxito.
 
 ## **4. Variables de Entorno Requeridas (.env)**
 
-Este servicio depende de las siguientes variables. Dado que corre bajo NSSM, **cualquier cambio en estas variables requiere un reinicio del servicio** para que tenga efecto.
+Cualquier cambio en estas variables requiere reiniciar el servicio SAM_Web.
 
-### **Configuración de la Interfaz Web**
+### **Servidor Web**
 
-* INTERFAZ_WEB_HOST  
-  * **Propósito:** La dirección IP en la que escuchará el servidor uvicorn (ej. 127.0.0.1 o 0.0.0.0).  
-  * **Efecto:** Requiere reinicio.  
-* INTERFAZ_WEB_PORT  
-  * **Propósito:** El puerto TCP en el que escuchará el servidor (ej. 8000).  
-  * **Efecto:** Requiere reinicio.  
-* INTERFAZ_WEB_DEBUG  
-  * **Propósito:** true o false. Activa el modo "debug" de FastAPI, que proporciona más detalles de errores y recarga automáticamente el servidor en cambios (no recomendado en producción).  
-  * **Efecto:** Requiere reinicio.
+* INTERFAZ_WEB_HOST: IP de escucha (default 0.0.0.0).  
+* INTERFAZ_WEB_PORT: Puerto TCP (default 8000).  
+* INTERFAZ_WEB_DEBUG: true/false. Modo desarrollo (recarga automática). **Desactivar en Producción**.
 
-### **Configuración Base de Datos (SAM)**
+### **Base de Datos**
 
-* SQL_SAM_DRIVER  
-  * **Propósito:** Driver ODBC para la conexión (ej. {ODBC Driver 17 for SQL Server}).  
-  * **Efecto:** Requiere reinicio.  
-* SQL_SAM_HOST  
-  * **Propósito:** Dirección IP o Hostname del servidor SQL Server donde reside la BD de SAM.  
-  * **Efecto:** Requiere reinicio.  
-* SQL_SAM_DB_NAME  
-  * **Propósito:** Nombre de la base de datos de SAM.  
-  * **Efecto:** Requiere reinicio.  
-* SQL_SAM_UID / SQL_SAM_PWD  
-  * **Propósito:** Credenciales (usuario y contraseña) para la base de datos SAM.  
-  * **Efecto:** Requiere reinicio.  
-* (Variables de reintento de SQL: SQL_SAM_MAX_REINTENTOS_QUERY, etc.)
+* SQL_SAM_DRIVER: Driver ODBC (ej. {ODBC Driver 17 for SQL Server}).  
+* SQL_SAM_HOST, SQL_SAM_DB_NAME: Ubicación de la BD.  
+* SQL_SAM_UID, SQL_SAM_PWD: Credenciales de acceso.
 
-### **Configuración de Logging**
+### **Logging**
 
-* LOG_DIRECTORY  
-  * **Propósito:** Carpeta donde se guardarán los archivos de log.  
-  * **Efecto:** Requiere reinicio.  
-* LOG_LEVEL  
-  * **Propósito:** Nivel de detalle del log (ej. INFO, DEBUG).  
-  * **Efecto:** Requiere reinicio.  
-* APP_LOG_FILENAME_INTERFAZ_WEB  
-  * **Propósito:** Nombre específico del archivo de log para este servicio.  
-  * **Efecto:** Requiere reinicio.
+* LOG_DIRECTORY: Ruta física de logs (ej. C:\RPA\Logs\SAM).  
+* APP_LOG_FILENAME_INTERFAZ_WEB: Nombre del archivo (ej. web.log).
 
-## **5. Ejecución**
+## **5. Ejecución y Soporte**
 
-Para ejecutar el servicio en un entorno de desarrollo:
-
-Bash
-
-uv run -m sam.web
-
+* **Ejecución Manual (Dev):** uv run -m sam.web  
+* **Servicio Windows:** SAM_Web (Gestionado por NSSM).  
+* **Logs:** Revisar web.log para errores de conexión con la BD o validación de datos.
