@@ -1,116 +1,120 @@
-# **Documentación Técnica: Servicio Balanceador**
+# **Documentación Técnica: Servicio Balanceador (Inteligencia)**
 
 **Módulo:** sam.balanceador
 
-## **1. Propósito**
+## **1\. Propósito**
 
-El **Servicio Balanceador** es un componente estratégico del ecosistema SAM. Su responsabilidad principal es monitorear la carga de trabajo pendiente (demanda) y la capacidad de procesamiento de los equipos (oferta) para reasignar dinámicamente los robots a diferentes "Pools" de ejecución.
+El **Servicio Balanceador** es el estratega del ecosistema SAM. Mientras el Lanzador se ocupa de ejecutar tareas, el Balanceador se encarga de **optimizar los recursos** antes de que esas tareas se lancen.
 
-El objetivo es optimizar el uso de licencias y la capacidad de los equipos, asegurando que los robots de alta prioridad tengan los recursos necesarios.
+Su función principal es monitorear la "Demanda" (cuánto trabajo pendiente tiene cada robot) y ajustar la "Oferta" (cuántos equipos tiene asignados ese robot en su Pool) en tiempo real.
 
-## **2. Arquitectura y Componentes**
+**Analogía Funcional:** Mientras que el Servicio Lanzador actúa como el agente operativo encargado de la ejecución individual de tareas (similar a un conductor asignado a un servicio), el Servicio Balanceador opera como un centro de control logístico. Su función es determinar estratégicamente la asignación óptima de recursos a cada sector, basándose en el análisis en tiempo real del volumen de demanda y la capacidad disponible.
 
-El servicio opera en un bucle continuo y utiliza un diseño modular para la toma de decisiones, separando la obtención de datos de la lógica de balanceo.
+## **2\. Arquitectura y Componentes**
+
+El servicio opera en un bucle continuo de análisis y decisión.
 
 ### **Componentes Principales**
 
-* **BalanceadorService (service/main.py)**:  
-  * **Rol:** Orquestador.  
-  * **Descripción:** Gestiona el bucle principal del servicio. En cada ciclo, invoca a los "Proveedores de Carga" para recolectar el estado actual del sistema y luego pasa esta información al AlgoritmoBalanceo para que tome decisiones.  
-* **Proveedores de Carga (service/proveedores.py)**:  
-  * **Rol:** Recolección de Datos.  
-  * **Descripción:** Son clases responsables de consultar las diferentes fuentes de datos (APIs, bases de datos) para determinar la "carga" o demanda de trabajo.  
-  * **Implementaciones:**  
-    * CloudersProveedor: Consulta la API de Clouders (usando CloudersClient) para obtener el número de "tickets" pendientes para los robots mapeados.  
-    * RPA360Proveedor: Consulta la base de datos histórica de RPA360 (usando HistoricoClient) para obtener la profundidad de la cola (ítems en "work queue") de los robots mapeados.  
-* **AlgoritmoBalanceo (service/algoritmo_balanceo.py)**:  
-  * **Rol:** Cerebro de Decisión.  
-  * **Descripción:** Recibe el "estado global" (la información de carga de todos los proveedores) y ejecuta la lógica de balanceo.  
-* **EstrategiaBalanceo (service/algoritmo_balanceo.py)**:  
-  * **Rol:** Lógica de Cálculo.  
-  * **Descripción:** Componente utilizado por el AlgoritmoBalanceo para calcular las *decisiones* específicas (ej. "mover Robot X al Pool Y") basándose en la carga y la configuración de aislamiento (BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO).  
-* **CoolingManager (service/cooling_manager.py)**:  
-  * **Rol:** Gestor de Enfriamiento.  
-  * **Descripción:** Evita que el balanceador tome acciones sobre el mismo pool repetidamente. Cuando el algoritmo decide mover un robot, este manager pone al pool afectado en un período de "enfriamiento" (BALANCEADOR_COOLING_PERIOD_SEG), durante el cual no se pueden realizar otras acciones sobre él.
+1. **Proveedores de Carga (service/proveedores.py) \- Los Ojos:**  
+   * Se conectan a fuentes externas para saber "cuánto trabajo hay".  
+   * **Clouders (API):** Consulta tickets pendientes en el orquestador externo.  
+   * **RPA360 (BD):** Consulta elementos en las "Work Queues" de Automation Anywhere.  
+   * **Extensibilidad:** Es posible agregar nuevos proveedores de carga (ej. ServiceNow, Jira) implementando la interfaz base ProveedorCarga definida en service/proveedores.py. Cualquier clase nueva que cumpla este contrato puede ser inyectada en el balanceador.  
+   * **Mapeo:** Utiliza la tabla de mapeos (gestionada en la Web) para traducir los nombres externos (ej. *"Robot\_Facturas\_V2"*) a los nombres internos de SAM.  
+2. **Algoritmo de Balanceo (service/algoritmo\_balanceo.py) \- El Cerebro:**  
+   * Recibe los datos de carga.  
+   * Compara la demanda con la capacidad actual de los equipos.  
+   * Decide si un robot necesita más equipos (Scaling Out) o si debe liberar recursos (Scaling In).  
+   * Respeta las reglas de **Prioridad** definidas en la Web.  
+3. **Cooling Manager (service/cooling\_manager.py) \- El Estabilizador:**  
+   * Evita cambios bruscos y repetitivos ("Flapping").  
+   * Si el balanceador modifica un Pool (ej. agrega un robot), ese Pool entra en estado de **Enfriamiento (Cooling)** por un tiempo configurable. Durante este periodo, **no se aceptan nuevos cambios** para dar tiempo a que el sistema se estabilice.
 
-## **3. Flujo de Datos**
+## **3\. Conceptos Clave para Soporte**
 
-El flujo es un ciclo que se repite según el intervalo configurado:
+### **A. ¿Por qué el Balanceador no asigna equipos inmediatamente? (Cooling)**
 
-1. BalanceadorService inicia su bucle.  
-2. Consulta a todos los proveedores de carga configurados en BALANCEADOR_PROVEEDORES_CARGA (ej. 'clouders', 'rpa360').  
-3. Toda la información de carga se consolida en un estado_global.  
-4. El estado_global se pasa a AlgoritmoBalanceo.ejecutar_balanceo().  
-5. El algoritmo usa EstrategiaBalanceo para generar una lista de *decisiones* (qué robot mover a qué pool).  
-6. Para cada decisión, el algoritmo consulta al CoolingManager para saber si el pool afectado está en período de enfriamiento.  
-7. Si el pool *no* está en enfriamiento, el algoritmo invoca al conector de base de datos para aplicar el cambio (específicamente, llama al método _db_connector.actualizar_pool_robot()).  
-8. Si la actualización es exitosa, se informa al CoolingManager para que inicie el período de enfriamiento para ese pool.  
-9. El BalanceadorService espera el tiempo definido en BALANCEADOR_INTERVALO_CICLO_SEG y el ciclo se repite.
+Si un usuario reporta que *"hay mucha carga pero el balanceador no asigna máquinas"*, lo primero a verificar es el **Cooling**.
 
-## **4. Variables de Entorno Requeridas (.env)**
+* Si el pool fue modificado hace menos de BALANCEADOR\_COOLING\_PERIOD\_SEG (ej. 300 segundos), el sistema estará en pausa intencional.  
+* **Acción:** Esperar unos minutos o verificar el log buscando el mensaje *"Pool en enfriamiento"*.
 
-Este servicio depende de las siguientes variables. Dado que corre bajo NSSM, **cualquier cambio en estas variables requiere un reinicio del servicio** para que tenga efecto.
+### **B. La Importancia de los Mapeos**
 
-### **Configuración del Balanceador**
+Si el Balanceador no "ve" la carga de un robot, suele ser un problema de nombres.
 
-* BALANCEADOR_INTERVALO_CICLO_SEG  
-  * **Propósito:** Intervalo en segundos entre cada ciclo de balanceo.  
-  * **Efecto:** Requiere reinicio.  
-* BALANCEADOR_COOLING_PERIOD_SEG  
-  * **Propósito:** Segundos que un pool debe esperar en "enfriamiento" después de una acción de balanceo antes de poder recibir otra.  
-  * **Efecto:** Requiere reinicio.  
-* BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO  
-  * **Propósito:** true o false. Define si los pools de aislamiento pueden tomar carga de otros pools si están ociosos.  
-  * **Efecto:** Requiere reinicio.  
-* BALANCEADOR_PROVEEDORES_CARGA  
-  * **Propósito:** Lista separada por comas de los proveedores de carga a utilizar (ej. clouders,rpa360).  
-  * **Efecto:** Requiere reinicio.  
-* BALANCEADOR_DEFAULT_TICKETS_POR_EQUIPO  
-  * **Propósito:** Valor numérico que define la capacidad de procesamiento (tickets) de un equipo si no se puede calcular de otra forma.  
-  * **Efecto:** Requiere reinicio.  
-* MAPA_ROBOTS  
-  * **Propósito:** Un string JSON que mapea nombres de robots (clave) a identificadores de "work queue" (valor). Usado por RPA360Proveedor.  
-  * **Efecto:** Requiere reinicio.
+* Los sistemas externos (Clouders, AA) pueden llamar al proceso de una forma (ej. "Proc\_Pagos"), pero en SAM se llama diferente.  
+* **Acción:** Ir a la **Web \> Mapeos** y asegurar que el nombre externo esté vinculado correctamente al robot interno.
 
-### **Configuración API Clouders**
+### **C. Prioridad Estricta (Preemption)**
 
-* CLOUDERS_API_URL  
-  * **Propósito:** URL base de la API de Clouders.  
-  * **Efecto:** Requiere reinicio.  
-* CLOUDERS_AUTH  
-  * **Propósito:** Credencial de autenticación (ej. Basic ...) para la API de Clouders.  
-  * **Efecto:** Requiere reinicio.  
-* CLOUDERS_VERIFY_SSL  
-  * **Propósito:** true o false. Define si se debe verificar el certificado SSL de la API de Clouders.  
-  * **Efecto:** Requiere reinicio.  
-* CLOUDERS_API_TIMEOUT  
-  * **Propósito:** Segundos de espera para las peticiones a la API de Clouders.  
-  * **Efecto:** Requiere reinicio.
+El mecanismo de **Preemption** asegura que los procesos críticos (Prioridad Alta) siempre tengan recursos disponibles, incluso si eso significa quitarle recursos a procesos menos importantes que están ejecutándose.
 
-### **Configuración Bases de Datos**
+* **Lógica de Prioridad:** En SAM, un número **menor** significa mayor prioridad (1 es la más alta, 10 la más baja).  
+* **Escenario de Conflicto:** Supongamos que no hay equipos libres en un Pool.  
+  * El Robot\_A (Prioridad 1\) tiene tickets pendientes.  
+  * El Robot\_B (Prioridad 5\) tiene asignados 3 equipos.  
+* **Acción del Balanceador:** El sistema detectará que Robot\_A tiene mayor prioridad y necesidad. Procederá a **desasignar** uno o más equipos del Robot\_B (aunque tenga trabajo pendiente) para asignárselos inmediatamente al Robot\_A.  
+* **Síntoma en Soporte:** Es común que los dueños de robots de baja prioridad reporten que *"su capacidad fluctúa"* o que *"pierden máquinas"*. Esto es el comportamiento esperado del sistema para garantizar SLAs críticos.
 
-* SQL_SAM_DRIVER, SQL_SAM_HOST, SQL_SAM_DB_NAME, SQL_SAM_UID, SQL_SAM_PWD  
-  * **Propósito:** Credenciales para conectarse a la base de datos de **SAM** (para actualizar los pools de robots).  
-  * **Efecto:** Requiere reinicio.  
-* SQL_RPA360_DRIVER, SQL_RPA360_HOST, SQL_RPA360_DB_NAME, SQL_RPA360_UID, SQL_RPA360_PWD  
-  * **Propósito:** Credenciales para conectarse a la base de datos de **RPA360** (usado por HistoricoClient para leer las colas).  
-  * **Efecto:** Requiere reinicio.
+### **D. Aislamiento de Pool Estricto**
 
-### **Configuración de Logging**
+Esta configuración define si los recursos de un Pool son exclusivos o compartidos. **Importante:** Este valor se lee de la base de datos (tabla ConfiguracionSistema), lo que permite cambiar la estrategia sin reiniciar el servicio.
 
-* LOG_DIRECTORY  
-  * **Propósito:** Carpeta donde se guardarán los archivos de log.  
-  * **Efecto:** Requiere reinicio.  
-* LOG_LEVEL  
-  * **Propósito:** Nivel de detalle del log (ej. INFO, DEBUG).  
-  * **Efecto:** Requiere reinicio.  
-* APP_LOG_FILENAME_BALANCEADOR  
-  * **Propósito:** Nombre específico del archivo de log para este servicio.  
-  * **Efecto:** Requiere reinicio.
+* **Modo Estricto (true):** "Lo mío es mío". Los equipos de un Pool solo atienden a los robots explícitamente asignados a ese Pool. Si el Pool de "Finanzas" está vacío, sus máquinas se quedan ociosas aunque "RRHH" tenga cola de espera.  
+* **Modo Flexible (false):** "Solidaridad de recursos". Si un Pool tiene máquinas ociosas (sin tickets pendientes en sus robots asignados), el Balanceador puede tomarlas prestadas temporalmente para asignarlas a robots de otro Pool con alta demanda.
 
-## **5. Ejecución**
+## **4\. Ciclo de Ejecución**
 
-Para ejecutar el servicio en un entorno de desarrollo:
+El servicio ejecuta el siguiente flujo cada BALANCEADOR\_INTERVALO\_CICLO\_SEG (ej. 60 seg):
 
-uv run -m sam.balanceador
+1. **Recolectar:** Consulta API Clouders \+ BD RPA360.  
+2. **Analizar:** Calcula demanda vs. capacidad.  
+3. **Filtrar:** Descarta Pools que estén en "Cooling".  
+4. **Ejecutar:** Aplica cambios en la base de datos (tabla Pool\_Robot).  
+5. **Enfriar:** Marca los Pools afectados para que "descansen".
 
+## **5\. Configuración Dinámica (Tabla ConfiguracionSistema)**
+
+A diferencia de las variables de entorno (.env) que requieren reinicio, SAM dispone de una tabla ConfiguracionSistema para ajustes en caliente. El servicio consulta estos valores en cada ciclo.
+
+**Claves Críticas:**
+
+| Clave (Key) | Valores Posibles | Descripción |
+| :---- | :---- | :---- |
+| BALANCEADOR\_POOL\_AISLAMIENTO\_ESTRICTO | true / false | Define si se permite el préstamo de equipos entre pools (ver sección 3.D). |
+| BALANCEADOR\_LOG\_LEVEL | DEBUG, INFO | Permite aumentar la verbosidad del log temporalmente para diagnóstico sin reiniciar. |
+| GLOBAL\_MAINTENANCE\_MODE | true / false | (Si aplica) Interruptor general para detener asignaciones en todo el sistema. |
+
+**Nota:** Para modificar estos valores, se debe realizar un UPDATE directo en la base de datos o utilizar la sección de "Configuración Avanzada" en la Web (si está habilitada para el usuario).
+
+## **6\. Variables de Entorno Requeridas (.env)**
+
+Cualquier cambio requiere reiniciar el servicio SAM\_Balanceador.
+
+### **Reglas de Negocio**
+
+* BALANCEADOR\_INTERVALO\_CICLO\_SEG: Cada cuánto se ejecuta el análisis (ej. 60).  
+* BALANCEADOR\_COOLING\_PERIOD\_SEG: Tiempo de bloqueo tras un cambio (ej. 300 \= 5 min).  
+* BALANCEADOR\_PROVEEDORES\_CARGA: Lista de fuentes activas (ej. clouders,rpa360).
+
+### **Conectividad Externa**
+
+* CLOUDERS\_API\_URL: Endpoint de la API de tickets.  
+* CLOUDERS\_AUTH: Token o credencial básica.  
+* SQL\_RPA360\_\*: Credenciales de lectura para la BD de Automation Anywhere (para ver colas).
+
+## **7\. Diagnóstico de Fallos (Troubleshooting)**
+
+* **Log:** balanceador.log  
+* **Caso: "El robot tiene 1000 tickets pero 0 máquinas"**  
+  1. **Log:** Buscar "Carga detectada para$$Robot$$  
+     ". Si no aparece, falla el **Proveedor** o el **Mapeo**.  
+  2. **Mapeo:** Verificar en la Web que el nombre coincida exactamente con el de Clouders/A360.  
+  3. **Configuración:** Verificar si el robot está activo y tiene un límite de equipos \> 0\.  
+* **Caso: "El sistema mueve los robots constantemente"**  
+  1. **Cooling:** Es posible que BALANCEADOR\_COOLING\_PERIOD\_SEG sea muy bajo (ej. 10 seg). Aumentarlo para dar estabilidad.  
+* **Caso: "Error de conexión con Clouders"**  
+  1. **Log:** Buscar errores HTTP 401/403 (Credenciales) o 500 (Caída de Clouders).  
+  2. **Acción:** Si Clouders cae, el balanceador dejará de ver carga, pero los robots ya asignados seguirán trabajando.
