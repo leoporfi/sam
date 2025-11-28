@@ -1,121 +1,69 @@
-# **Documentación Técnica: Servicio de Callback**
+# **Documentación Técnica: Servicio de Callback (Tiempo Real)**
 
 **Módulo:** sam.callback
 
-## **1. Propósito**
+## **1\. Propósito**
 
-El **Servicio de Callback** es un microservicio web (API) cuya única responsabilidad es recibir notificaciones *push* (webhooks) desde Automation 360 cuando una ejecución de robot finaliza.
+El **Servicio de Callback** es el "oído" del sistema. Su única función es escuchar. Mientras que el Lanzador tiene que preguntar activamente a A360 "¿ya terminaste?", el Callback permite que A360 nos avise **inmediatamente** cuando un robot finaliza.
 
-Esto permite al ecosistema SAM registrar el estado final de un robot (ej. COMPLETED, RUN_FAILED) de forma inmediata, sin tener que esperar al próximo ciclo del Conciliador del Servicio Lanzador.
+Esto reduce la latencia de actualización de minutos (Conciliador) a milisegundos, permitiendo liberar los equipos para el siguiente robot casi al instante.
 
-## **2. Arquitectura y Componentes**
+## **2\. Arquitectura y Seguridad**
 
-El servicio es una API ligera construida con **FastAPI** que expone un único endpoint.
+Este servicio expone una API REST (FastAPI) ligera. Dado que recibe peticiones externas, la seguridad es su componente más complejo.
 
-### **Componentes Principales**
+### **Mecanismo de Autenticación Dual**
 
-* **FastAPI App (service/main.py)**:  
-  * **Rol:** Servidor Web.  
-  * **Descripción:** Configura y ejecuta un servidor uvicorn. Define el endpoint que recibirá las notificaciones.  
-* **Endpoint de Callback (service/main.py)**:  
-  * **Rol:** Receptor de Notificaciones.  
-  * **Descripción:** Es un endpoint POST (la ruta es configurable, por defecto /api/callback) que espera un JSON con la estructura de CallbackPayload enviada por A360.  
-* **AuthDependency (service/main.py)**:  
-  * **Rol:** Gestor de Seguridad.  
-  * **Descripción:** Una dependencia de FastAPI que se ejecuta en cada petición para validar la autenticidad de la llamada. Implementa una lógica de autenticación dual (ver sección 4).  
-* **CallbackPayload (Modelo Pydantic)**:  
-  * **Rol:** Modelo de Datos.  
-  * **Descripción:** Valida que el JSON entrante contenga los campos esperados por A360 (como deploymentId, status, type).  
-* **DatabaseConnector (common/database.py)**:  
-  * **Rol:** Persistencia de Datos.  
-  * **Descripción:** Se utiliza para invocar el método actualizar_ejecucion_desde_callback en la base de datos de SAM.
+El servicio puede validar dos tipos de credenciales simultáneamente. El comportamiento depende de la variable CALLBACK\_AUTH\_MODE.
 
-## **3. Flujo de Datos**
+1. **Token Estático (X-Authorization):**  
+   * Es una clave secreta (API Key) definida por nosotros en SAM y configurada en A360.  
+   * **Uso:** Validación simple y rápida.  
+2. **Token Dinámico (JWT / Bearer):**  
+   * Es un token firmado generado por un API Gateway corporativo (si existe en la infraestructura).  
+   * **Uso:** Validación de identidad robusta mediante criptografía asimétrica (Clave Pública/Privada).
 
-1. El **Servicio Lanzador** despliega un bot en A360 e inyecta la URL de este servicio (AA_URL_CALLBACK) en la petición.  
-2. Cuando el bot finaliza en A360, A360 envía una petición POST al endpoint de callback (ej. /api/callback).  
-3. AuthDependency intercepta la petición y valida las credenciales (Token estático y/o JWT) según el modo configurado.  
-4. Si la autenticación es exitosa, FastAPI valida el cuerpo (JSON) de la petición contra el modelo CallbackPayload.  
-5. El servicio invoca db_connector.actualizar_ejecucion_desde_callback(), pasando el deploymentId, el estado final y el JSON completo.  
-6. La base de datos (mediante actualizar_ejecucion_desde_callback) actualiza la fila correspondiente en dbo.Ejecuciones, marcando el estado (ej. COMPLETED) y almacenando el JSON crudo en la columna CallbackInfo.  
-7. El servicio devuelve un HTTP 200 OK a A360 para confirmar la recepción.
+### **Modos de Operación (CALLBACK\_AUTH\_MODE)**
 
-## **4. Seguridad (Autenticación)**
+* **optional (Recomendado):** La puerta se abre si **cualquiera** de los dos tokens es válido. Es ideal para transiciones o entornos mixtos.  
+* **required:** La puerta solo se abre si vienen **ambos** tokens y ambos son válidos. Máxima seguridad.  
+* **none:** La puerta está abierta. Solo para pruebas locales. **Prohibido en Producción.**
 
-El endpoint de callback valida las peticiones entrantes usando una combinación de dos tokens. El comportamiento se controla mediante la variable CALLBACK_AUTH_MODE:
+## **3\. Flujo de Datos**
 
-1. **Token Estático (X-Authorization):** Un token secreto compartido (definido en CALLBACK_TOKEN) que se envía en la cabecera X-Authorization.  
-2. **Token Dinámico JWT (Authorization):** Un token Bearer (JWT) que es generado por el API Gateway (ApiGatewayClient) y validado por este servicio usando una clave pública (JWT_PUBLIC_KEY).
+1. **Disparo:** El robot en A360 termina su tarea (éxito o fallo).  
+2. **Notificación:** A360 (o el API Gateway) envía un POST a la URL del callback (ej. https://sam-server/api/callback).  
+3. **Validación:** SAM verifica los tokens según el modo configurado.  
+4. **Actualización:**  
+   * Si es válido: SAM actualiza inmediatamente la tabla Ejecuciones con el estado final (COMPLETED, RUN\_FAILED) y guarda el JSON recibido en la columna CallbackInfo.  
+   * Si es inválido: SAM devuelve un error HTTP 401/403 y **ignora** la actualización.
 
-Los modos de autenticación (CALLBACK_AUTH_MODE) son:
+## **4\. Variables de Entorno Requeridas (.env)**
 
-* optional (Default): La petición es válida si **al menos uno** de los dos tokens (estático o JWT) está presente y es correcto.  
-* required: La petición es válida solo si **ambos** tokens (estático y JWT) están presentes y son correctos.  
-* none: No se realiza ninguna validación. **(No recomendado para producción)**.
+Cualquier cambio requiere reiniciar el servicio SAM\_Callback.
 
-## **5. Variables de Entorno Requeridas (.env)**
+### **Servidor**
 
-Este servicio depende de las siguientes variables. Dado que corre bajo NSSM, **cualquier cambio en estas variables requiere un reinicio del servicio** para que tenga efecto.
+* CALLBACK\_SERVER\_PORT: Puerto de escucha (ej. 8008). Asegurarse de que el Firewall de Windows permita este puerto.  
+* CALLBACK\_ENDPOINT\_PATH: Ruta relativa (ej. /api/callback).
 
-### **Configuración del Servidor**
+### **Seguridad**
 
-* CALLBACK_SERVER_HOST  
-  * **Propósito:** Dirección IP en la que el servidor FastAPI escuchará (ej. 0.0.0.0 para todas las interfaces).  
-  * **Efecto:** Requiere reinicio.  
-* CALLBACK_SERVER_PORT  
-  * **Propósito:** Puerto en el que el servidor FastAPI escuchará (ej. 8008).  
-  * **Efecto:** Requiere reinicio.  
-* CALLBACK_SERVER_THREADS  
-  * **Propósito:** Número de "workers" (hilos) que uvicorn utilizará para manejar peticiones concurrentes.  
-  * **Efecto:** Requiere reinicio.  
-* CALLBACK_ENDPOINT_PATH  
-  * **Propósito:** La ruta de la URL para el endpoint de callback (ej. /api/callback).  
-  * **Efecto:** Requiere reinicio.
+* CALLBACK\_AUTH\_MODE: optional, required, none.  
+* CALLBACK\_TOKEN: El string secreto que debe coincidir con lo configurado en A360.  
+* JWT\_PUBLIC\_KEY: (Si se usa JWT) La clave pública para verificar la firma del token del Gateway.
 
-### **Configuración de Seguridad y Autenticación**
+## **5\. Diagnóstico de Fallos (Troubleshooting)**
 
-* CALLBACK_AUTH_MODE  
-  * **Propósito:** Define la lógica de validación de tokens (optional, required, none).  
-  * **Efecto:** Requiere reinicio.  
-* CALLBACK_TOKEN  
-  * **Propósito:** El token secreto estático (API Key) esperado en la cabecera X-Authorization.  
-  * **Efecto:** Requiere reinicio.  
-* API_GATEWAY_CLIENT_ID  
-  * **Propósito:** El Client ID del API Gateway, esperado en la cabecera x-ibm-client-id (usado para validación cruzada del JWT).  
-  * **Efecto:** Requiere reinicio.  
-* JWT_PUBLIC_KEY  
-  * **Propósito:** La clave pública (en formato PEM) usada para verificar la firma de los tokens JWT provenientes del API Gateway.  
-  * **Efecto:** Requiere reinicio.  
-* JWT_AUDIENCE  
-  * **Propósito:** El valor "audience" esperado dentro del token JWT.  
-  * **Efecto:** Requiere reinicio.  
-* JWT_ISSUER  
-  * **Propósito:** El valor "issuer" (emisor) esperado dentro del token JWT.  
-  * **Efecto:** Requiere reinicio.
-
-### **Configuración Base de Datos (SAM)**
-
-* SQL_SAM_DRIVER, SQL_SAM_HOST, SQL_SAM_DB_NAME, SQL_SAM_UID, SQL_SAM_PWD  
-  * **Propósito:** Credenciales completas para conectarse a la base de datos de SAM y actualizar el estado de las ejecuciones.  
-  * **Efecto:** Requiere reinicio.
-
-### **Configuración de Logging**
-
-* LOG_DIRECTORY  
-  * **Propósito:** Carpeta donde se guardarán los archivos de log.  
-  * **Efecto:** Requiere reinicio.  
-* LOG_LEVEL  
-  * **Propósito:** Nivel de detalle del log (ej. INFO, DEBUG).  
-  * **Efecto:** Requiere reinicio.  
-* APP_LOG_FILENAME_CALLBACK  
-  * **Propósito:** Nombre específico del archivo de log para este servicio.  
-  * **Efecto:** Requiere reinicio.
-
-## **6. Ejecución**
-
-Para ejecutar el servicio en un entorno de desarrollo:
-
-Bash
-
-uv run -m sam.callback
-
+* **Log:** callback.log  
+* **Caso: "El robot terminó hace 10 minutos pero en SAM sigue 'Running'"**  
+  1. **Verificar Logs:** Si el log está vacío, la petición **nunca llegó** a SAM.  
+     * Causa probable: Firewall bloqueando el puerto o URL mal configurada en A360.  
+  2. **Verificar Errores 401/403:** Si el log muestra "Unauthorized", la petición llegó pero la llave es incorrecta.  
+     * Acción: Comparar el CALLBACK\_TOKEN del .env con el configurado en A360.  
+* **Caso: "A360 da error al invocar el callback"**  
+  1. **Prueba Manual:** Usar Postman o curl desde el servidor de A360 hacia el servidor SAM para verificar visibilidad de red.  
+  2. **Certificados:** Si la URL es https, verificar que el certificado SSL del servidor SAM sea válido y confiable para A360.  
+* **Caso: "El callback llega pero da error 422 Unprocessable Entity"**  
+  1. **Formato JSON:** A360 cambió el formato de su respuesta y SAM no lo reconoce.  
+  2. **Acción:** Capturar el JSON del log y reportarlo a Desarrollo para actualizar el esquema (schemas.py).
