@@ -116,5 +116,6 @@ generate_keys.py
 migra.md
 
 # SAM specific
+tests/
 backup_migration/
 migrate_sam_structure*.py
