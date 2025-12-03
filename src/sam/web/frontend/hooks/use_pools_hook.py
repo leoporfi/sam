@@ -24,10 +24,13 @@ def use_pools_management():
         try:
             data = await api_client.get_pools()
             set_pools(data.get("pools", []))
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             set_error(str(e))
         finally:
-            set_loading(False)
+            if not asyncio.current_task().cancelled():
+                set_loading(False)
 
     @use_effect(dependencies=[])  # solo al montar
     def setup_load():
@@ -43,14 +46,24 @@ def use_pools_management():
     @use_callback
     async def edit_pool(pool_id, pool_data):
         """Actualiza un pool existente y recarga la lista."""
-        await api_client.update_pool(pool_id, pool_data)
-        await load_pools()
+        try:
+            await api_client.update_pool(pool_id, pool_data)
+            await load_pools()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            raise
 
     @use_callback
     async def remove_pool(pool_id):
         """Elimina un pool y recarga la lista."""
-        await api_client.delete_pool(pool_id)
-        await load_pools()
+        try:
+            await api_client.delete_pool(pool_id)
+            await load_pools()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            raise
 
     return {
         "pools": pools,
