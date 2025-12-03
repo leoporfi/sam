@@ -172,7 +172,7 @@ def ScheduleEditModal(
     is_loading, set_is_loading = use_state(False)
 
     @use_effect(dependencies=[schedule])
-    def sync_form_data():
+    def sync_form_state():
         """Asegura que el formulario se resetee cada vez que 'schedule' (la prop) cambia."""
         if schedule:
             set_form_data(schedule)
@@ -373,10 +373,13 @@ def ScheduleEquiposModal(
 
                 set_available(avail)
                 set_assigned(asgn)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 show_notification(f"Error al cargar equipos: {e}", "error")
             finally:
-                set_is_loading(False)
+                if not asyncio.current_task().cancelled():
+                    set_is_loading(False)
 
         task = asyncio.create_task(fetch())
         return lambda: task.cancel()
@@ -442,7 +445,9 @@ def ScheduleEquiposModal(
                     },
                 ),
                 html.h3(
-                    f"Asignar Equipos - {schedule.get('RobotNombre', '')}" if schedule.get('RobotNombre', '') else f"Asignar Equipos (ID: {schedule_id})"
+                    f"Asignar Equipos - {schedule.get('RobotNombre', '')}"
+                    if schedule.get("RobotNombre", "")
+                    else f"Asignar Equipos (ID: {schedule_id})"
                 ),
             ),
             # Contenido del modal con GRID de 3 columnas

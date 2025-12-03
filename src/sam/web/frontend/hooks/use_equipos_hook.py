@@ -46,11 +46,14 @@ def use_equipos():
             data = await api_client.get_equipos(api_params)
             set_equipos(data.get("equipos", []))
             set_total_count(data.get("total_count", 0))
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             set_error(str(e))
             notification_ctx["show_notification"](f"Error al cargar equipos: {e}", "error")
         finally:
-            set_loading(False)
+            if not asyncio.current_task().cancelled():
+                set_loading(False)
 
     @use_callback
     async def trigger_sync(event=None):

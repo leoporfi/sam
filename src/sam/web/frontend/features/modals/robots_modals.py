@@ -114,7 +114,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     is_edit_mode = bool(robot and robot.get("RobotId") is not None)
 
     @use_effect(dependencies=[robot])
-    def populate_form_data():
+    def sync_form_state():
         if robot is None:
             # Si el robot es None, reseteamos el formulario completamente
             set_form_data(DEFAULT_ROBOT_STATE)
@@ -187,6 +187,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                 "id": "robot-name",
                                 "type": "text",
                                 "name": "text-robot-name",
+                                "placeholder": "Ej: Robot 1",
                                 "value": form_data.get("Robot", ""),
                                 "on_change": lambda e: handle_form_change("Robot", e["target"]["value"]),
                                 "required": True,
@@ -201,6 +202,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                 "id": "robot-id",
                                 "type": "number",
                                 "name": "number-robot-id",
+                                "placeholder": "Ej: 1111",
                                 "value": form_data.get("RobotId", ""),
                                 "on_change": lambda e: handle_form_change("RobotId", e["target"]["value"]),
                                 "required": not is_edit_mode,
@@ -354,7 +356,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
         return sorted(devices, key=lambda x: x.get("Equipo", "").lower())
 
     @use_effect(dependencies=[robot])
-    def fetch_data():
+    def init_data_load():
         def get_highest_priority_assignment(assignments: List[Dict]) -> List[Dict]:
             """
             De-duplica una lista de asignaciones por EquipoId,
@@ -391,7 +393,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
 
             return list(unique_equipos.values())
 
-        async def get_data():
+        async def fetch_data():
             if not robot:
                 return
             set_is_loading(True)
@@ -407,12 +409,16 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
                 unique_assigned_devices = get_highest_priority_assignment(assigned_res)
                 set_assigned_devices(unique_assigned_devices)
                 set_available_devices(available_res)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 show_notification(f"Error al cargar datos: {e}", "error")
             finally:
-                set_is_loading(False)
+                if not asyncio.current_task().cancelled():
+                    set_is_loading(False)
 
-        asyncio.create_task(get_data())
+        task = asyncio.create_task(fetch_data())
+        return lambda: task.cancel()
 
     filtered_assigned = use_memo(
         lambda: sort_devices(
@@ -574,13 +580,13 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     is_loading, set_is_loading = use_state(False)
 
     @use_effect(dependencies=[robot])
-    def load_data():
+    def init_data_load():
         if not robot:
             return
-        task = asyncio.create_task(fetch_schedule_data())
+        task = asyncio.create_task(fetch_data())
         return lambda: task.cancel()
 
-    async def fetch_schedule_data():
+    async def fetch_data():
         set_is_loading(True)
         try:
             schedules_res, devices_res, assigned_res = await asyncio.gather(
@@ -589,18 +595,31 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                 api_service.get_robot_assignments(robot["RobotId"]),
             )
             set_schedules(schedules_res)
-            set_available_devices(devices_res)
-            # Combinamos ambas listas en el nuevo estado
-            set_all_robot_devices(devices_res + assigned_res)
+            # No seteamos available_devices directamente para evitar duplicados en props posteriores
+            # set_available_devices(devices_res)
+
+            # FIX CRÍTICO: Desduplicar la lista combinada por EquipoId
+            # La suma devices_res + assigned_res pone al final los asignados.
+            # El dict comprehension sobreescribe claves, quedándonos con la versión "Asignada" (más completa) si hay colisión.
+            combined = devices_res + assigned_res
+            unique_combined_dict = {d["EquipoId"]: d for d in combined}
+            unique_list = list(unique_combined_dict.values())
+
+            set_all_robot_devices(unique_list)
+            # Usamos la lista única también para available_devices para asegurar consistencia en selectores
+            set_available_devices(unique_list)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             show_notification(str(e), "error")
         finally:
-            set_is_loading(False)
+            if not asyncio.current_task().cancelled():
+                set_is_loading(False)
 
     async def handle_successful_change():
         await on_save_success()
         if robot:
-            await fetch_schedule_data()
+            await fetch_data()
 
     async def submit_form(event):
         set_is_loading(True)
@@ -619,10 +638,13 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
             show_notification(message, "success")
             set_view_mode("list")
             await handle_successful_change()
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             show_notification(str(e), "error")
         finally:
-            set_is_loading(False)
+            if not asyncio.current_task().cancelled():
+                set_is_loading(False)
 
     handle_form_submit = use_callback(submit_form, [form_data, robot, on_save_success])
 
@@ -957,8 +979,8 @@ def ScheduleForm(
                         }
                     ),
                 ),
+                ConditionalFields(tipo, form_data, handle_form_change),
             ),
-            ConditionalFields(tipo, form_data, handle_form_change),
             DeviceSelector(available_devices, form_data.get("Equipos", []), handle_device_change),
         ),
         html.footer(
@@ -1014,7 +1036,7 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                 }
             ),
         )
-    return html.div()
+    return html._()
 
 
 @component

@@ -194,20 +194,24 @@ def BalanceadorStrategyPanel():
 
     # Cargar estado inicial
     @use_effect(dependencies=[])
-    def load_config():
-        async def fetch():
+    def init_data_load():
+        async def fetch_data():
             try:
                 api = get_api_client()
                 p_data = await api.get_preemption_mode()
                 i_data = await api.get_isolation_mode()
                 set_preemption_enabled(p_data.get("enabled", False))
                 set_isolation_enabled(i_data.get("enabled", True))
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 print(f"Error cargando configuración: {e}")
             finally:
-                set_is_loading(False)
+                if not asyncio.current_task().cancelled():
+                    set_is_loading(False)
 
-        asyncio.create_task(fetch())
+        task = asyncio.create_task(fetch_data())
+        return lambda: task.cancel()
 
     # Prepara el cambio pero pide confirmación
     def request_change(setting_type, new_value):
@@ -230,11 +234,14 @@ def BalanceadorStrategyPanel():
             elif setting == "isolation":
                 await api.set_isolation_mode(val)
                 set_isolation_enabled(val)
+        except asyncio.CancelledError:
+                raise
         except Exception as e:
             print(f"Error guardando configuración: {e}")
         finally:
-            set_confirm_open(False)
-            set_pending_change(None)
+            if not asyncio.current_task().cancelled():
+                set_confirm_open(False)
+                set_pending_change(None)
 
     def get_confirm_message():
         if not pending_change:
