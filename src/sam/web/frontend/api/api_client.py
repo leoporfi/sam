@@ -60,9 +60,6 @@ class ApiClient:
             except httpx.RequestError as e:
                 if attempt == retries - 1:
                     raise APIException(f"Error de conexión: {str(e)}")
-                # if self._client:
-                #     await self._client.aclose()
-                #     self._client = None
                 await asyncio.sleep(2**attempt)
             except APIException:
                 raise
@@ -244,7 +241,7 @@ class ApiClient:
     async def set_isolation_mode(self, enabled: bool) -> Dict:
         return await self._request("PUT", "/api/config/isolation", json_data={"enabled": enabled})
 
-    # 
+    #
     async def get_mappings(self) -> List[Dict]:
         return await self._request("GET", "/api/mappings")
 
