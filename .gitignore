@@ -46,6 +46,7 @@ logs/*.log
 *.bak
 *.swp
 *.swo
+diff*.txt
 
 # =======================================
 # IDEs / EDITORES
