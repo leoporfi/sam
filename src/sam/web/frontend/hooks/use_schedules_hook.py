@@ -26,7 +26,7 @@ def use_schedules():
     sort_by, set_sort = use_state("Robot")
     sort_dir, set_dir = use_state("asc")
 
-    async def load():
+    async def load_schedules():
         set_loading(True)
         set_error(None)
         try:
@@ -46,15 +46,23 @@ def use_schedules():
             data = await api.get_schedules(params)
             set_schedules(data.get("schedules", []))
             set_total(data.get("total_count", 0))
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             set_error(str(e))
             show(f"Error al cargar programaciones: {e}", "error")
         finally:
-            set_loading(False)
+            if not asyncio.current_task().cancelled():
+                set_loading(False)
 
     @use_effect(dependencies=[filters, page])
     def _load_on_filters_or_page_change():
-        task = asyncio.create_task(load())
+        task = asyncio.create_task(load_schedules())
+        return lambda: task.cancel()
+
+    @use_effect(dependencies=[])
+    def _initial_load():
+        task = asyncio.create_task(load_schedules())
         return lambda: task.cancel()
 
     @use_effect(dependencies=[])
@@ -80,10 +88,10 @@ def use_schedules():
             try:
                 await api.toggle_schedule_status(schedule_id, activo)
                 show("Estado cambiado", "success")
-                await load()
+                await load_schedules()
             except Exception as e:
                 show(str(e), "error")
-                await load()
+                await load_schedules()
 
         asyncio.create_task(_logic())
 
@@ -98,7 +106,7 @@ def use_schedules():
             try:
                 await api.update_schedule_details(schedule_id, data)
                 show("Programación actualizada", "success")
-                await load()
+                await load_schedules()
             except Exception as e:
                 show(f"Error al guardar: {e}", "error")
 
@@ -126,7 +134,7 @@ def use_schedules():
                 else:
                     on_success()
 
-            await load()  # Recargar datos
+            await load_schedules()  # Recargar datos
 
         except Exception as e:
             show(f"Error al guardar equipos: {e}", "error")
@@ -149,5 +157,5 @@ def use_schedules():
         "toggle_active": toggle_active,
         "save_schedule": save_schedule,
         "save_schedule_equipos": save_schedule_equipos,
-        "refresh": load,
+        "refresh": load_schedules,
     }

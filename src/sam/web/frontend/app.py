@@ -353,8 +353,8 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
 
     # --- LÓGICA 1: Cargar robots dinámicamente según el Tipo (CASCADA) ---
     @use_effect(dependencies=[tipo_filter])
-    def load_robots_based_on_type():
-        async def fetch():
+    def init_data_load():
+        async def fetch_data():
             api = get_api_client()
             try:
                 # Solicitamos programaciones filtradas por tipo para extraer los robots relevantes
@@ -374,11 +374,13 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
 
                 sorted_robots = sorted(unique_robots.values(), key=lambda r: r["Robot"])
                 set_dropdown_robots(sorted_robots)
-
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 print(f"Error cargando filtro de robots: {e}")
 
-        asyncio.create_task(fetch())
+        task = asyncio.create_task(fetch_data())
+        return lambda: task.cancel()
 
     # --- LÓGICA 2: Sincronizar UI -> Hook de Datos (Filtros) ---
 
