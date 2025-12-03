@@ -46,7 +46,7 @@ def EquipoEditModal(
 
     # Efecto para inicializar/resetear el formulario cuando 'equipo' o 'is_open' cambian
     @use_effect(dependencies=[equipo, is_open])
-    def _populate_or_reset_form():
+    def sync_form_state():
         if is_open:
             if is_edit_mode:
                 # Si implementáramos edición, aquí cargaríamos los datos
@@ -95,6 +95,7 @@ def EquipoEditModal(
                 "UserId": form_data["UserId"],
                 "UserName": form_data.get("UserName", "").strip() or None,
                 "Licencia": form_data.get("Licencia") if form_data.get("Licencia") != "NONE" else None,
+                # "Activo": form_data.get("Activo", True) # Si tu API lo soporta
             }
             if is_edit_mode:
                 # Lógica de actualización (si se implementa)
@@ -106,8 +107,9 @@ def EquipoEditModal(
                 show_notification("Equipo creado con éxito.", "success")
 
             await on_save_success()  # Refrescar lista en la página
-            on_close()  # Cerrar modal
-
+            on_close()
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             error_message = str(e)
             # Intentar extraer el 'detail' si es una APIException
@@ -116,7 +118,8 @@ def EquipoEditModal(
             set_error(f"Error al guardar: {error_message}")
             show_notification(f"Error al guardar: {error_message}", "error")
         finally:
-            set_is_loading(False)
+            if not asyncio.current_task().cancelled():
+                set_is_loading(False)
 
     # No renderizar si no está abierto
     if not is_open:
@@ -137,7 +140,6 @@ def EquipoEditModal(
                     {"class_name": "grid"},
                     html.label(
                         "ID Equipo (A360)",
-                        # --- CORRECCIÓN: Atributos dentro de un dict ---
                         html.input(
                             {
                                 "type": "number",
@@ -153,7 +155,6 @@ def EquipoEditModal(
                     ),
                     html.label(
                         "ID Usuario (A360)",
-                        # --- CORRECCIÓN: Atributos dentro de un dict ---
                         html.input(
                             {
                                 "type": "number",
@@ -169,7 +170,6 @@ def EquipoEditModal(
                 ),
                 html.label(
                     "Nombre Equipo (Hostname)",
-                    # --- CORRECCIÓN: Atributos dentro de un dict ---
                     html.input(
                         {
                             "type": "text",
