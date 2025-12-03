@@ -1,0 +1,591 @@
+diff --git a/src/sam/web/frontend/api/api_client.py b/src/sam/web/frontend/api/api_client.py
+index 372d5f4..a0cd98b 100644
+--- a/src/sam/web/frontend/api/api_client.py
++++ b/src/sam/web/frontend/api/api_client.py
+@@ -60,9 +60,6 @@ class ApiClient:
+             except httpx.RequestError as e:
+                 if attempt == retries - 1:
+                     raise APIException(f"Error de conexión: {str(e)}")
+-                # if self._client:
+-                #     await self._client.aclose()
+-                #     self._client = None
+                 await asyncio.sleep(2**attempt)
+             except APIException:
+                 raise
+@@ -244,7 +241,7 @@ class ApiClient:
+     async def set_isolation_mode(self, enabled: bool) -> Dict:
+         return await self._request("PUT", "/api/config/isolation", json_data={"enabled": enabled})
+ 
+-    # 
++    #
+     async def get_mappings(self) -> List[Dict]:
+         return await self._request("GET", "/api/mappings")
+ 
+diff --git a/src/sam/web/frontend/app.py b/src/sam/web/frontend/app.py
+index 54777e6..dc613d7 100644
+--- a/src/sam/web/frontend/app.py
++++ b/src/sam/web/frontend/app.py
+@@ -353,8 +353,8 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
+ 
+     # --- LÓGICA 1: Cargar robots dinámicamente según el Tipo (CASCADA) ---
+     @use_effect(dependencies=[tipo_filter])
+-    def load_robots_based_on_type():
+-        async def fetch():
++    def init_data_load():
++        async def fetch_data():
+             api = get_api_client()
+             try:
+                 # Solicitamos programaciones filtradas por tipo para extraer los robots relevantes
+@@ -374,11 +374,13 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
+ 
+                 sorted_robots = sorted(unique_robots.values(), key=lambda r: r["Robot"])
+                 set_dropdown_robots(sorted_robots)
+-
++            except asyncio.CancelledError:
++                raise
+             except Exception as e:
+                 print(f"Error cargando filtro de robots: {e}")
+ 
+-        asyncio.create_task(fetch())
++        task = asyncio.create_task(fetch_data())
++        return lambda: task.cancel()
+ 
+     # --- LÓGICA 2: Sincronizar UI -> Hook de Datos (Filtros) ---
+ 
+diff --git a/src/sam/web/frontend/features/components/mappings_page.py b/src/sam/web/frontend/features/components/mappings_page.py
+index 0771025..e52098f 100644
+--- a/src/sam/web/frontend/features/components/mappings_page.py
++++ b/src/sam/web/frontend/features/components/mappings_page.py
+@@ -30,7 +30,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+     robot_search, set_robot_search = use_state("")  # Texto que ve el usuario
+ 
+     # Función para cargar datos
+-    async def load_data():
++    async def fetch_data():
+         api = get_api_client()
+         try:
+             m_data = await api.get_mappings()
+@@ -45,15 +45,18 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+                 list(set(existing_providers + ["A360", "Orquestador", "RPA360", "Tisam", "General"]))
+             )
+             set_known_providers(all_providers)
+-
++        except asyncio.CancelledError:
++            raise
+         except Exception as e:
+             print(f"Error cargando datos de mapeo: {e}")
+         finally:
+-            set_loading(False)
++            if not asyncio.current_task().cancelled():
++                set_loading(False)
+ 
+     @use_effect(dependencies=[])
+-    def init():
+-        asyncio.create_task(load_data())
++    def init_data_load():
++        task = asyncio.create_task(fetch_data())
++        return lambda: task.cancel()
+ 
+     # LOGICA DE BÚSQUEDA DE ROBOT (Nombre -> ID)
+     def handle_robot_search(event):
+@@ -88,7 +91,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+             set_robot_search("")  # Limpiar buscador
+             set_new_robot_id(None)
+ 
+-            await load_data()
++            await fetch_data()
+         except Exception as e:
+             print(f"Error creando mapeo: {e}")
+ 
+@@ -96,7 +99,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+         try:
+             api = get_api_client()
+             await api.delete_mapping(mid)
+-            await load_data()
++            await fetch_data()
+         except Exception as e:
+             print(f"Error eliminando mapeo: {e}")
+ 
+diff --git a/src/sam/web/frontend/features/components/pools_components.py b/src/sam/web/frontend/features/components/pools_components.py
+index a85d9eb..57bc0fb 100644
+--- a/src/sam/web/frontend/features/components/pools_components.py
++++ b/src/sam/web/frontend/features/components/pools_components.py
+@@ -194,20 +194,24 @@ def BalanceadorStrategyPanel():
+ 
+     # Cargar estado inicial
+     @use_effect(dependencies=[])
+-    def load_config():
+-        async def fetch():
++    def init_data_load():
++        async def fetch_data():
+             try:
+                 api = get_api_client()
+                 p_data = await api.get_preemption_mode()
+                 i_data = await api.get_isolation_mode()
+                 set_preemption_enabled(p_data.get("enabled", False))
+                 set_isolation_enabled(i_data.get("enabled", True))
++            except asyncio.CancelledError:
++                raise
+             except Exception as e:
+                 print(f"Error cargando configuración: {e}")
+             finally:
+-                set_is_loading(False)
++                if not asyncio.current_task().cancelled():
++                    set_is_loading(False)
+ 
+-        asyncio.create_task(fetch())
++        task = asyncio.create_task(fetch_data())
++        return lambda: task.cancel()
+ 
+     # Prepara el cambio pero pide confirmación
+     def request_change(setting_type, new_value):
+@@ -230,11 +234,14 @@ def BalanceadorStrategyPanel():
+             elif setting == "isolation":
+                 await api.set_isolation_mode(val)
+                 set_isolation_enabled(val)
++        except asyncio.CancelledError:
++                raise
+         except Exception as e:
+             print(f"Error guardando configuración: {e}")
+         finally:
+-            set_confirm_open(False)
+-            set_pending_change(None)
++            if not asyncio.current_task().cancelled():
++                set_confirm_open(False)
++                set_pending_change(None)
+ 
+     def get_confirm_message():
+         if not pending_change:
+diff --git a/src/sam/web/frontend/features/modals/equipos_modals.py b/src/sam/web/frontend/features/modals/equipos_modals.py
+index 093ab6e..27fd6ee 100644
+--- a/src/sam/web/frontend/features/modals/equipos_modals.py
++++ b/src/sam/web/frontend/features/modals/equipos_modals.py
+@@ -46,7 +46,7 @@ def EquipoEditModal(
+ 
+     # Efecto para inicializar/resetear el formulario cuando 'equipo' o 'is_open' cambian
+     @use_effect(dependencies=[equipo, is_open])
+-    def _populate_or_reset_form():
++    def sync_form_state():
+         if is_open:
+             if is_edit_mode:
+                 # Si implementáramos edición, aquí cargaríamos los datos
+@@ -95,6 +95,7 @@ def EquipoEditModal(
+                 "UserId": form_data["UserId"],
+                 "UserName": form_data.get("UserName", "").strip() or None,
+                 "Licencia": form_data.get("Licencia") if form_data.get("Licencia") != "NONE" else None,
++                # "Activo": form_data.get("Activo", True) # Si tu API lo soporta
+             }
+             if is_edit_mode:
+                 # Lógica de actualización (si se implementa)
+@@ -106,8 +107,9 @@ def EquipoEditModal(
+                 show_notification("Equipo creado con éxito.", "success")
+ 
+             await on_save_success()  # Refrescar lista en la página
+-            on_close()  # Cerrar modal
+-
++            on_close()
++        except asyncio.CancelledError:
++            raise
+         except Exception as e:
+             error_message = str(e)
+             # Intentar extraer el 'detail' si es una APIException
+@@ -116,7 +118,8 @@ def EquipoEditModal(
+             set_error(f"Error al guardar: {error_message}")
+             show_notification(f"Error al guardar: {error_message}", "error")
+         finally:
+-            set_is_loading(False)
++            if not asyncio.current_task().cancelled():
++                set_is_loading(False)
+ 
+     # No renderizar si no está abierto
+     if not is_open:
+@@ -137,7 +140,6 @@ def EquipoEditModal(
+                     {"class_name": "grid"},
+                     html.label(
+                         "ID Equipo (A360)",
+-                        # --- CORRECCIÓN: Atributos dentro de un dict ---
+                         html.input(
+                             {
+                                 "type": "number",
+@@ -153,7 +155,6 @@ def EquipoEditModal(
+                     ),
+                     html.label(
+                         "ID Usuario (A360)",
+-                        # --- CORRECCIÓN: Atributos dentro de un dict ---
+                         html.input(
+                             {
+                                 "type": "number",
+@@ -169,7 +170,6 @@ def EquipoEditModal(
+                 ),
+                 html.label(
+                     "Nombre Equipo (Hostname)",
+-                    # --- CORRECCIÓN: Atributos dentro de un dict ---
+                     html.input(
+                         {
+                             "type": "text",
+diff --git a/src/sam/web/frontend/features/modals/pool_modals.py b/src/sam/web/frontend/features/modals/pool_modals.py
+index 54d6a94..d73a4e7 100644
+--- a/src/sam/web/frontend/features/modals/pool_modals.py
++++ b/src/sam/web/frontend/features/modals/pool_modals.py
+@@ -22,7 +22,7 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
+         return None
+ 
+     @use_effect(dependencies=[pool])
+-    def _populate_form():
++    def sync_form_state():
+         if pool is not None:
+             set_form_data(pool if is_edit_mode else DEFAULT_POOL_STATE)
+ 
+@@ -37,10 +37,13 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
+                 f"Pool {'actualizado' if is_edit_mode else 'creado'} con éxito.", "success"
+             )
+             on_close()
++        except asyncio.CancelledError:
++            raise
+         except Exception as e:
+             notification_ctx["show_notification"](str(e), "error")
+         finally:
+-            set_is_loading(False)
++            if not asyncio.current_task().cancelled():
++                set_is_loading(False)
+ 
+     if not is_open:
+         return None
+@@ -116,11 +119,11 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
+         return None
+ 
+     @use_effect(dependencies=[pool])
+-    def _load_data():
++    def init_data_load():
+         if not pool or not pool.get("PoolId"):
+             return
+ 
+-        async def _fetch():
++        async def fetch_data():
+             set_is_loading(True)
+             try:
+                 data = await api_client.get_pool_assignments(pool["PoolId"])
+@@ -128,12 +131,16 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
+                 set_assigned_robots([r for r in data.get("assigned", []) if r["Tipo"] == "Robot"])
+                 set_available_equipos([e for e in data.get("available", []) if e["Tipo"] == "Equipo"])
+                 set_assigned_equipos([e for e in data.get("assigned", []) if e["Tipo"] == "Equipo"])
++            except asyncio.CancelledError:
++                raise
+             except Exception as e:
+                 notification_ctx["show_notification"](f"Error al cargar asignaciones: {e}", "error")
+             finally:
+-                set_is_loading(False)
++                if not asyncio.current_task().cancelled():
++                    set_is_loading(False)
+ 
+-        asyncio.create_task(_fetch())
++        task = asyncio.create_task(fetch_data())
++        return lambda: task.cancel()
+ 
+     async def handle_save(e):
+         set_is_loading(True)
+@@ -144,10 +151,13 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
+             await on_save_success()
+             notification_ctx["show_notification"]("Asignaciones guardadas con éxito.", "success")
+             on_close()
++        except asyncio.CancelledError:
++            raise
+         except Exception as e:
+             notification_ctx["show_notification"](f"Error al guardar asignaciones: {e}", "error")
+         finally:
+-            set_is_loading(False)
++            if not asyncio.current_task().cancelled():
++                set_is_loading(False)
+ 
+     if not is_open:
+         return None
+diff --git a/src/sam/web/frontend/features/modals/robots_modals.py b/src/sam/web/frontend/features/modals/robots_modals.py
+index fc1982d..3a69401 100644
+--- a/src/sam/web/frontend/features/modals/robots_modals.py
++++ b/src/sam/web/frontend/features/modals/robots_modals.py
+@@ -114,7 +114,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
+     is_edit_mode = bool(robot and robot.get("RobotId") is not None)
+ 
+     @use_effect(dependencies=[robot])
+-    def populate_form_data():
++    def sync_form_state():
+         if robot is None:
+             # Si el robot es None, reseteamos el formulario completamente
+             set_form_data(DEFAULT_ROBOT_STATE)
+@@ -187,6 +187,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
+                                 "id": "robot-name",
+                                 "type": "text",
+                                 "name": "text-robot-name",
++                                "placeholder": "Ej: Robot 1",
+                                 "value": form_data.get("Robot", ""),
+                                 "on_change": lambda e: handle_form_change("Robot", e["target"]["value"]),
+                                 "required": True,
+@@ -201,6 +202,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
+                                 "id": "robot-id",
+                                 "type": "number",
+                                 "name": "number-robot-id",
++                                "placeholder": "Ej: 1111",
+                                 "value": form_data.get("RobotId", ""),
+                                 "on_change": lambda e: handle_form_change("RobotId", e["target"]["value"]),
+                                 "required": not is_edit_mode,
+@@ -354,7 +356,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
+         return sorted(devices, key=lambda x: x.get("Equipo", "").lower())
+ 
+     @use_effect(dependencies=[robot])
+-    def fetch_data():
++    def init_data_load():
+         def get_highest_priority_assignment(assignments: List[Dict]) -> List[Dict]:
+             """
+             De-duplica una lista de asignaciones por EquipoId,
+@@ -391,7 +393,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
+ 
+             return list(unique_equipos.values())
+ 
+-        async def get_data():
++        async def fetch_data():
+             if not robot:
+                 return
+             set_is_loading(True)
+@@ -407,12 +409,16 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
+                 unique_assigned_devices = get_highest_priority_assignment(assigned_res)
+                 set_assigned_devices(unique_assigned_devices)
+                 set_available_devices(available_res)
++            except asyncio.CancelledError:
++                raise
+             except Exception as e:
+                 show_notification(f"Error al cargar datos: {e}", "error")
+             finally:
+-                set_is_loading(False)
++                if not asyncio.current_task().cancelled():
++                    set_is_loading(False)
+ 
+-        asyncio.create_task(get_data())
++        task = asyncio.create_task(fetch_data())
++        return lambda: task.cancel()
+ 
+     filtered_assigned = use_memo(
+         lambda: sort_devices(
+@@ -574,13 +580,13 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
+     is_loading, set_is_loading = use_state(False)
+ 
+     @use_effect(dependencies=[robot])
+-    def load_data():
++    def init_data_load():
+         if not robot:
+             return
+-        task = asyncio.create_task(fetch_schedule_data())
++        task = asyncio.create_task(fetch_data())
+         return lambda: task.cancel()
+ 
+-    async def fetch_schedule_data():
++    async def fetch_data():
+         set_is_loading(True)
+         try:
+             schedules_res, devices_res, assigned_res = await asyncio.gather(
+@@ -589,18 +595,31 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
+                 api_service.get_robot_assignments(robot["RobotId"]),
+             )
+             set_schedules(schedules_res)
+-            set_available_devices(devices_res)
+-            # Combinamos ambas listas en el nuevo estado
+-            set_all_robot_devices(devices_res + assigned_res)
++            # No seteamos available_devices directamente para evitar duplicados en props posteriores
++            # set_available_devices(devices_res)
++
++            # FIX CRÍTICO: Desduplicar la lista combinada por EquipoId
++            # La suma devices_res + assigned_res pone al final los asignados.
++            # El dict comprehension sobreescribe claves, quedándonos con la versión "Asignada" (más completa) si hay colisión.
++            combined = devices_res + assigned_res
++            unique_combined_dict = {d["EquipoId"]: d for d in combined}
++            unique_list = list(unique_combined_dict.values())
++
++            set_all_robot_devices(unique_list)
++            # Usamos la lista única también para available_devices para asegurar consistencia en selectores
++            set_available_devices(unique_list)
++        except asyncio.CancelledError:
++            raise
+         except Exception as e:
+             show_notification(str(e), "error")
+         finally:
+-            set_is_loading(False)
++            if not asyncio.current_task().cancelled():
++                set_is_loading(False)
+ 
+     async def handle_successful_change():
+         await on_save_success()
+         if robot:
+-            await fetch_schedule_data()
++            await fetch_data()
+ 
+     async def submit_form(event):
+         set_is_loading(True)
+@@ -619,10 +638,13 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
+             show_notification(message, "success")
+             set_view_mode("list")
+             await handle_successful_change()
++        except asyncio.CancelledError:
++            raise
+         except Exception as e:
+             show_notification(str(e), "error")
+         finally:
+-            set_is_loading(False)
++            if not asyncio.current_task().cancelled():
++                set_is_loading(False)
+ 
+     handle_form_submit = use_callback(submit_form, [form_data, robot, on_save_success])
+ 
+@@ -957,8 +979,8 @@ def ScheduleForm(
+                         }
+                     ),
+                 ),
++                ConditionalFields(tipo, form_data, handle_form_change),
+             ),
+-            ConditionalFields(tipo, form_data, handle_form_change),
+             DeviceSelector(available_devices, form_data.get("Equipos", []), handle_device_change),
+         ),
+         html.footer(
+@@ -1014,7 +1036,7 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
+                 }
+             ),
+         )
+-    return html.div()
++    return html._()
+ 
+ 
+ @component
+diff --git a/src/sam/web/frontend/features/modals/schedule_modal.py b/src/sam/web/frontend/features/modals/schedule_modal.py
+index 0356f6b..d098b64 100644
+--- a/src/sam/web/frontend/features/modals/schedule_modal.py
++++ b/src/sam/web/frontend/features/modals/schedule_modal.py
+@@ -172,7 +172,7 @@ def ScheduleEditModal(
+     is_loading, set_is_loading = use_state(False)
+ 
+     @use_effect(dependencies=[schedule])
+-    def sync_form_data():
++    def sync_form_state():
+         """Asegura que el formulario se resetee cada vez que 'schedule' (la prop) cambia."""
+         if schedule:
+             set_form_data(schedule)
+@@ -373,10 +373,13 @@ def ScheduleEquiposModal(
+ 
+                 set_available(avail)
+                 set_assigned(asgn)
++            except asyncio.CancelledError:
++                raise
+             except Exception as e:
+                 show_notification(f"Error al cargar equipos: {e}", "error")
+             finally:
+-                set_is_loading(False)
++                if not asyncio.current_task().cancelled():
++                    set_is_loading(False)
+ 
+         task = asyncio.create_task(fetch())
+         return lambda: task.cancel()
+@@ -442,7 +445,9 @@ def ScheduleEquiposModal(
+                     },
+                 ),
+                 html.h3(
+-                    f"Asignar Equipos - {schedule.get('RobotNombre', '')}" if schedule.get('RobotNombre', '') else f"Asignar Equipos (ID: {schedule_id})"
++                    f"Asignar Equipos - {schedule.get('RobotNombre', '')}"
++                    if schedule.get("RobotNombre", "")
++                    else f"Asignar Equipos (ID: {schedule_id})"
+                 ),
+             ),
+             # Contenido del modal con GRID de 3 columnas
+diff --git a/src/sam/web/frontend/hooks/use_equipos_hook.py b/src/sam/web/frontend/hooks/use_equipos_hook.py
+index b37ef94..f7b081e 100644
+--- a/src/sam/web/frontend/hooks/use_equipos_hook.py
++++ b/src/sam/web/frontend/hooks/use_equipos_hook.py
+@@ -46,11 +46,14 @@ def use_equipos():
+             data = await api_client.get_equipos(api_params)
+             set_equipos(data.get("equipos", []))
+             set_total_count(data.get("total_count", 0))
++        except asyncio.CancelledError:
++            raise
+         except Exception as e:
+             set_error(str(e))
+             notification_ctx["show_notification"](f"Error al cargar equipos: {e}", "error")
+         finally:
+-            set_loading(False)
++            if not asyncio.current_task().cancelled():
++                set_loading(False)
+ 
+     @use_callback
+     async def trigger_sync(event=None):
+diff --git a/src/sam/web/frontend/hooks/use_schedules_hook.py b/src/sam/web/frontend/hooks/use_schedules_hook.py
+index 840f34b..176b420 100644
+--- a/src/sam/web/frontend/hooks/use_schedules_hook.py
++++ b/src/sam/web/frontend/hooks/use_schedules_hook.py
+@@ -26,7 +26,7 @@ def use_schedules():
+     sort_by, set_sort = use_state("Robot")
+     sort_dir, set_dir = use_state("asc")
+ 
+-    async def load():
++    async def load_schedules():
+         set_loading(True)
+         set_error(None)
+         try:
+@@ -46,15 +46,23 @@ def use_schedules():
+             data = await api.get_schedules(params)
+             set_schedules(data.get("schedules", []))
+             set_total(data.get("total_count", 0))
++        except asyncio.CancelledError:
++            raise
+         except Exception as e:
+             set_error(str(e))
+             show(f"Error al cargar programaciones: {e}", "error")
+         finally:
+-            set_loading(False)
++            if not asyncio.current_task().cancelled():
++                set_loading(False)
+ 
+     @use_effect(dependencies=[filters, page])
+     def _load_on_filters_or_page_change():
+-        task = asyncio.create_task(load())
++        task = asyncio.create_task(load_schedules())
++        return lambda: task.cancel()
++
++    @use_effect(dependencies=[])
++    def _initial_load():
++        task = asyncio.create_task(load_schedules())
+         return lambda: task.cancel()
+ 
+     @use_effect(dependencies=[])
+@@ -80,10 +88,10 @@ def use_schedules():
+             try:
+                 await api.toggle_schedule_status(schedule_id, activo)
+                 show("Estado cambiado", "success")
+-                await load()
++                await load_schedules()
+             except Exception as e:
+                 show(str(e), "error")
+-                await load()
++                await load_schedules()
+ 
+         asyncio.create_task(_logic())
+ 
+@@ -98,7 +106,7 @@ def use_schedules():
+             try:
+                 await api.update_schedule_details(schedule_id, data)
+                 show("Programación actualizada", "success")
+-                await load()
++                await load_schedules()
+             except Exception as e:
+                 show(f"Error al guardar: {e}", "error")
+ 
+@@ -126,7 +134,7 @@ def use_schedules():
+                 else:
+                     on_success()
+ 
+-            await load()  # Recargar datos
++            await load_schedules()  # Recargar datos
+ 
+         except Exception as e:
+             show(f"Error al guardar equipos: {e}", "error")
+@@ -149,5 +157,5 @@ def use_schedules():
+         "toggle_active": toggle_active,
+         "save_schedule": save_schedule,
+         "save_schedule_equipos": save_schedule_equipos,
+-        "refresh": load,
++        "refresh": load_schedules,
+     }
