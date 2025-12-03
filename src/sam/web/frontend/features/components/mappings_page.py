@@ -30,7 +30,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
     robot_search, set_robot_search = use_state("")  # Texto que ve el usuario
 
     # Función para cargar datos
-    async def load_data():
+    async def fetch_data():
         api = get_api_client()
         try:
             m_data = await api.get_mappings()
@@ -45,15 +45,18 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                 list(set(existing_providers + ["A360", "Orquestador", "RPA360", "Tisam", "General"]))
             )
             set_known_providers(all_providers)
-
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             print(f"Error cargando datos de mapeo: {e}")
         finally:
-            set_loading(False)
+            if not asyncio.current_task().cancelled():
+                set_loading(False)
 
     @use_effect(dependencies=[])
-    def init():
-        asyncio.create_task(load_data())
+    def init_data_load():
+        task = asyncio.create_task(fetch_data())
+        return lambda: task.cancel()
 
     # LOGICA DE BÚSQUEDA DE ROBOT (Nombre -> ID)
     def handle_robot_search(event):
@@ -88,7 +91,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
             set_robot_search("")  # Limpiar buscador
             set_new_robot_id(None)
 
-            await load_data()
+            await fetch_data()
         except Exception as e:
             print(f"Error creando mapeo: {e}")
 
@@ -96,7 +99,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
         try:
             api = get_api_client()
             await api.delete_mapping(mid)
-            await load_data()
+            await fetch_data()
         except Exception as e:
             print(f"Error eliminando mapeo: {e}")
 
