@@ -52,11 +52,14 @@ def use_robots():
             data = await api_client.get_robots(api_params)
             set_robots(data.get("robots", []))
             set_total_count(data.get("total_count", 0))
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             set_error(str(e))
             show_notification(f"Error al cargar robots: {e}", "error")
         finally:
-            set_loading(False)
+            if not asyncio.current_task().cancelled():
+                set_loading(False)
 
     @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
     def setup_load():
@@ -73,8 +76,12 @@ def use_robots():
             await asyncio.sleep(POLLING_INTERVAL_SECONDS)
             while True:
                 await asyncio.sleep(POLLING_INTERVAL_SECONDS)
-                if not is_syncing:
+                try:
                     await load_robots()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    pass
 
         task = asyncio.create_task(polling_loop())
         return lambda: task.cancel()
