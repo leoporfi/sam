@@ -81,10 +81,15 @@ def use_equipos():
             show_notification("Sincronización de equipos completada. Actualizando...", "success")
             await load_equipos()
             set_is_syncing(False)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             show_notification(f"Error al iniciar sincronización: {e}", "error")
             set_error(f"Error en sincronización: {e}")
             set_is_syncing(False)
+        finally:
+            if not asyncio.current_task().cancelled():
+                set_loading(False)
 
     # use_effect(load_equipos, [filters, current_page, sort_by, sort_dir])
     @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
@@ -98,8 +103,12 @@ def use_equipos():
             await asyncio.sleep(POLLING_INTERVAL_SECONDS)
             while True:
                 await asyncio.sleep(POLLING_INTERVAL_SECONDS)
-                if not is_syncing:
+                try:
                     await load_equipos()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    pass
 
         task = asyncio.create_task(polling_loop())
         return lambda: task.cancel()
@@ -135,6 +144,8 @@ def use_equipos():
             await api_client.update_equipo_status(equipo_id, {"field": field, "value": value})
             show_notification("Estado del equipo actualizado.", "success")
             await load_equipos()
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             set_error(f"Error al actualizar estado del equipo {equipo_id}: {e}")
             show_notification(f"Error al actualizar: {e}", "error")
