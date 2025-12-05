@@ -63,18 +63,21 @@ def use_equipos():
         set_is_syncing(True)
         show_notification("Sincronizando equipos desde A360...", "info")
         try:
+            # 1. Iniciar la tarea
             await api_client.trigger_sync_equipos()
             show_notification("Sincronización iniciada. Esperando finalización...", "info")
 
+            # 2. Bucle de polling
             while True:
                 await asyncio.sleep(SYNC_POLLING_INTERVAL_SECONDS)
                 try:
                     status_data = await api_client.get_sync_status()
                     if status_data.get("equipos") == "idle":
-                        break
+                        break  # Tarea terminó
                 except Exception as poll_error:
                     show_notification(f"Error al consultar estado de sync: {poll_error}", "warning")
 
+            # 3. Tarea completada
             show_notification("Sincronización de equipos completada. Actualizando...", "success")
             await load_equipos()
             set_is_syncing(False)
@@ -88,24 +91,18 @@ def use_equipos():
             if not asyncio.current_task().cancelled():
                 set_loading(False)
 
-    # --- Efecto Unificado: Carga Inicial + Polling ---
+    # use_effect(load_equipos, [filters, current_page, sort_by, sort_dir])
     @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
-    def manage_data_lifecycle():
-        async def run_lifecycle():
-            # 1. Carga inicial
-            try:
-                await load_equipos()
-            except asyncio.CancelledError:
-                return
+    def setup_load():
+        task = asyncio.create_task(load_equipos())
+        return lambda: task.cancel()
 
-            # 2. Bucle de Polling
+    @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
+    def setup_polling():
+        async def polling_loop():
+            await asyncio.sleep(POLLING_INTERVAL_SECONDS)
             while True:
                 await asyncio.sleep(POLLING_INTERVAL_SECONDS)
-
-                # Evitar conflicto si hay sync manual
-                if is_syncing:
-                    continue
-
                 try:
                     await load_equipos()
                 except asyncio.CancelledError:
@@ -113,8 +110,20 @@ def use_equipos():
                 except Exception:
                     pass
 
-        task = asyncio.create_task(run_lifecycle())
+        task = asyncio.create_task(polling_loop())
         return lambda: task.cancel()
+
+    async def polling_loop():
+        while True:
+            await asyncio.sleep(POLLING_INTERVAL_SECONDS)
+            if is_syncing:
+                return
+            try:
+                await load_equipos()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                set_error(f"Error de actualización automática: {e}")
 
     def handle_sort(column_name: str):
         if sort_by == column_name:
@@ -131,6 +140,7 @@ def use_equipos():
     @use_callback
     async def update_equipo_status(equipo_id: int, field: str, value: bool):
         try:
+            # Asumimos que el cliente API tendrá este método
             await api_client.update_equipo_status(equipo_id, {"field": field, "value": value})
             show_notification("Estado del equipo actualizado.", "success")
             await load_equipos()
