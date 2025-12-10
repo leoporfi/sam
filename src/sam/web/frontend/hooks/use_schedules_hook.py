@@ -96,51 +96,35 @@ def use_schedules():
         asyncio.create_task(_logic())
 
     @use_callback
-    def save_schedule(data: dict):
-        async def _logic():
-            schedule_id = data.get("ProgramacionId")
-            if not schedule_id:
-                show("No se pudo guardar: ID de programación no encontrado.", "error")
-                return
+    async def save_schedule(data: dict):
+        schedule_id = data.get("ProgramacionId")
+        if not schedule_id:
+            show("No se pudo guardar: ID de programación no encontrado.", "error")
+            raise ValueError("ID de programación no encontrado")
 
-            try:
-                await api.update_schedule_details(schedule_id, data)
-                show("Programación actualizada", "success")
-                await load_schedules()
-            except Exception as e:
-                show(f"Error al guardar: {e}", "error")
-
-        asyncio.create_task(_logic())
+        try:
+            await api.update_schedule_details(schedule_id, data)
+            show("Programación actualizada", "success")
+            await load_schedules()
+        except Exception as e:
+            show(f"Error al guardar: {e}", "error")
+            raise
 
     @use_callback
     async def save_schedule_equipos(schedule_id: int, equipo_ids: List[int], on_success: Optional[Callable] = None):
-        """
-        Guarda únicamente la lista de equipos para una programación.
-        Retomamos async/await directo para que el Modal pueda esperar a que termine.
-        """
         if not schedule_id:
             show("No se pudo guardar: ID de programación no encontrado.", "error")
-            return
+            raise ValueError("ID de programación no encontrado")
 
         try:
             # Llama al API
             await api.update_schedule_devices(schedule_id, equipo_ids)
             show("Equipos de la programación actualizados", "success")
-
-            # Ejecutamos el callback si existe
-            if on_success:
-                if asyncio.iscoroutinefunction(on_success):
-                    await on_success()
-                else:
-                    on_success()
-
-            await load_schedules()  # Recargar datos
+            await load_schedules()
 
         except Exception as e:
             show(f"Error al guardar equipos: {e}", "error")
-            # Opcional: Si quieres que el modal NO se cierre si hay error real de API,
-            # descomenta la siguiente línea para relanzar la excepción hacia el modal.
-            # raise e
+            raise
 
     total_pages = use_memo(lambda: max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE), [total, PAGE_SIZE])
 
