@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict
 from reactpy import component, event, html, use_context, use_effect, use_memo, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.common_components import ConfirmationModal
 
 from ...shared.notifications import NotificationContext
 
@@ -160,7 +161,7 @@ def ScheduleEditModal(
     schedule: Dict,
     is_open: bool,
     on_close: Callable,
-    on_save: Callable,  # Esta es la función 'save_schedule' del hook
+    on_save: Callable,
 ):
     """
     Modal para editar los detalles de una programación existente.
@@ -170,12 +171,38 @@ def ScheduleEditModal(
     show_notification = notification_context["show_notification"]
     form_data, set_form_data = use_state(schedule)
     is_loading, set_is_loading = use_state(False)
+    show_confirm, set_show_confirm = use_state(False)
 
     @use_effect(dependencies=[schedule])
     def sync_form_state():
         """Asegura que el formulario se resetee cada vez que 'schedule' (la prop) cambia."""
         if schedule:
             set_form_data(schedule)
+
+    def handle_save_click(e):
+        """Muestra el diálogo de confirmación"""
+        set_show_confirm(True)
+
+    async def handle_confirm_save():
+        """Ejecuta el guardado tras confirmar"""
+        set_show_confirm(False)
+        set_is_loading(True)
+        try:
+            tipo = form_data.get("TipoProgramacion")
+            if tipo == "Semanal" and not form_data.get("DiasSemana"):
+                raise ValueError("Para 'Semanal', los días de la semana son obligatorios.")
+            if tipo == "Mensual" and not form_data.get("DiaDelMes"):
+                raise ValueError("Para 'Mensual', el día del mes es obligatorio.")
+            if tipo == "Especifica" and not form_data.get("FechaEspecifica"):
+                raise ValueError("Para 'Específica', la fecha es obligatoria.")
+
+            await on_save(form_data)
+            show_notification("Programación actualizada con éxito.", "success")
+            on_close()
+        except Exception as ex:
+            show_notification(f"Error al guardar: {ex}", "error")
+        finally:
+            set_is_loading(False)
 
     async def handle_submit(e):
         """Manejador del evento 'submit' del formulario."""
@@ -195,57 +222,69 @@ def ScheduleEditModal(
             await on_save(form_data)
             show_notification("Programación actualizada con éxito.", "success")
             on_close()
-        except Exception as ex:
+        except Exception as e:
             # Mostramos el error (ya sea de la validación de frontend o del backend)
-            show_notification(f"Error al guardar: {ex}", "error")
+            show_notification(f"Error al guardar: {e}", "error")
         finally:
             set_is_loading(False)
 
     if not is_open:
         return None
 
-    return html.dialog(
-        {"open": True, "class_name": "modal-dialog"},
-        html.article(
-            html.header(
-                html.a(
-                    {
-                        "href": "#",
-                        "aria-label": "Close",
-                        "class_name": "close",
-                        "on_click": event(lambda e: on_close(), prevent_default=True),
-                    }
-                ),
-                html.h3(f"Editar Programación: {schedule.get('RobotNombre', '')}"),
-            ),
-            html.form(
-                {"id": "edit-schedule-form", "on_submit": event(handle_submit, prevent_default=True)},
-                FullScheduleEditForm(form_data, set_form_data),
-            ),
-            html.footer(
-                html.div(
-                    {"class_name": "grid"},
-                    html.button(
+    return html._(
+        html.dialog(
+            {"open": True, "class_name": "modal-dialog"},
+            html.article(
+                html.header(
+                    html.a(
                         {
-                            "type": "button",
-                            "class_name": "secondary",
+                            "href": "#",
+                            "aria-label": "Close",
+                            "class_name": "close",
                             "on_click": event(lambda e: on_close(), prevent_default=True),
-                            "disabled": is_loading,
-                        },
-                        "Cancelar",
+                        }
                     ),
-                    html.button(
-                        {
-                            "type": "submit",
-                            "form": "edit-schedule-form",
-                            "aria-busy": str(is_loading).lower(),
-                            "disabled": is_loading,
-                        },
-                        "Guardar Cambios",
-                    ),
-                )
+                    html.h3(f"Editar Programación: {schedule.get('RobotNombre', '')}"),
+                ),
+                html.form(
+                    {"id": "edit-schedule-form", "on_submit": event(handle_submit, prevent_default=True)},
+                    FullScheduleEditForm(form_data, set_form_data),
+                ),
+                html.footer(
+                    html.div(
+                        {"class_name": "grid"},
+                        html.button(
+                            {
+                                "type": "button",
+                                "class_name": "secondary",
+                                "on_click": event(lambda e: on_close(), prevent_default=True),
+                                "disabled": is_loading,
+                            },
+                            "Cancelar",
+                        ),
+                        html.button(
+                            {
+                                "type": "button",
+                                "on_click": event(handle_save_click, prevent_default=True),
+                                "form": "edit-schedule-form",
+                                "aria-busy": str(is_loading).lower(),
+                                "disabled": is_loading,
+                            },
+                            "Guardar Cambios",
+                        ),
+                    )
+                ),
             ),
         ),
+        ConfirmationModal(
+            is_open=show_confirm,
+            title="Confirmar Cambios",
+            message=f"¿Estás seguro de que deseas guardar los cambios en la programación de '{schedule.get('RobotNombre', '')}'?",
+            on_confirm=handle_confirm_save,
+            on_cancel=lambda: set_show_confirm(False),
+        )
+        if show_confirm
+        else None,
     )
 
 
@@ -344,6 +383,7 @@ def ScheduleEquiposModal(
     show_notification = notification_ctx["show_notification"]
 
     is_loading, set_is_loading = use_state(False)
+    show_confirm, set_show_confirm = use_state(False)
 
     # Listas de equipos
     available, set_available = use_state([])
@@ -413,104 +453,119 @@ def ScheduleEquiposModal(
             set_available(new_available)
             set_selected_assigned_ids(set())
 
-    def handle_save(*args):
+    def handle_save_click(e):
+        """Muestra el diálogo de confirmación"""
+        set_show_confirm(True)
+
+    async def handle_confirm_save():
+        """Ejecuta el guardado tras confirmar"""
+        set_show_confirm(False)
         set_is_loading(True)
         assigned_ids = [item["ID"] for item in assigned]
 
-        async def save_task():
-            try:
-                await on_save(schedule_id, assigned_ids)
-                on_close()
-            except Exception as e:
-                show_notification(f"Error al guardar: {e}", "error")
-            finally:
-                set_is_loading(False)
-
-        asyncio.create_task(save_task())
+        try:
+            await on_save(schedule_id, assigned_ids)
+            show_notification("Equipos actualizados con éxito.", "success")
+            on_close()
+        except Exception as e:
+            show_notification(f"Error al guardar: {e}", "error")
+        finally:
+            set_is_loading(False)
 
     # Renderizado condicional para evitar hooks inconsistentes (Return final)
     if not schedule_id and not is_open:
         return html.div({"class_name": modal_class, "style": {"display": "none"}})
 
-    return html.dialog(  #
-        {"class_name": modal_class, "open": is_open},
-        html.article(
-            html.header(
-                html.a(
+    return html._(
+        html.dialog(  #
+            {"class_name": modal_class, "open": is_open},
+            html.article(
+                html.header(
+                    html.a(
+                        {
+                            "href": "#",
+                            "aria-label": "Close",
+                            "class_name": "close",
+                            "on_click": event(lambda e: on_close(), prevent_default=True),
+                        },
+                    ),
+                    html.h3(
+                        f"Asignar Equipos - {schedule.get('RobotNombre', '')}"
+                        if schedule.get("RobotNombre", "")
+                        else f"Asignar Equipos (ID: {schedule_id})"
+                    ),
+                ),
+                # Contenido del modal con GRID de 3 columnas
+                html.div(
                     {
-                        "href": "#",
-                        "aria-label": "Close",
-                        "class_name": "close",
-                        "on_click": event(lambda e: on_close(), prevent_default=True),
-                    },
-                ),
-                html.h3(
-                    f"Asignar Equipos - {schedule.get('RobotNombre', '')}"
-                    if schedule.get("RobotNombre", "")
-                    else f"Asignar Equipos (ID: {schedule_id})"
-                ),
-            ),
-            # Contenido del modal con GRID de 3 columnas
-            html.div(
-                {
-                    "class_name": "grid",
-                    "style": {
-                        "gridTemplateColumns": "5fr 1fr 5fr",  # Columnas proporcionales
-                        "alignItems": "center",
-                        "gap": "1rem",
-                        "height": "400px",  # Altura fija para que se vea uniforme
-                    },
-                },
-                # Columna 1: Disponibles
-                DeviceList(
-                    title="Equipos Disponibles",
-                    items=available,
-                    selected_ids_set=selected_available_ids,
-                    handle_selection=lambda i: set_selected_available_ids(lambda s: (s ^ {i})),
-                    handle_select_all=lambda new_set: set_selected_available_ids(new_set),
-                ),
-                # Columna 2: Botones Centrales
-                html.div(
-                    {"style": {"display": "flex", "flexDirection": "column", "gap": "1rem"}},
-                    html.button(
-                        {
-                            "on_click": lambda e: handle_move("assign"),
-                            "disabled": not selected_available_ids,
-                            "data-tooltip": "Asignar",
+                        "class_name": "grid",
+                        "style": {
+                            "gridTemplateColumns": "5fr 1fr 5fr",  # Columnas proporcionales
+                            "alignItems": "center",
+                            "gap": "1rem",
+                            "height": "400px",  # Altura fija para que se vea uniforme
                         },
-                        html.i({"class_name": "fa-solid fa-arrow-right"}),
+                    },
+                    # Columna 1: Disponibles
+                    DeviceList(
+                        title="Equipos Disponibles",
+                        items=available,
+                        selected_ids_set=selected_available_ids,
+                        handle_selection=lambda i: set_selected_available_ids(lambda s: (s ^ {i})),
+                        handle_select_all=lambda new_set: set_selected_available_ids(new_set),
                     ),
-                    html.button(
-                        {
-                            "on_click": lambda e: handle_move("unassign"),
-                            "disabled": not selected_assigned_ids,
-                            "data-tooltip": "Quitar",
-                        },
-                        html.i({"class_name": "fa-solid fa-arrow-left"}),
+                    # Columna 2: Botones Centrales
+                    html.div(
+                        {"style": {"display": "flex", "flexDirection": "column", "gap": "1rem"}},
+                        html.button(
+                            {
+                                "on_click": lambda e: handle_move("assign"),
+                                "disabled": not selected_available_ids,
+                                "data-tooltip": "Asignar",
+                            },
+                            html.i({"class_name": "fa-solid fa-arrow-right"}),
+                        ),
+                        html.button(
+                            {
+                                "on_click": lambda e: handle_move("unassign"),
+                                "disabled": not selected_assigned_ids,
+                                "data-tooltip": "Quitar",
+                            },
+                            html.i({"class_name": "fa-solid fa-arrow-left"}),
+                        ),
+                    ),
+                    # Columna 3: Asignados
+                    DeviceList(
+                        title="Equipos Asignados",
+                        items=assigned,
+                        selected_ids_set=selected_assigned_ids,
+                        handle_selection=lambda i: set_selected_assigned_ids(lambda s: (s ^ {i})),
+                        handle_select_all=lambda new_set: set_selected_assigned_ids(new_set),
                     ),
                 ),
-                # Columna 3: Asignados
-                DeviceList(
-                    title="Equipos Asignados",
-                    items=assigned,
-                    selected_ids_set=selected_assigned_ids,
-                    handle_selection=lambda i: set_selected_assigned_ids(lambda s: (s ^ {i})),
-                    handle_select_all=lambda new_set: set_selected_assigned_ids(new_set),
-                ),
-            ),
-            # Pie del modal
-            html.footer(
-                html.div(
-                    {"class_name": "grid"},
-                    html.button(
-                        {"class_name": "secondary", "on_click": lambda e: on_close(), "disabled": is_loading},
-                        "Cancelar",
-                    ),
-                    html.button(
-                        {"on_click": handle_save, "aria-busy": is_loading, "disabled": is_loading},
-                        "Guardar",
+                # Pie del modal
+                html.footer(
+                    html.div(
+                        {"class_name": "grid"},
+                        html.button(
+                            {"class_name": "secondary", "on_click": lambda e: on_close(), "disabled": is_loading},
+                            "Cancelar",
+                        ),
+                        html.button(
+                            {"on_click": handle_save_click, "aria-busy": is_loading, "disabled": is_loading},
+                            "Guardar",
+                        ),
                     ),
                 ),
             ),
         ),
+        ConfirmationModal(
+            is_open=show_confirm,
+            title="Confirmar Asignación",
+            message=f"¿Estás seguro de que deseas actualizar los equipos asignados a '{schedule.get('RobotNombre', '')}'?",
+            on_confirm=handle_confirm_save,
+            on_cancel=lambda: set_show_confirm(False),
+        )
+        if show_confirm
+        else None,
     )
