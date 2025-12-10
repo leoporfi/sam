@@ -19,10 +19,12 @@ if __name__ == "__main__":
     if src_path not in sys.path:
         sys.path.insert(0, src_path)
 
+from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.config_loader import ConfigLoader
 from sam.common.config_manager import ConfigManager
 from sam.common.database import DatabaseConnector
 from sam.common.logging_setup import setup_logging
+from sam.web.backend.dependencies import aa_client_provider
 from sam.web.main import create_app
 
 # --- Globales del Servicio ---
@@ -83,7 +85,24 @@ def _setup_dependencies() -> Dict[str, Any]:
         usuario=cfg_sql_sam["usuario"],
         contrasena=cfg_sql_sam["contrasena"],
     )
-    return {"db_connector": _db_connector}
+    logging.info("Creando dependencia AutomationAnywhereClient (Config Web)...")
+    # 1. Usamos la config específica que busca INTERFAZ_WEB_AA_USER
+    aa_config = ConfigManager.get_aa360_web_config()
+
+    # 2. Instanciamos el cliente
+    aa_client = AutomationAnywhereClient(
+        cr_url=aa_config["cr_url"],
+        cr_user=aa_config["cr_user"],
+        cr_pwd=aa_config.get("cr_pwd"),  # Será None si se usa ApiKey
+        cr_api_key=aa_config.get("cr_api_key"),
+        cr_api_timeout=aa_config.get("api_timeout_seconds", 60),
+        # Pasamos otros parámetros opcionales si existen en la config
+        callback_url_deploy=aa_config.get("callback_url_deploy"),
+    )
+
+    # 3. Inyectamos la dependencia en el proveedor global
+    aa_client_provider.set_aa_client(aa_client)
+    return {"db_connector": _db_connector, "aa_client": aa_client}
 
 
 def _run_service(deps: Dict[str, Any]) -> None:

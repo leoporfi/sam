@@ -181,6 +181,32 @@ class ConfigManager:
             "max_upload_size_mb": int(cls._get_env_with_warning("INTERFAZ_WEB_MAX_UPLOAD_SIZE_MB", 16)),
         }
 
+    @classmethod
+    def get_aa360_web_config(cls) -> Dict[str, Any]:
+        """
+        Obtiene la configuración de A360 específica para la Interfaz Web.
+        Hereda la URL y configuraciones base de la config general, pero
+        sobrescribe las credenciales con las específicas de la web.
+        """
+        # 1. Obtenemos la config base (URLs, timeouts, SSL)
+        base_config = cls.get_aa360_config()
+
+        # 2. Obtenemos las credenciales específicas
+        web_user = cls._get_env_with_warning("INTERFAZ_WEB_AA_USER")
+        web_apikey = cls._get_env_with_warning("INTERFAZ_WEB_AA_APIKEY")
+
+        # 3. Si existen, sobrescribimos. Si no, advertimos y usamos las default (o fallamos)
+        if web_user and web_apikey:
+            base_config["cr_user"] = web_user
+            base_config["cr_api_key"] = web_apikey
+        else:
+            logger.warning(
+                "ADVERTENCIA: No se definieron credenciales AA específicas para la Web (INTERFAZ_WEB_AA_USER). "
+                "Se usarán las credenciales globales, lo que puede causar conflictos de sesión."
+            )
+
+        return base_config
+
     # --- CONFIGURACIONES DE CLIENTES EXTERNOS ---
     @classmethod
     def get_mapa_robots(cls) -> Dict[str, str]:
@@ -258,6 +284,7 @@ class ConfigManager:
             "Clouders API": (["CLOUDERS_API_URL", "CLOUDERS_AUTH"], False),
             "Callback": (["CALLBACK_TOKEN"], False),
             "API Gateway": (["API_GATEWAY_URL", "API_GATEWAY_CLIENT_ID", "API_GATEWAY_CLIENT_SECRET"], False),
+            "Interfaz Web AA": (["INTERFAZ_WEB_AA_USER", "INTERFAZ_WEB_AA_APIKEY"], False),
         }
 
         for config_name, (keys, is_critical) in configs_a_verificar.items():

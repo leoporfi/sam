@@ -3,15 +3,15 @@ from typing import Optional
 
 from fastapi import HTTPException
 
-from sam.common.a360_client import AutomationAnywhereClient  # <--- Importar
+from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.database import DatabaseConnector
 
 
-# --- Proveedor de BD (Sin cambios) ---
+# --- Proveedor de BD ---
 class DBDependencyProvider:
     """
     Clase que actúa como un contenedor para nuestra dependencia de base de datos.
-    Esto resuelve el problema de cómo pasar la instancia creada en run_dashboard.py
+    Esto resuelve el problema de cómo pasar la instancia creada en run_web.py
     a los endpoints de la API que la necesitan a través de FastAPI `Depends`.
     """
 
@@ -19,7 +19,7 @@ class DBDependencyProvider:
         self._db_connector: Optional[DatabaseConnector] = None
 
     def set_db_connector(self, db_connector: DatabaseConnector):
-        """Este método es llamado una vez al inicio desde run_dashboard.py."""
+        """Este método es llamado una vez al inicio desde run_web.py."""
         self._db_connector = db_connector
 
     def get_db_connector(self) -> DatabaseConnector:
@@ -33,7 +33,7 @@ db_dependency_provider = DBDependencyProvider()
 get_db = db_dependency_provider.get_db_connector
 
 
-# --- NUEVO: Proveedor de Cliente A360 ---
+# --- Proveedor de Cliente A360 ---
 class AAClientDependencyProvider:
     def __init__(self):
         self._aa_client: Optional[AutomationAnywhereClient] = None
@@ -48,4 +48,4 @@ class AAClientDependencyProvider:
 
 
 aa_client_provider = AAClientDependencyProvider()
-get_aa_client = aa_client_provider.get_aa_client  # <--- Exportar
+get_aa_client = aa_client_provider.get_aa_client

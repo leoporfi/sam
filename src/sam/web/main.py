@@ -25,22 +25,26 @@ async def lifespan(app: FastAPI):
     logger.info("Iniciando aplicación y recursos...")
 
     # Obtener configs
-    # 1: Usar el método correcto get_aa_config()
-    aa_config = ConfigManager.get_aa360_config()
+    # # 1: Usar el método correcto get_aa_config()
+    # aa_config = ConfigManager.get_aa360_config()
 
-    # Crear cliente A360
-    # 2: Usar las claves correctas de tu configuración
-    aa_client = AutomationAnywhereClient(
-        cr_url=aa_config["cr_url"],
-        cr_user=aa_config["cr_user"],
-        cr_pwd=aa_config.get("cr_pwd"),
-        cr_api_key=aa_config.get("cr_api_key"),
-        api_timeout_seconds=aa_config.get("api_timeout_seconds", 60),
-    )
+    # # Crear cliente A360
+    # # 2: Usar las claves correctas de tu configuración
+    # aa_client = AutomationAnywhereClient(
+    #     cr_url=aa_config["cr_url"],
+    #     cr_user=aa_config["cr_user"],
+    #     cr_pwd=aa_config.get("cr_pwd"),
+    #     cr_api_key=aa_config.get("cr_api_key"),
+    #     api_timeout_seconds=aa_config.get("api_timeout_seconds", 60),
+    # )
 
-    # Inyectar el cliente A360 en el proveedor de dependencias
-    aa_client_provider.set_aa_client(aa_client)
-    logger.info("Cliente A360 inicializado y proveedor configurado.")
+    # # Inyectar el cliente A360 en el proveedor de dependencias
+    # aa_client_provider.set_aa_client(aa_client)
+    # logger.info("Cliente A360 inicializado y proveedor configurado.")
+
+    # Solo verificamos que esté listo (opcional, ya debería estarlo)
+    if not aa_client_provider.get_aa_client():
+        logger.warning("El cliente AA no fue inyectado correctamente desde run_web.py")
 
     # Inicializa el diccionario de estado
     app.state.sync_status = {"robots": "idle", "equipos": "idle", "global": "idle"}
