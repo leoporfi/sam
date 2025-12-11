@@ -14,7 +14,7 @@ SYNC_POLLING_INTERVAL_SECONDS = 3
 
 def use_equipos():
     """
-    Hook para gestionar el estado del dashboard de equipos.
+    Hook para gestionar equipos con recuperación de estado de Sync.
     """
     api_client = get_api_client()
     notification_ctx = use_context(NotificationContext)
@@ -30,7 +30,7 @@ def use_equipos():
     sort_by, set_sort_by = use_state("Equipo")
     sort_dir, set_sort_dir = use_state("asc")
 
-    # Referencia de montaje
+    # Safety Check
     is_mounted = use_ref(True)
 
     @use_effect(dependencies=[])
@@ -42,7 +42,6 @@ def use_equipos():
     async def load_equipos():
         if not is_mounted.current:
             return
-
         set_loading(True)
         set_error(None)
         try:
@@ -70,25 +69,16 @@ def use_equipos():
             if is_mounted.current and not asyncio.current_task().cancelled():
                 set_loading(False)
 
-    @use_callback
-    async def trigger_sync(event=None):
-        """Sincroniza solo equipos desde A360."""
-        if is_syncing or not is_mounted.current:
+    # --- Lógica centralizada de Monitoreo ---
+    async def monitor_active_sync():
+        if not is_mounted.current:
             return
-
-        set_is_syncing(True)
-        show_notification("Sincronizando equipos desde A360...", "info")
         try:
-            await api_client.trigger_sync_equipos()
-
-            if is_mounted.current:
-                show_notification("Sincronización iniciada. Esperando finalización...", "info")
-
-            # Bucle seguro
             while is_mounted.current:
                 await asyncio.sleep(SYNC_POLLING_INTERVAL_SECONDS)
                 try:
                     status_data = await api_client.get_sync_status()
+                    # A360 devuelve "idle" o "running" bajo la key "equipos"
                     if status_data.get("equipos") == "idle":
                         break
                 except Exception as poll_error:
@@ -96,23 +86,61 @@ def use_equipos():
                         show_notification(f"Error al consultar estado de sync: {poll_error}", "warning")
 
             if is_mounted.current:
-                show_notification("Sincronización de equipos completada. Actualizando...", "success")
+                show_notification("Sincronización de equipos completada.", "success")
                 await load_equipos()
                 set_is_syncing(False)
+        except Exception as e:
+            if is_mounted.current:
+                show_notification(f"Error monitoreando sync: {e}", "error")
+                set_is_syncing(False)
+
+    # --- Efecto: Recuperación de estado Sync al inicio ---
+    @use_effect(dependencies=[])
+    def check_sync_on_load():
+        async def check():
+            if not is_mounted.current:
+                return
+            try:
+                status = await api_client.get_sync_status()
+                if status.get("equipos") != "idle":
+                    if is_mounted.current:
+                        set_is_syncing(True)
+                        show_notification("Sincronización de equipos en curso...", "info")
+                        await monitor_active_sync()
+            except Exception:
+                pass
+
+        task = asyncio.create_task(check())
+        return lambda: task.cancel()
+
+    @use_callback
+    async def trigger_sync(event=None):
+        if is_syncing or not is_mounted.current:
+            return
+
+        set_is_syncing(True)
+        show_notification("Iniciando sincronización de equipos...", "info")
+        try:
+            await api_client.trigger_sync_equipos()
+            if is_mounted.current:
+                show_notification("Petición enviada. Esperando...", "info")
+
+            # Reutilizamos el monitor
+            await monitor_active_sync()
 
         except asyncio.CancelledError:
             raise
         except Exception as e:
             if is_mounted.current:
                 show_notification(f"Error al iniciar sincronización: {e}", "error")
-                set_error(f"Error en sincronización: {e}")
+                # set_error(f"Error en sincronización: {e}")
                 set_is_syncing(False)
         finally:
-            # Aseguramos quitar loading si quedó colgado, pero solo si sigue montado
             if is_mounted.current and not asyncio.current_task().cancelled():
-                set_loading(False)
+                # Solo por si acaso algo falló muy temprano
+                pass
 
-    # --- Efecto Unificado: Carga Inicial + Polling ---
+    # --- Ciclo de vida de Datos ---
     @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
     def manage_data_lifecycle():
         async def run_lifecycle():
@@ -125,10 +153,8 @@ def use_equipos():
             # 2. Bucle de Polling protegido
             while is_mounted.current:
                 await asyncio.sleep(POLLING_INTERVAL_SECONDS)
-
                 if is_syncing:
                     continue
-
                 try:
                     await load_equipos()
                 except asyncio.CancelledError:
@@ -155,17 +181,14 @@ def use_equipos():
     async def update_equipo_status(equipo_id: int, field: str, value: bool):
         if not is_mounted.current:
             return
-
         try:
             await api_client.update_equipo_status(equipo_id, {"field": field, "value": value})
             if is_mounted.current:
                 show_notification("Estado del equipo actualizado.", "success")
                 await load_equipos()
-        except asyncio.CancelledError:
-            raise
         except Exception as e:
             if is_mounted.current:
-                set_error(f"Error al actualizar estado del equipo {equipo_id}: {e}")
+                # set_error(f"Error al actualizar estado del equipo {equipo_id}: {e}")
                 show_notification(f"Error al actualizar: {e}", "error")
 
     total_pages = use_memo(lambda: max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE), [total_count])
