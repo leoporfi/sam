@@ -16,7 +16,7 @@ SYNC_POLLING_INTERVAL_SECONDS = 3
 
 def use_robots():
     """
-    Hook para gestionar el estado del dashboard de robots.
+    Hook para gestionar el estado del dashboard de robots con recuperación de estado de Sync.
     """
     api_client = get_api_client()
     notification_ctx = use_context(NotificationContext)
@@ -33,7 +33,7 @@ def use_robots():
     sort_by, set_sort_by = use_state("Robot")
     sort_dir, set_sort_dir = use_state("asc")
 
-    # Referencia para saber si el componente está montado
+    # Safety Check: Referencia de montaje
     is_mounted = use_ref(True)
 
     @use_effect(dependencies=[])
@@ -44,7 +44,6 @@ def use_robots():
     # --- Función de carga de datos ---
     @use_callback
     async def load_robots():
-        # [CHECK] Si ya no existe la UI, abortamos inmediatamente
         if not is_mounted.current:
             return
 
@@ -62,7 +61,6 @@ def use_robots():
 
             data = await api_client.get_robots(api_params)
 
-            # [CHECK] Solo actualizamos estado si seguimos montados
             if is_mounted.current:
                 set_robots(data.get("robots", []))
                 set_total_count(data.get("total_count", 0))
@@ -74,11 +72,59 @@ def use_robots():
                 set_error(str(e))
                 show_notification(f"Error al cargar robots: {e}", "error")
         finally:
-            # [CHECK] Evitar setear loading en un componente desmontado
             if is_mounted.current and not asyncio.current_task().cancelled():
                 set_loading(False)
 
-    # --- Efecto Unificado: Carga Inicial + Polling ---
+    # --- Lógica centralizada de Monitoreo de Sync ---
+    async def monitor_active_sync():
+        """Bucle que espera a que la sincronización termine."""
+        if not is_mounted.current:
+            return
+
+        try:
+            while is_mounted.current:
+                await asyncio.sleep(SYNC_POLLING_INTERVAL_SECONDS)
+                try:
+                    status_data = await api_client.get_sync_status()
+                    # Si ya no está corriendo, rompemos el bucle
+                    if status_data.get("robots") == "idle":
+                        break
+                except Exception as poll_error:
+                    if is_mounted.current:
+                        print(f"Warn polling sync: {poll_error}")
+
+            # Al terminar el bucle, actualizamos todo
+            if is_mounted.current:
+                show_notification("Sincronización completada. Actualizando lista...", "success")
+                await load_robots()
+                set_is_syncing(False)
+        except Exception as e:
+            if is_mounted.current:
+                show_notification(f"Error durante monitoreo de sync: {e}", "error")
+                set_is_syncing(False)
+
+    # --- Efecto: Recuperación de estado de Sync al cargar página ---
+    @use_effect(dependencies=[])
+    def check_sync_on_load():
+        async def check():
+            if not is_mounted.current:
+                return
+            try:
+                # Preguntar al backend si ya está trabajando
+                status_data = await api_client.get_sync_status()
+                if status_data.get("robots") != "idle":
+                    if is_mounted.current:
+                        set_is_syncing(True)
+                        show_notification("Sincronización en curso detectada (Background)...", "info")
+                        # Retomamos el monitoreo
+                        await monitor_active_sync()
+            except Exception:
+                pass  # Fallo silencioso en check inicial para no molestar
+
+        task = asyncio.create_task(check())
+        return lambda: task.cancel()
+
+    # --- Efecto: Carga Inicial + Polling de Datos ---
     @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
     def manage_data_lifecycle():
         async def run_lifecycle():
@@ -119,6 +165,7 @@ def use_robots():
         set_current_page(1)
         set_filters(new_filters_func)
 
+    # --- Acción manual de Sync ---
     @use_callback
     async def trigger_sync(event=None):
         """Sincroniza solo robots desde A360."""
@@ -128,31 +175,21 @@ def use_robots():
         set_is_syncing(True)
         show_notification("Sincronizando robots desde A360...", "info")
         try:
+            # 1. Lanzar la orden
             await api_client.trigger_sync_robots()
 
             if is_mounted.current:
                 show_notification("Sincronización iniciada. Esperando finalización...", "info")
 
-            # Bucle seguro que muere si el componente muere
-            while is_mounted.current:
-                await asyncio.sleep(SYNC_POLLING_INTERVAL_SECONDS)
-                try:
-                    status_data = await api_client.get_sync_status()
-                    if status_data.get("robots") == "idle":
-                        break
-                except Exception as poll_error:
-                    if is_mounted.current:
-                        show_notification(f"Error al consultar estado de sync: {poll_error}", "warning")
-
-            if is_mounted.current:
-                show_notification("Sincronización completada. Actualizando lista...", "success")
-                await load_robots()
-                set_is_syncing(False)
+            # 2. Esperar (usando la misma lógica que el recovery)
+            await monitor_active_sync()
 
         except Exception as e:
             if is_mounted.current:
+                #  Si es 409 Conflict, significa que ya corría.
+                # Podríamos manejarlo soft, pero el monitor de inicio ya debería haberlo atrapado.
                 show_notification(f"Error al iniciar sincronización: {e}", "error")
-                set_error(f"Error en sincronización: {e}")
+                # set_error(f"Error en sincronización: {e}")
                 set_is_syncing(False)
 
     @use_callback
