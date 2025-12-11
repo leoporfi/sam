@@ -1,7 +1,7 @@
 # sam/web/hooks/use_equipos_hook.py
 import asyncio
 
-from reactpy import use_callback, use_context, use_effect, use_memo, use_state
+from reactpy import use_callback, use_context, use_effect, use_memo, use_ref, use_state
 
 from ..api.api_client import get_api_client
 from ..shared.notifications import NotificationContext
@@ -30,8 +30,19 @@ def use_equipos():
     sort_by, set_sort_by = use_state("Equipo")
     sort_dir, set_sort_dir = use_state("asc")
 
+    # Referencia de montaje
+    is_mounted = use_ref(True)
+
+    @use_effect(dependencies=[])
+    def mount_lifecycle():
+        is_mounted.current = True
+        return lambda: setattr(is_mounted, "current", False)
+
     @use_callback
     async def load_equipos():
+        if not is_mounted.current:
+            return
+
         set_loading(True)
         set_error(None)
         try:
@@ -44,48 +55,61 @@ def use_equipos():
             }
             api_params = {k: v for k, v in api_params.items() if v is not None}
             data = await api_client.get_equipos(api_params)
-            set_equipos(data.get("equipos", []))
-            set_total_count(data.get("total_count", 0))
+
+            if is_mounted.current:
+                set_equipos(data.get("equipos", []))
+                set_total_count(data.get("total_count", 0))
+
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            set_error(str(e))
-            notification_ctx["show_notification"](f"Error al cargar equipos: {e}", "error")
+            if is_mounted.current:
+                set_error(str(e))
+                show_notification(f"Error al cargar equipos: {e}", "error")
         finally:
-            if not asyncio.current_task().cancelled():
+            if is_mounted.current and not asyncio.current_task().cancelled():
                 set_loading(False)
 
     @use_callback
     async def trigger_sync(event=None):
         """Sincroniza solo equipos desde A360."""
-        if is_syncing:
+        if is_syncing or not is_mounted.current:
             return
+
         set_is_syncing(True)
         show_notification("Sincronizando equipos desde A360...", "info")
         try:
             await api_client.trigger_sync_equipos()
-            show_notification("Sincronización iniciada. Esperando finalización...", "info")
 
-            while True:
+            if is_mounted.current:
+                show_notification("Sincronización iniciada. Esperando finalización...", "info")
+
+            # Bucle seguro
+            while is_mounted.current:
                 await asyncio.sleep(SYNC_POLLING_INTERVAL_SECONDS)
                 try:
                     status_data = await api_client.get_sync_status()
                     if status_data.get("equipos") == "idle":
                         break
                 except Exception as poll_error:
-                    show_notification(f"Error al consultar estado de sync: {poll_error}", "warning")
+                    if is_mounted.current:
+                        show_notification(f"Error al consultar estado de sync: {poll_error}", "warning")
 
-            show_notification("Sincronización de equipos completada. Actualizando...", "success")
-            await load_equipos()
-            set_is_syncing(False)
+            if is_mounted.current:
+                show_notification("Sincronización de equipos completada. Actualizando...", "success")
+                await load_equipos()
+                set_is_syncing(False)
+
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            show_notification(f"Error al iniciar sincronización: {e}", "error")
-            set_error(f"Error en sincronización: {e}")
-            set_is_syncing(False)
+            if is_mounted.current:
+                show_notification(f"Error al iniciar sincronización: {e}", "error")
+                set_error(f"Error en sincronización: {e}")
+                set_is_syncing(False)
         finally:
-            if not asyncio.current_task().cancelled():
+            # Aseguramos quitar loading si quedó colgado, pero solo si sigue montado
+            if is_mounted.current and not asyncio.current_task().cancelled():
                 set_loading(False)
 
     # --- Efecto Unificado: Carga Inicial + Polling ---
@@ -98,11 +122,10 @@ def use_equipos():
             except asyncio.CancelledError:
                 return
 
-            # 2. Bucle de Polling
-            while True:
+            # 2. Bucle de Polling protegido
+            while is_mounted.current:
                 await asyncio.sleep(POLLING_INTERVAL_SECONDS)
 
-                # Evitar conflicto si hay sync manual
                 if is_syncing:
                     continue
 
@@ -130,15 +153,20 @@ def use_equipos():
 
     @use_callback
     async def update_equipo_status(equipo_id: int, field: str, value: bool):
+        if not is_mounted.current:
+            return
+
         try:
             await api_client.update_equipo_status(equipo_id, {"field": field, "value": value})
-            show_notification("Estado del equipo actualizado.", "success")
-            await load_equipos()
+            if is_mounted.current:
+                show_notification("Estado del equipo actualizado.", "success")
+                await load_equipos()
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            set_error(f"Error al actualizar estado del equipo {equipo_id}: {e}")
-            show_notification(f"Error al actualizar: {e}", "error")
+            if is_mounted.current:
+                set_error(f"Error al actualizar estado del equipo {equipo_id}: {e}")
+                show_notification(f"Error al actualizar: {e}", "error")
 
     total_pages = use_memo(lambda: max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE), [total_count])
 

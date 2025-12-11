@@ -1,7 +1,7 @@
 import asyncio
 from typing import Callable, Dict, List, Optional
 
-from reactpy import use_callback, use_context, use_effect, use_memo, use_state
+from reactpy import use_callback, use_context, use_effect, use_memo, use_ref, use_state
 
 from ..api.api_client import get_api_client
 from ..shared.notifications import NotificationContext
@@ -26,7 +26,18 @@ def use_schedules():
     sort_by, set_sort = use_state("Robot")
     sort_dir, set_dir = use_state("asc")
 
+    # Safety Check
+    is_mounted = use_ref(True)
+
+    @use_effect(dependencies=[])
+    def mount_lifecycle():
+        is_mounted.current = True
+        return lambda: setattr(is_mounted, "current", False)
+
     async def load_schedules():
+        if not is_mounted.current:
+            return
+
         set_loading(True)
         set_error(None)
         try:
@@ -44,15 +55,19 @@ def use_schedules():
                 params["search"] = filters["search"]
 
             data = await api.get_schedules(params)
-            set_schedules(data.get("schedules", []))
-            set_total(data.get("total_count", 0))
+
+            if is_mounted.current:
+                set_schedules(data.get("schedules", []))
+                set_total(data.get("total_count", 0))
+
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            set_error(str(e))
-            show(f"Error al cargar programaciones: {e}", "error")
+            if is_mounted.current:
+                set_error(str(e))
+                show(f"Error al cargar programaciones: {e}", "error")
         finally:
-            if not asyncio.current_task().cancelled():
+            if is_mounted.current and not asyncio.current_task().cancelled():
                 set_loading(False)
 
     @use_effect(dependencies=[filters, page])
@@ -60,24 +75,26 @@ def use_schedules():
         task = asyncio.create_task(load_schedules())
         return lambda: task.cancel()
 
-    @use_effect(dependencies=[])
-    def _initial_load():
-        task = asyncio.create_task(load_schedules())
-        return lambda: task.cancel()
-
+    # --- Polling desactivado o activado, igual necesita protección ---
     @use_effect(dependencies=[])
     def _setup_polling():
         async def poll_loop():
-            while True:
+            # While seguro
+            while is_mounted.current:
                 await asyncio.sleep(POLL_INTERVAL)
                 try:
+                    # Reutilizamos lógica pero manual para no llamar a load_schedules (que toca loading)
+                    # o simplemente llamamos a load_schedules si queremos loading spinner.
+                    # Aquí lo simplifico a llamar a la API directo para no flashear loading:
                     params = {**filters, "page": page, "size": PAGE_SIZE}
                     data = await api.get_schedules(params)
-                    set_schedules(data.get("schedules", []))
-                    set_total(data.get("total_count", 0))
+                    if is_mounted.current:
+                        set_schedules(data.get("schedules", []))
+                        set_total(data.get("total_count", 0))
                 except Exception:
                     pass
 
+        # Si decides descomentar el polling:
         # task = asyncio.create_task(poll_loop())
         # return lambda: task.cancel()
         pass
@@ -85,18 +102,25 @@ def use_schedules():
     @use_callback
     def toggle_active(schedule_id: int, activo: bool):
         async def _logic():
+            if not is_mounted.current:
+                return
             try:
                 await api.toggle_schedule_status(schedule_id, activo)
-                show("Estado cambiado", "success")
-                await load_schedules()
+                if is_mounted.current:
+                    show("Estado cambiado", "success")
+                    await load_schedules()
             except Exception as e:
-                show(str(e), "error")
-                await load_schedules()
+                if is_mounted.current:
+                    show(str(e), "error")
+                    await load_schedules()
 
         asyncio.create_task(_logic())
 
     @use_callback
     async def save_schedule(data: dict):
+        if not is_mounted.current:
+            return
+
         schedule_id = data.get("ProgramacionId")
         if not schedule_id:
             show("No se pudo guardar: ID de programación no encontrado.", "error")
@@ -104,14 +128,19 @@ def use_schedules():
 
         try:
             await api.update_schedule_details(schedule_id, data)
-            show("Programación actualizada", "success")
-            await load_schedules()
+            if is_mounted.current:
+                show("Programación actualizada", "success")
+                await load_schedules()
         except Exception as e:
-            show(f"Error al guardar: {e}", "error")
+            if is_mounted.current:
+                show(f"Error al guardar: {e}", "error")
             raise
 
     @use_callback
     async def save_schedule_equipos(schedule_id: int, equipo_ids: List[int], on_success: Optional[Callable] = None):
+        if not is_mounted.current:
+            return
+
         if not schedule_id:
             show("No se pudo guardar: ID de programación no encontrado.", "error")
             raise ValueError("ID de programación no encontrado")
@@ -119,11 +148,13 @@ def use_schedules():
         try:
             # Llama al API
             await api.update_schedule_devices(schedule_id, equipo_ids)
-            show("Equipos de la programación actualizados", "success")
-            await load_schedules()
+            if is_mounted.current:
+                show("Equipos de la programación actualizados", "success")
+                await load_schedules()
 
         except Exception as e:
-            show(f"Error al guardar equipos: {e}", "error")
+            if is_mounted.current:
+                show(f"Error al guardar equipos: {e}", "error")
             raise
 
     total_pages = use_memo(lambda: max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE), [total, PAGE_SIZE])
