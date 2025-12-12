@@ -18,13 +18,15 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
     notification_ctx = use_context(NotificationContext)
     is_edit_mode = pool and pool.get("PoolId") is not None
 
-    if pool is None:
-        return None
-
     @use_effect(dependencies=[pool])
     def sync_form_state():
         if pool is not None:
             set_form_data(pool if is_edit_mode else DEFAULT_POOL_STATE)
+        else:
+            set_form_data(DEFAULT_POOL_STATE)
+
+    if pool is None:
+        return None
 
     def handle_change(field, value):
         set_form_data(lambda old: {**old, field: value})

@@ -64,7 +64,7 @@ class Desplegador:
             logger.info("Lanzador en PAUSA operativa configurada. Omitiendo ciclo.")
             return []
 
-        logger.debug("Buscando robots para ejecutar...")
+        logger.info("Buscando robots para ejecutar...")
         robots_a_ejecutar = self._db_connector.obtener_robots_ejecutables()
 
         if not robots_a_ejecutar:
