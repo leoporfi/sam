@@ -35,7 +35,7 @@ class Balanceo:
         self.cooling_manager = CoolingManager(cooling_period_seconds=cooling_period)
         self.aislamiento_estricto_pool = self.cfg_balanceador_specifics.get("aislamiento_estricto_pool", True)
         self._lock = threading.RLock()
-        logger.info(
+        logger.debug(
             f"Modo de aislamiento estricto de pools: {'Activado' if self.aislamiento_estricto_pool else 'Desactivado'}"
         )
 
@@ -174,7 +174,7 @@ class Balanceo:
         """
         Recopila toda la información necesaria de la base de datos para tomar decisiones.
         """
-        logger.info("Obteniendo estado inicial global del sistema...")
+        logger.debug("Obteniendo estado inicial global del sistema...")
 
         robots_activos_query = "SELECT RobotId, Robot, EsOnline, MinEquipos, MaxEquipos, PrioridadBalanceo, TicketsPorEquipoAdicional, PoolId FROM dbo.Robots WHERE Activo = 1"
         mapa_config_robots = {
@@ -404,7 +404,7 @@ class Balanceo:
             robot_id, estado_global["carga_trabajo_por_robot"].get(robot_id, 0)
         )
         if not puede_desasignar:
-            logger.info(f"Desasignación omitida por CoolingManager para RobotId {robot_id}. Just: {justificacion}")
+            logger.debug(f"Desasignación omitida por CoolingManager para RobotId {robot_id}. Just: {justificacion}")
             return False
         query = "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ? AND (EsProgramado = 0 OR EsProgramado IS NULL) AND (Reservado = 0 OR Reservado IS NULL)"
         try:

@@ -40,7 +40,7 @@ def _graceful_shutdown(signum: int, frame: Any) -> None:
         logging.warning("Señal de cierre duplicada recibida. Ya se está deteniendo.")
         return
     _shutdown_initiated = True
-    logging.info(f"Señal de parada recibida (Señal: {signum}). Iniciando cierre ordenado...")
+    logging.debug(f"Señal de parada recibida (Señal: {signum}). Iniciando cierre ordenado...")
 
     if _server_instance:
         _server_instance.should_exit = True
@@ -68,7 +68,7 @@ def _setup_signals() -> None:
 
 def _setup_dependencies() -> Dict[str, Any]:
     """El servicio Callback no tiene dependencias pre-inicializadas en el runner."""
-    logging.info("Las dependencias de Callback son gestionadas por FastAPI (lifespan).")
+    logging.debug("Las dependencias de Callback son gestionadas por FastAPI (lifespan).")
     return {}
 
 
@@ -84,7 +84,7 @@ def _run_service(deps: Dict[str, Any]) -> None:
     workers = server_config.get("threads", 1)
     log_level = log_config.get("level_str", "info").lower()
 
-    logging.info(f"Configuración del servidor: http://{host}:{port} con {workers} worker(s)...")
+    logging.debug(f"Configuración del servidor: http://{host}:{port} con {workers} worker(s)...")
 
     config = uvicorn.Config(
         "sam.callback.service.main:app",
@@ -95,13 +95,13 @@ def _run_service(deps: Dict[str, Any]) -> None:
     )
     _server_instance = uvicorn.Server(config)
 
-    logging.info("Servidor Uvicorn iniciado correctamente.")
+    logging.debug("Servidor Uvicorn iniciado correctamente.")
     _server_instance.run()
 
 
 def _cleanup_resources() -> None:
     """Uvicorn maneja su propia limpieza."""
-    logging.info(f"Servidor Uvicorn detenido. Servicio {_service_name.upper()} ha concluido.")
+    logging.debug(f"Servidor Uvicorn detenido. Servicio {_service_name.upper()} ha concluido.")
 
 
 # ---------- Punto de Entrada Principal ----------
