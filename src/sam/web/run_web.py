@@ -5,12 +5,19 @@ Punto de entrada único del servicio Web (Servidor Uvicorn).
 
 from __future__ import annotations
 
-import asyncio
-import logging
+# [CORRECCIÓN CRÍTICA] Establecer política ANTES de cualquier import que use asyncio
 import platform
-import signal
 import sys
 from pathlib import Path
+
+if platform.system() == "Windows":
+    import asyncio
+
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+# Ahora sí, imports regulares
+import logging
+import signal
 from typing import Any, Dict, Optional
 
 import uvicorn
@@ -71,15 +78,11 @@ def _setup_signals() -> None:
         signal.signal(signal.SIGTERM, _graceful_shutdown)
 
 
-# ---------- Lógica del Servicio ----------
-
-
 def _setup_dependencies() -> Dict[str, Any]:
     """Crea y retorna las dependencias específicas del servicio (la BD)."""
     global _db_connector
 
     logging.debug("Creando dependencia DatabaseConnector...")
-
     cfg_sql_sam = ConfigManager.get_sql_server_config("SQL_SAM")
     _db_connector = DatabaseConnector(
         servidor=cfg_sql_sam["servidor"],
@@ -87,6 +90,7 @@ def _setup_dependencies() -> Dict[str, Any]:
         usuario=cfg_sql_sam["usuario"],
         contrasena=cfg_sql_sam["contrasena"],
     )
+
     logging.debug("Creando dependencia AutomationAnywhereClient (Config Web)...")
     # 1. Usamos la config específica que busca INTERFAZ_WEB_AA_USER
     aa_config = ConfigManager.get_aa360_web_config()
@@ -98,12 +102,12 @@ def _setup_dependencies() -> Dict[str, Any]:
         cr_pwd=aa_config.get("cr_pwd"),
         cr_api_key=aa_config.get("cr_api_key"),
         cr_api_timeout=aa_config.get("api_timeout_seconds", 60),
-        # Pasamos otros parámetros opcionales si existen en la config
         callback_url_deploy=aa_config.get("callback_url_deploy"),
     )
 
     # 3. Inyectamos la dependencia en el proveedor global
     aa_client_provider.set_aa_client(aa_client)
+
     return {"db_connector": _db_connector, "aa_client": aa_client}
 
 
@@ -136,8 +140,12 @@ def _run_service(deps: Dict[str, Any]) -> None:
         loop="asyncio",  # Evita el loop 'auto' que elige Proactor en Windows
     )
     _server_instance = uvicorn.Server(config)
+    # # Verificar el loop antes de iniciar
+    # import asyncio
 
-    logging.debug("Servidor Uvicorn iniciado correctamente.")
+    # loop = asyncio.get_event_loop()
+    # logging.info(f"Event loop type: {type(loop).__name__}")
+    logging.info("Servidor Uvicorn iniciado correctamente.")
     _server_instance.run()
 
 
@@ -164,16 +172,6 @@ def main(service_name: str) -> None:
     """Punto de entrada síncrono llamado por __main__.py."""
     global _service_name
 
-    # [CORRECCIÓN CRÍTICA PARA WINDOWS]
-    # Cambia la política del Loop ANTES de hacer cualquier cosa async
-    if platform.system() == "Windows":
-        try:
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            logging.info("Política de EventLoop de Windows cambiada a WindowsSelectorEventLoopPolicy.")
-        except Exception as e:
-            logging.warning(f"No se pudo establecer la política de EventLoop: {e}")
-
-    # Estandarizar el nombre del servicio
     _service_name = "web" if service_name == "interfaz_web" else service_name
 
     # El logging se debe iniciar *antes* que nada
