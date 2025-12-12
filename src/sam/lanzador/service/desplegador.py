@@ -171,7 +171,6 @@ class Desplegador:
                             f"después de {max_intentos} intentos. Dispositivo offline."
                         )
                         break
-
                 elif status_code == 400:
                     detected_error_type = "400"
                     # ERROR PERMANENTE (Bad Request)
