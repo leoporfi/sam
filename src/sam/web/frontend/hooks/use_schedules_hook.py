@@ -34,6 +34,7 @@ def use_schedules():
         is_mounted.current = True
         return lambda: setattr(is_mounted, "current", False)
 
+    @use_callback
     async def load_schedules():
         if not is_mounted.current:
             return
@@ -72,32 +73,29 @@ def use_schedules():
 
     @use_effect(dependencies=[filters, page])
     def _load_on_filters_or_page_change():
-        task = asyncio.create_task(load_schedules())
+        async def load():
+            await load_schedules()
+
+        task = asyncio.create_task(load())
         return lambda: task.cancel()
 
-    # --- Polling desactivado o activado, igual necesita protección ---
-    @use_effect(dependencies=[])
-    def _setup_polling():
-        async def poll_loop():
-            # While seguro
-            while is_mounted.current:
-                await asyncio.sleep(POLL_INTERVAL)
-                try:
-                    # Reutilizamos lógica pero manual para no llamar a load_schedules (que toca loading)
-                    # o simplemente llamamos a load_schedules si queremos loading spinner.
-                    # Aquí lo simplifico a llamar a la API directo para no flashear loading:
-                    params = {**filters, "page": page, "size": PAGE_SIZE}
-                    data = await api.get_schedules(params)
-                    if is_mounted.current:
-                        set_schedules(data.get("schedules", []))
-                        set_total(data.get("total_count", 0))
-                except Exception:
-                    pass
-
-        # Si decides descomentar el polling:
-        # task = asyncio.create_task(poll_loop())
-        # return lambda: task.cancel()
-        pass
+    # --- Polling desactivado ---
+    # Si se necesita reactivar el polling, descomentar el siguiente bloque:
+    # @use_effect(dependencies=[])
+    # def _setup_polling():
+    #     async def poll_loop():
+    #         while is_mounted.current:
+    #             await asyncio.sleep(POLL_INTERVAL)
+    #             try:
+    #                 params = {**filters, "page": page, "size": PAGE_SIZE}
+    #                 data = await api.get_schedules(params)
+    #                 if is_mounted.current:
+    #                     set_schedules(data.get("schedules", []))
+    #                     set_total(data.get("total_count", 0))
+    #             except Exception:
+    #                 pass
+    #     task = asyncio.create_task(poll_loop())
+    #     return lambda: task.cancel()
 
     @use_callback
     def toggle_active(schedule_id: int, activo: bool):
