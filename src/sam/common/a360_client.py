@@ -2,7 +2,7 @@
 import asyncio
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 import urllib3
@@ -147,6 +147,13 @@ class AutomationAnywhereClient:
     # --- Métodos Públicos Asíncronos ---
 
     async def obtener_devices(self) -> List[Dict]:
+        """
+        Obtiene la lista de dispositivos conectados desde Automation Anywhere.
+
+        Returns:
+            Lista de diccionarios con información completa de cada dispositivo.
+            Estructura según API v2 de A360.
+        """
         logger.info("Obteniendo devices de A360...")
         payload = {"filter": {"operator": "eq", "field": "status", "value": "CONNECTED"}}
         devices_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_DEVICES_LIST_V2, payload)
@@ -160,7 +167,13 @@ class AutomationAnywhereClient:
         return usuarios_api
 
     async def obtener_devices_old(self) -> List[Dict]:
-        logger.info("Obteniendo devices de A360...")
+        """
+        [DEPRECATED] Versión legacy que retorna estructura mapeada custom.
+
+        Usar `obtener_devices()` para obtener la estructura completa de la API.
+        Este método se mantendrá solo para compatibilidad con código existente.
+        """
+        logger.warning("Método obtener_devices_old() está deprecado. Use obtener_devices()")
         payload = {"filter": {"operator": "eq", "field": "status", "value": "CONNECTED"}}
         devices_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_DEVICES_LIST_V2, payload)
 
@@ -254,30 +267,33 @@ class AutomationAnywhereClient:
         user_ids: List[int],
         bot_input: Optional[Dict] = None,
         callback_auth_headers: Optional[Dict[str, str]] = None,
-    ) -> Dict:
+    ) -> List[Dict[str, Any]]:
+        """
+        Despliega un bot usando la API v3 (LEGACY - usar v4 para nuevos desarrollos).
+
+        Las excepciones HTTP (400, 412, etc.) se propagan al llamador.
+        """
         logger.info(f"Desplegando bot v3 con FileID: {file_id} en UserIDs: {user_ids}")
-        payload = dict(fileId=file_id, runAsUserIds=user_ids)
+
+        payload = {"fileId": file_id, "runAsUserIds": user_ids}
+
         if bot_input:
             payload["botInput"] = bot_input
 
-        # Crear la sección callbackInfo solo si se ha definido una URL de callback.
         if self.callback_url_deploy:
             payload["callbackInfo"] = {"url": self.callback_url_deploy}
-            logger.debug(f"Callback URL de despliegue configurada: {self.callback_url_deploy}")
+            logger.debug(f"Callback URL configurada: {self.callback_url_deploy}")
 
-            # Si además hay cabeceras, las añadimos al objeto ya creado.
             if callback_auth_headers:
                 payload["callbackInfo"]["headers"] = callback_auth_headers
                 logger.debug("Cabeceras de autorización añadidas al callback.")
 
-        try:
-            logger.debug(f"Payload de despliegue: {payload}")
-            response = await self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V3, json=payload)
-            logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
-            return response
-        except Exception as e:
-            logger.error(f"Fallo en el despliegue del bot {file_id}: {e}", exc_info=True)
-            return {"error": str(e)}
+        logger.debug(f"Payload de despliegue: {payload}")
+
+        response = await self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V3, json=payload)
+
+        logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
+        return response
 
     async def desplegar_bot_v4(
         self,
@@ -285,38 +301,51 @@ class AutomationAnywhereClient:
         user_ids: List[int],
         bot_input: Optional[Dict] = None,
         callback_auth_headers: Optional[Dict[str, str]] = None,
-    ) -> Dict:
-        logger.info(f"Desplegando bot v4 con FileID: {file_id} en UserIDs: {user_ids}")
+    ) -> List[Dict[str, Any]]:
+        """
+        Despliega un bot usando la API v4 (/automations/deploy).
 
-        unattendedRequest = dict(runAsUserIds=user_ids, deviceUsageType="RUN_ONLY_ON_DEFAULT_DEVICE")
-        payload = dict(botId=file_id, unattendedRequest=unattendedRequest)
+        IMPORTANTE: Este método NO captura excepciones (Clean Code).
+        Si la API responde con error (400, 412, 500), la excepción httpx.HTTPStatusError
+        subirá directamente al 'Desplegador' para ser gestionada allí (reintentos/alertas).
 
+        Estructura según documentación oficial AA v4:
+        - botId (no automationId)
+        - unattendedRequest/attendedRequest/headlessRequest
+        - botInput (opcional)
+        - callbackInfo (opcional)
+        """
+        logger.info(f"Desplegando bot v4 con BotID: {file_id} en UserIDs: {user_ids}")
+
+        # Estructura UnattendedRequest
+        unattended_request = {"runAsUserIds": user_ids, "deviceUsageType": "RUN_ONLY_ON_DEFAULT_DEVICE"}
+
+        payload = {
+            "botId": file_id,
+            "unattendedRequest": unattended_request,
+        }
+
+        # Agregar bot inputs si existen
         if bot_input:
             payload["botInput"] = bot_input
 
-        # Crear la sección callbackInfo solo si se ha definido una URL de callback.
+        # Agregar callback info si está configurado
         if self.callback_url_deploy:
             payload["callbackInfo"] = {"url": self.callback_url_deploy}
-            logger.debug(f"Callback URL de despliegue configurada: {self.callback_url_deploy}")
+            logger.debug(f"Callback URL configurada: {self.callback_url_deploy}")
 
-            # Si además hay cabeceras, las añadimos al objeto ya creado.
             if callback_auth_headers:
                 payload["callbackInfo"]["headers"] = callback_auth_headers
                 logger.debug("Cabeceras de autorización añadidas al callback.")
 
-        try:
-            logger.debug(f"Payload de despliegue: {payload}")
-            response = await self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V4, json=payload)
-            logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
-            return response
-        except Exception as e:
-            if isinstance(e, httpx.HTTPStatusError) and e.response.status_code in (400, 412):
-                logger.warning(f"Fallo en el despliegue del bot {file_id}: {e}")
-            elif isinstance(e, (httpx.ReadTimeout, httpx.TimeoutException)):
-                logger.warning(f"Timeout en despliegue del bot {file_id}")
-            else:
-                logger.error(f"Fallo en el despliegue del bot {file_id}: {e}", exc_info=True)
-            return {"error": str(e)}
+        logger.debug(f"Payload de despliegue: {payload}")
+
+        # Si falla, la excepción sube automáticamente al Desplegador
+        response = await self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V4, json=payload)
+
+        logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
+
+        return response
 
     async def close(self):
         """Cierra la sesión del cliente httpx de forma segura."""
