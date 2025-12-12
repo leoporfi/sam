@@ -39,13 +39,13 @@ class SincronizadorComun:
             users_task = self._aa_client.obtener_usuarios_detallados()
 
             robots_api, devices_api, users_api = await asyncio.gather(robots_task, devices_task, users_task)
-            logger.info(
+            logger.debug(
                 f"Datos recibidos de A360: {len(robots_api)} robots, {len(devices_api)} dispositivos, {len(users_api)} usuarios."
             )
 
             equipos_finales = self._procesar_y_mapear_equipos(devices_api, users_api)
 
-            logger.info("Actualizando base de datos de SAM...")
+            logger.debug("Actualizando base de datos de SAM...")
             self._db_connector.merge_robots(robots_api)
             self._db_connector.merge_equipos(equipos_finales)
 
@@ -75,7 +75,7 @@ class SincronizadorComun:
             and "id" in user
             and any(lic in self._valid_licenses for lic in user.get("licenseFeatures", []))
         }
-        logger.info(f"Se filtraron {len(users_by_id)} usuarios (de {len(users_list)}) con licencias válidas.")
+        logger.debug(f"Se filtraron {len(users_by_id)} usuarios (de {len(users_list)}) con licencias válidas.")
 
         equipos_procesados = []
         for device in devices_list:

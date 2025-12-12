@@ -2,7 +2,7 @@
 import asyncio
 from typing import Dict
 
-from reactpy import use_callback, use_context, use_effect, use_memo, use_state
+from reactpy import use_callback, use_context, use_effect, use_memo, use_ref, use_state
 
 from ..api.api_client import get_api_client
 from ..shared.notifications import NotificationContext
@@ -16,8 +16,7 @@ SYNC_POLLING_INTERVAL_SECONDS = 3
 
 def use_robots():
     """
-    Hook para gestionar el estado del dashboard de robots, incluyendo la carga,
-    filtrado, paginación, ordenación y actualización automática.
+    Hook para gestionar el estado del dashboard de robots con recuperación de estado de Sync.
     """
     api_client = get_api_client()
     notification_ctx = use_context(NotificationContext)
@@ -26,7 +25,7 @@ def use_robots():
     # --- Estados del hook ---
     robots, set_robots = use_state([])
     loading, set_loading = use_state(True)
-    is_syncing, set_is_syncing = use_state(False)  # <-- NUEVO ESTADO
+    is_syncing, set_is_syncing = use_state(False)
     error, set_error = use_state(None)
     total_count, set_total_count = use_state(0)
     filters, set_filters = use_state(INITIAL_FILTERS)
@@ -34,9 +33,20 @@ def use_robots():
     sort_by, set_sort_by = use_state("Robot")
     sort_dir, set_sort_dir = use_state("asc")
 
+    # Safety Check: Referencia de montaje
+    is_mounted = use_ref(True)
+
+    @use_effect(dependencies=[])
+    def mount_lifecycle():
+        is_mounted.current = True
+        return lambda: setattr(is_mounted, "current", False)
+
     # --- Función de carga de datos ---
     @use_callback
     async def load_robots():
+        if not is_mounted.current:
+            return
+
         set_loading(True)
         set_error(None)
         try:
@@ -50,46 +60,98 @@ def use_robots():
             api_params = {k: v for k, v in api_params.items() if v is not None}
 
             data = await api_client.get_robots(api_params)
-            set_robots(data.get("robots", []))
-            set_total_count(data.get("total_count", 0))
+
+            if is_mounted.current:
+                set_robots(data.get("robots", []))
+                set_total_count(data.get("total_count", 0))
+
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
-            set_error(str(e))
-            show_notification(f"Error al cargar robots: {e}", "error")
+            if is_mounted.current:
+                set_error(str(e))
+                show_notification(f"Error al cargar robots: {e}", "error")
         finally:
-            set_loading(False)
+            if is_mounted.current and not asyncio.current_task().cancelled():
+                set_loading(False)
 
-    @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
-    def setup_load():
-        task = asyncio.create_task(load_robots())
-        return lambda: task.cancel()
+    # --- Lógica centralizada de Monitoreo de Sync ---
+    async def monitor_active_sync():
+        """Bucle que espera a que la sincronización termine."""
+        if not is_mounted.current:
+            return
 
-    # --- Efectos y Manejadores ---
-    # use_effect(load_robots, [filters, current_page, sort_by, sort_dir])
+        try:
+            while is_mounted.current:
+                await asyncio.sleep(SYNC_POLLING_INTERVAL_SECONDS)
+                try:
+                    status_data = await api_client.get_sync_status()
+                    # Si ya no está corriendo, rompemos el bucle
+                    if status_data.get("robots") == "idle":
+                        break
+                except Exception as poll_error:
+                    if is_mounted.current:
+                        print(f"Warn polling sync: {poll_error}")
 
-    # Polling effect (sin cambios)
-    @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
-    def setup_polling():
-        async def polling_loop():
-            await asyncio.sleep(POLLING_INTERVAL_SECONDS)
-            while True:
-                await asyncio.sleep(POLLING_INTERVAL_SECONDS)
-                if not is_syncing:
-                    await load_robots()
+            # Al terminar el bucle, actualizamos todo
+            if is_mounted.current:
+                show_notification("Sincronización completada. Actualizando lista...", "success")
+                await load_robots()
+                set_is_syncing(False)
+        except Exception as e:
+            if is_mounted.current:
+                show_notification(f"Error durante monitoreo de sync: {e}", "error")
+                set_is_syncing(False)
 
-        task = asyncio.create_task(polling_loop())
-        return lambda: task.cancel()
-
-    async def polling_loop():
-        while True:
-            await asyncio.sleep(POLLING_INTERVAL_SECONDS)
-            if is_syncing:
+    # --- Efecto: Recuperación de estado de Sync al cargar página ---
+    @use_effect(dependencies=[])
+    def check_sync_on_load():
+        async def check():
+            if not is_mounted.current:
                 return
+            try:
+                # Preguntar al backend si ya está trabajando
+                status_data = await api_client.get_sync_status()
+                if status_data.get("robots") != "idle":
+                    if is_mounted.current:
+                        set_is_syncing(True)
+                        show_notification("Sincronización en curso detectada (Background)...", "info")
+                        # Retomamos el monitoreo
+                        await monitor_active_sync()
+            except Exception:
+                pass  # Fallo silencioso en check inicial para no molestar
+
+        task = asyncio.create_task(check())
+        return lambda: task.cancel()
+
+    # --- Efecto: Carga Inicial + Polling de Datos ---
+    @use_effect(dependencies=[filters, current_page, sort_by, sort_dir])
+    def manage_data_lifecycle():
+        async def run_lifecycle():
+            # 1. Carga inicial inmediata al montar o cambiar filtros
             try:
                 await load_robots()
             except asyncio.CancelledError:
-                break
-            except Exception as e:
-                set_error(f"Error de actualización automática: {e}")
+                return
+
+            # 2. Bucle de Polling
+            # Usamos is_mounted.current como condición de seguridad extra
+            while is_mounted.current:
+                await asyncio.sleep(POLLING_INTERVAL_SECONDS)
+
+                # Si estamos sincronizando manualmente, saltamos este ciclo de polling
+                if is_syncing:
+                    continue
+
+                try:
+                    await load_robots()
+                except asyncio.CancelledError:
+                    break  # Salir si el componente se desmonta o dependencias cambian
+                except Exception:
+                    pass  # Ignorar errores silenciosos en polling
+
+        task = asyncio.create_task(run_lifecycle())
+        return lambda: task.cancel()
 
     def handle_sort(column_name: str):
         if sort_by == column_name:
@@ -103,51 +165,47 @@ def use_robots():
         set_current_page(1)
         set_filters(new_filters_func)
 
+    # --- Acción manual de Sync ---
     @use_callback
     async def trigger_sync(event=None):
         """Sincroniza solo robots desde A360."""
-        if is_syncing:
+        if is_syncing or not is_mounted.current:
             return
+
         set_is_syncing(True)
         show_notification("Sincronizando robots desde A360...", "info")
         try:
-            # 1. Iniciar la tarea en el backend
-            # Esto ahora puede devolver un error 409 si ya está corriendo
+            # 1. Lanzar la orden
             await api_client.trigger_sync_robots()
-            show_notification("Sincronización iniciada. Esperando finalización...", "info")
-            # 2. Iniciar bucle de polling para el estado
-            while True:
-                # Esperamos ANTES de preguntar
-                await asyncio.sleep(SYNC_POLLING_INTERVAL_SECONDS)
-                try:
-                    status_data = await api_client.get_sync_status()
-                    if status_data.get("robots") == "idle":
-                        break  # La tarea terminó, salimos del bucle
-                except Exception as poll_error:
-                    # Si el polling falla, no rompemos el bucle,
-                    # solo lo reportamos y reintentamos.
-                    show_notification(f"Error al consultar estado de sync: {poll_error}", "warning")
-            # 3. Tarea completada: Recargar datos y notificar
-            show_notification("Sincronización completada. Actualizando lista...", "success")
-            await load_robots()
-            set_is_syncing(False)
+
+            if is_mounted.current:
+                show_notification("Sincronización iniciada. Esperando finalización...", "info")
+
+            # 2. Esperar (usando la misma lógica que el recovery)
+            await monitor_active_sync()
+
         except Exception as e:
-            # Captura errores de 'trigger_sync_robots' (ej. 409 Conflict)
-            show_notification(f"Error al iniciar sincronización: {e}", "error")
-            set_error(f"Error en sincronización: {e}")
-            set_is_syncing(False)
+            if is_mounted.current:
+                #  Si es 409 Conflict, significa que ya corría.
+                # Podríamos manejarlo soft, pero el monitor de inicio ya debería haberlo atrapado.
+                show_notification(f"Error al iniciar sincronización: {e}", "error")
+                # set_error(f"Error en sincronización: {e}")
+                set_is_syncing(False)
 
     @use_callback
     async def update_robot_status(robot_id: int, status_data: Dict[str, bool]):
+        if not is_mounted.current:
+            return
         try:
             await api_client.update_robot_status(robot_id, status_data)
-            await load_robots()
+            if is_mounted.current:
+                await load_robots()
         except Exception as e:
-            set_error(f"Error al actualizar estado del robot {robot_id}: {e}")
+            if is_mounted.current:
+                set_error(f"Error al actualizar estado del robot {robot_id}: {e}")
 
     total_pages = use_memo(lambda: max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE), [total_count])
 
-    # --- Devolvemos los nuevos estados y funciones ---
     return {
         "robots": robots,
         "loading": loading,

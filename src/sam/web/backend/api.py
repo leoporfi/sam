@@ -102,7 +102,7 @@ async def run_equipo_sync_task(db: DatabaseConnector, aa_client: AutomationAnywh
 # ------------------------------------------------------------------
 @router.post("/api/sync/robots", tags=["Sincronización"], status_code=status.HTTP_202_ACCEPTED)
 async def trigger_sync_robots(
-    request: Request,  # <--- Inyectar Request
+    request: Request,
     background_tasks: BackgroundTasks,
     db: DatabaseConnector = Depends(get_db),
     aa_client: AutomationAnywhereClient = Depends(get_aa_client),
@@ -125,7 +125,7 @@ async def trigger_sync_robots(
 
 @router.post("/api/sync/equipos", tags=["Sincronización"], status_code=status.HTTP_202_ACCEPTED)
 async def trigger_sync_equipos(
-    request: Request,  # <--- Inyectar Request
+    request: Request,
     background_tasks: BackgroundTasks,
     db: DatabaseConnector = Depends(get_db),
     aa_client: AutomationAnywhereClient = Depends(get_aa_client),
