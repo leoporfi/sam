@@ -312,6 +312,7 @@ class AutomationAnywhereClient:
         except Exception as e:
             if isinstance(e, httpx.HTTPStatusError) and e.response.status_code in (400, 412):
                 logger.warning(f"Fallo en el despliegue del bot {file_id}: {e}")
+                raise e
             elif isinstance(e, (httpx.ReadTimeout, httpx.TimeoutException)):
                 logger.warning(f"Timeout en despliegue del bot {file_id}")
             else:
