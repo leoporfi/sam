@@ -5,7 +5,9 @@ Punto de entrada único del servicio Web (Servidor Uvicorn).
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import platform
 import signal
 import sys
 from pathlib import Path
@@ -93,7 +95,7 @@ def _setup_dependencies() -> Dict[str, Any]:
     aa_client = AutomationAnywhereClient(
         cr_url=aa_config["cr_url"],
         cr_user=aa_config["cr_user"],
-        cr_pwd=aa_config.get("cr_pwd"),  # Será None si se usa ApiKey
+        cr_pwd=aa_config.get("cr_pwd"),
         cr_api_key=aa_config.get("cr_api_key"),
         cr_api_timeout=aa_config.get("api_timeout_seconds", 60),
         # Pasamos otros parámetros opcionales si existen en la config
@@ -124,7 +126,15 @@ def _run_service(deps: Dict[str, Any]) -> None:
 
     logging.info(f"Configuración del servidor: http://{host}:{port} (Reload: {reload})")
 
-    config = uvicorn.Config(app, host=host, port=port, reload=reload)
+    # Forzar loop="asyncio" y workers=1
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        reload=reload,
+        workers=1,  # ReactPy necesita 1 worker para mantener estado en memoria
+        loop="asyncio",  # Evita el loop 'auto' que elige Proactor en Windows
+    )
     _server_instance = uvicorn.Server(config)
 
     logging.info("Servidor Uvicorn iniciado correctamente.")
@@ -154,11 +164,20 @@ def main(service_name: str) -> None:
     """Punto de entrada síncrono llamado por __main__.py."""
     global _service_name
 
+    # [CORRECCIÓN CRÍTICA PARA WINDOWS]
+    # Cambia la política del Loop ANTES de hacer cualquier cosa async
+    if platform.system() == "Windows":
+        try:
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            logging.info("Política de EventLoop de Windows cambiada a WindowsSelectorEventLoopPolicy.")
+        except Exception as e:
+            logging.warning(f"No se pudo establecer la política de EventLoop: {e}")
+
     # Estandarizar el nombre del servicio
     _service_name = "web" if service_name == "interfaz_web" else service_name
 
     # El logging se debe iniciar *antes* que nada
-    setup_logging(service_name="interfaz_web")  # Usar nombre de archivo de log esperado
+    setup_logging(service_name="interfaz_web")
     logging.info(f"Iniciando el servicio: {_service_name.capitalize()}...")
 
     _setup_signals()
