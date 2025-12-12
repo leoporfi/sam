@@ -20,8 +20,9 @@ def use_debounced_value(value, delay: int):
 
         task = asyncio.create_task(do_debounce())
 
-        # Si 'value' cambia de nuevo antes de que termine el delay,
-        # la función de limpieza cancelará la tarea anterior.
-        return lambda: task.cancel()
+        def cleanup():
+            task.cancel()
+
+        return cleanup
 
     return debounced_value
