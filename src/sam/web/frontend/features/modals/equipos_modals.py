@@ -123,7 +123,7 @@ def EquipoEditModal(
 
     # No renderizar si no está abierto
     if not is_open:
-        return None
+        return html.dialog({"open": False, "style": {"display": "none"}})
 
     return html.dialog(
         {"open": True},

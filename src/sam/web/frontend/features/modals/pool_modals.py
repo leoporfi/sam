@@ -18,13 +18,15 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
     notification_ctx = use_context(NotificationContext)
     is_edit_mode = pool and pool.get("PoolId") is not None
 
-    if pool is None:
-        return None
-
     @use_effect(dependencies=[pool])
     def sync_form_state():
         if pool is not None:
             set_form_data(pool if is_edit_mode else DEFAULT_POOL_STATE)
+        else:
+            set_form_data(DEFAULT_POOL_STATE)
+
+    if pool is None:
+        return None
 
     def handle_change(field, value):
         set_form_data(lambda old: {**old, field: value})
@@ -33,9 +35,7 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
         set_is_loading(True)
         try:
             await on_save(form_data)
-            notification_ctx["show_notification"](
-                f"Pool {'actualizado' if is_edit_mode else 'creado'} con éxito.", "success"
-            )
+            notification_ctx["show_notification"](f"Pool {'actualizado' if is_edit_mode else 'creado'} con éxito.", "success")
             on_close()
         except asyncio.CancelledError:
             raise
@@ -115,9 +115,6 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
     selected_avail_equipos, set_selected_avail_equipos = use_state([])
     selected_asgn_equipos, set_selected_asgn_equipos = use_state([])
 
-    if not pool:
-        return None
-
     @use_effect(dependencies=[pool])
     def init_data_load():
         if not pool or not pool.get("PoolId"):
@@ -139,8 +136,9 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
                 if not asyncio.current_task().cancelled():
                     set_is_loading(False)
 
-        task = asyncio.create_task(fetch_data())
-        return lambda: task.cancel()
+        if pool and pool.get("PoolId"):
+            task = asyncio.create_task(fetch_data())
+            return lambda: task.cancel()
 
     async def handle_save(e):
         set_is_loading(True)
@@ -159,8 +157,8 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
             if not asyncio.current_task().cancelled():
                 set_is_loading(False)
 
-    if not is_open:
-        return None
+    if not is_open or not pool:
+        return html.dialog({"open": False, "style": {"display": "none"}})
 
     return html.dialog(
         {

@@ -231,7 +231,7 @@ def ScheduleEditModal(
             set_is_loading(False)
 
     if not is_open:
-        return None
+        return html.dialog({"open": False, "style": {"display": "none"}})
 
     return html._(
         html.dialog(

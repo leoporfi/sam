@@ -166,7 +166,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
             set_is_loading(False)
 
     if not is_open or robot is None:
-        return None
+        return html.dialog({"open": False, "style": {"display": "none"}})
 
     return html.dialog(
         {"open": True if robot is not None else False},
@@ -283,9 +283,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                     "max": "100",
                                     "step": "5",
                                     "value": form_data.get("PrioridadBalanceo", 100),
-                                    "on_change": lambda e: handle_form_change(
-                                        "PrioridadBalanceo", e["target"]["value"]
-                                    ),
+                                    "on_change": lambda e: handle_form_change("PrioridadBalanceo", e["target"]["value"]),
                                     "style": {"flexGrow": "1"},
                                 }
                             ),
@@ -305,9 +303,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                     "min": "1",
                                     "max": "100",
                                     "value": form_data.get("TicketsPorEquipoAdicional", 10),
-                                    "on_change": lambda e: handle_form_change(
-                                        "TicketsPorEquipoAdicional", e["target"]["value"]
-                                    ),
+                                    "on_change": lambda e: handle_form_change("TicketsPorEquipoAdicional", e["target"]["value"]),
                                     "style": {"flexGrow": "1"},
                                 }
                             ),
@@ -421,15 +417,11 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
         return lambda: task.cancel()
 
     filtered_assigned = use_memo(
-        lambda: sort_devices(
-            [device for device in assigned_devices if search_assigned.lower() in device.get("Equipo", "").lower()]
-        ),
+        lambda: sort_devices([device for device in assigned_devices if search_assigned.lower() in device.get("Equipo", "").lower()]),
         [assigned_devices, search_assigned],
     )
     filtered_available = use_memo(
-        lambda: sort_devices(
-            [device for device in available_devices if search_available.lower() in device.get("Equipo", "").lower()]
-        ),
+        lambda: sort_devices([device for device in available_devices if search_available.lower() in device.get("Equipo", "").lower()]),
         [available_devices, search_available],
     )
 
@@ -475,7 +467,7 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
         set_confirmation_data({"assign": ids_to_assign, "unassign": ids_to_unassign})
 
     if not is_open or not robot:
-        return None
+        return html.dialog({"open": False, "style": {"display": "none"}})
 
     return html.dialog(
         {"open": True},  # "style": {"width": "90vw", "maxWidth": "1000px"}},
@@ -677,7 +669,7 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
         set_view_mode("list")
 
     if not is_open or not robot:
-        return None
+        return html.dialog({"open": False, "style": {"display": "none"}})
 
     return html.dialog(
         {"open": True},
@@ -800,16 +792,12 @@ def DeviceList(
                                     {
                                         "type": "checkbox",
                                         "checked": device["EquipoId"] in selected_ids,
-                                        "onChange": lambda e, eid=device["EquipoId"]: handle_select_one(
-                                            eid, e["target"]["checked"]
-                                        ),
+                                        "onChange": lambda e, eid=device["EquipoId"]: handle_select_one(eid, e["target"]["checked"]),
                                     }
                                 )
                             ),
                             html.td(device["Equipo"]),
-                            html.td(html.span({"class_name": f"tag {get_estado(device)[1]}"}, get_estado(device)[0]))
-                            if has_status_column
-                            else None,
+                            html.td(html.span({"class_name": f"tag {get_estado(device)[1]}"}, get_estado(device)[0])) if has_status_column else None,
                         )
                         for device in devices
                     ]
@@ -900,11 +888,7 @@ def SchedulesList(
         html.table(
             {"class_name": "compact-schedule-table"},
             html.thead(html.tr(html.th("Detalles"), html.th("Equipos"), html.th("Acciones"))),
-            html.tbody(
-                rows
-                if rows
-                else html.tr(html.td({"colSpan": 3, "style": {"text_align": "center"}}, "No hay programaciones."))
-            ),
+            html.tbody(rows if rows else html.tr(html.td({"colSpan": 3, "style": {"text_align": "center"}}, "No hay programaciones."))),
         ),
         ConfirmationModal(
             is_open=bool(schedule_to_delete),
@@ -927,10 +911,7 @@ def ScheduleForm(
 ):
     tipo = form_data.get("TipoProgramacion")
     schedule_options = use_memo(
-        lambda: [
-            html.option({"value": schedule_type, "key": schedule_type}, schedule_type)
-            for schedule_type in SCHEDULE_TYPES
-        ],
+        lambda: [html.option({"value": schedule_type, "key": schedule_type}, schedule_type) for schedule_type in SCHEDULE_TYPES],
         [],
     )
 
@@ -973,9 +954,7 @@ def ScheduleForm(
                             "min": "0",
                             "max": "60",
                             "value": form_data.get("Tolerancia"),
-                            "on_change": lambda e: handle_form_change(
-                                "Tolerancia", int(e["target"]["value"]) if e["target"]["value"] else 0
-                            ),
+                            "on_change": lambda e: handle_form_change("Tolerancia", int(e["target"]["value"]) if e["target"]["value"] else 0),
                         }
                     ),
                 ),
@@ -1007,9 +986,7 @@ def ScheduleForm(
 @component
 def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
     if tipo == "Semanal":
-        return WeekdaySelector(
-            value=form_data.get("DiasSemana", ""), on_change=lambda new_string: on_change("DiasSemana", new_string)
-        )
+        return WeekdaySelector(value=form_data.get("DiasSemana", ""), on_change=lambda new_string: on_change("DiasSemana", new_string))
     elif tipo == "Mensual":
         return html.label(
             "Día del Mes",
@@ -1019,9 +996,7 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                     "min": 1,
                     "max": 31,
                     "value": form_data.get("DiaDelMes", 1),
-                    "on_change": lambda e: on_change(
-                        "DiaDelMes", int(e["target"]["value"]) if e["target"]["value"] else 1
-                    ),
+                    "on_change": lambda e: on_change("DiaDelMes", int(e["target"]["value"]) if e["target"]["value"] else 1),
                 }
             ),
         )
@@ -1053,9 +1028,7 @@ def DeviceSelector(available_devices: List[Dict], selected_devices: List[int], o
     )
 
     all_filtered_ids = use_memo(lambda: [device["EquipoId"] for device in filtered_devices], [filtered_devices])
-    are_all_devices_selected = len(safe_selected_devices) > 0 and all(
-        item in safe_selected_devices for item in all_filtered_ids
-    )
+    are_all_devices_selected = len(safe_selected_devices) > 0 and all(item in safe_selected_devices for item in all_filtered_ids)
 
     def handle_select_all_devices(event):
         on_change(all_filtered_ids if event["target"]["checked"] else [])
@@ -1110,9 +1083,7 @@ def DeviceSelector(available_devices: List[Dict], selected_devices: List[int], o
                                     {
                                         "type": "checkbox",
                                         "checked": device["EquipoId"] in safe_selected_devices,
-                                        "on_change": lambda e, tid=device["EquipoId"]: handle_device_select(
-                                            tid, e["target"]["checked"]
-                                        ),
+                                        "on_change": lambda e, tid=device["EquipoId"]: handle_device_select(tid, e["target"]["checked"]),
                                     }
                                 )
                             ),
