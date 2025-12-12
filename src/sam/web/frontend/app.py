@@ -4,7 +4,7 @@ import uuid
 
 # app.py - SECCIÓN DE IMPORTS
 from reactpy import component, html, use_context, use_effect, use_location, use_state
-from reactpy_router import browser_router, link, route
+from reactpy_router import browser_router, route
 
 from sam.web.frontend.api.api_client import get_api_client
 
@@ -82,24 +82,16 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
         on_create_robot=handle_create_robot,
         search_term=search_input,
         on_search_change=set_search_input,
-        active_filter="all"
-        if robots_state["filters"].get("active") is None
-        else str(robots_state["filters"].get("active")).lower(),
-        on_active_change=lambda value: robots_state["set_filters"](
-            lambda prev: {**prev, "active": None if value == "all" else value == "true"}
-        ),
-        online_filter="all"
-        if robots_state["filters"].get("online") is None
-        else str(robots_state["filters"].get("online")).lower(),
-        on_online_change=lambda value: robots_state["set_filters"](
-            lambda prev: {**prev, "online": None if value == "all" else value == "true"}
-        ),
+        active_filter="all" if robots_state["filters"].get("active") is None else str(robots_state["filters"].get("active")).lower(),
+        on_active_change=lambda value: robots_state["set_filters"](lambda prev: {**prev, "active": None if value == "all" else value == "true"}),
+        online_filter="all" if robots_state["filters"].get("online") is None else str(robots_state["filters"].get("online")).lower(),
+        on_online_change=lambda value: robots_state["set_filters"](lambda prev: {**prev, "online": None if value == "all" else value == "true"}),
         is_searching=is_searching,
         is_syncing_equipos=equipos_state.get("is_syncing", False),
         on_sync_equipos=equipos_state.get("trigger_sync"),
     )
 
-    base_key = str(selected_robot["RobotId"]) if selected_robot else str(uuid.uuid4())
+    base_key = str(selected_robot.get("RobotId", uuid.uuid4())) if selected_robot and isinstance(selected_robot, dict) else str(uuid.uuid4())
 
     return PageWithLayout(
         theme_is_dark=theme_is_dark,
@@ -154,11 +146,7 @@ def PoolsPage(theme_is_dark: bool, on_theme_toggle):
     pool_to_delete, set_pool_to_delete = use_state(None)
 
     # Filtrar pools por búsqueda
-    filtered_pools = [
-        pool
-        for pool in pools_state["pools"]
-        if not debounced_search or debounced_search.lower() in pool["Nombre"].lower()
-    ]
+    filtered_pools = [pool for pool in pools_state["pools"] if not debounced_search or debounced_search.lower() in pool["Nombre"].lower()]
 
     is_searching = debounced_search != search_input
 
@@ -291,18 +279,10 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
         search=search_input,
         on_search=set_search_input,
         is_searching=is_searching,
-        active_filter="all"
-        if equipos_state["filters"].get("active") is None
-        else str(equipos_state["filters"].get("active")).lower(),
-        on_active=lambda value: equipos_state["set_filters"](
-            lambda prev: {**prev, "active": None if value == "all" else value == "true"}
-        ),
-        balanceable_filter="all"
-        if equipos_state["filters"].get("balanceable") is None
-        else str(equipos_state["filters"].get("balanceable")).lower(),
-        on_balanceable=lambda value: equipos_state["set_filters"](
-            lambda prev: {**prev, "balanceable": None if value == "all" else value == "true"}
-        ),
+        active_filter="all" if equipos_state["filters"].get("active") is None else str(equipos_state["filters"].get("active")).lower(),
+        on_active=lambda value: equipos_state["set_filters"](lambda prev: {**prev, "active": None if value == "all" else value == "true"}),
+        balanceable_filter="all" if equipos_state["filters"].get("balanceable") is None else str(equipos_state["filters"].get("balanceable")).lower(),
+        on_balanceable=lambda value: equipos_state["set_filters"](lambda prev: {**prev, "balanceable": None if value == "all" else value == "true"}),
         on_create_equipo=handle_create_click,
     )
 
@@ -440,13 +420,7 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
                 ),
             ),
             html.div(
-                {
-                    "style": {
-                        "display": "block"
-                        if not schedules_state["loading"] and not schedules_state["error"]
-                        else "none"
-                    }
-                },
+                {"style": {"display": "block" if not schedules_state["loading"] and not schedules_state["error"] else "none"}},
                 SchedulesDashboard(
                     schedules=schedules_state["schedules"],
                     on_toggle=schedules_state["toggle_active"],
@@ -560,9 +534,7 @@ head = html.head(
     html.meta({"charset": "utf-8"}),
     html.meta({"name": "viewport", "content": "width=device-width, initial-scale=1"}),
     html.link({"rel": "stylesheet", "href": "/static/css/pico.violet.min.css"}),
-    html.link(
-        {"rel": "stylesheet", "href": "https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.colors.min.css"}
-    ),
+    html.link({"rel": "stylesheet", "href": "https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.colors.min.css"}),
     html.link({"rel": "stylesheet", "href": "/static/css/all.min.css"}),
     html.link({"rel": "stylesheet", "href": "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"}),
     html.link({"rel": "stylesheet", "href": "/static/custom.css"}),
