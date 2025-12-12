@@ -48,7 +48,7 @@ def _graceful_shutdown(signum: int, frame: Any) -> None:
         logging.warning("Señal de cierre duplicada recibida. Ya se está deteniendo.")
         return
     _shutdown_initiated = True
-    logging.info(f"Señal de parada recibida (Señal: {signum}). Iniciando cierre ordenado...")
+    logging.debug(f"Señal de parada recibida (Señal: {signum}). Iniciando cierre ordenado...")
 
     if _server_instance:
         _server_instance.should_exit = True
@@ -59,14 +59,14 @@ def _graceful_shutdown(signum: int, frame: Any) -> None:
 def _setup_signals() -> None:
     """Configura los manejadores de señales para Windows y Unix."""
     if sys.platform == "win32":
-        logging.info("Plataforma Windows detectada. Registrando SIGINT y SIGBREAK.")
+        logging.debug("Plataforma Windows detectada. Registrando SIGINT y SIGBREAK.")
         signal.signal(signal.SIGINT, _graceful_shutdown)
         try:
             signal.signal(signal.SIGBREAK, _graceful_shutdown)
         except AttributeError:
             logging.warning("signal.SIGBREAK no está disponible.")
     else:
-        logging.info("Plataforma No-Windows detectada. Registrando SIGINT y SIGTERM.")
+        logging.debug("Plataforma No-Windows detectada. Registrando SIGINT y SIGTERM.")
         signal.signal(signal.SIGINT, _graceful_shutdown)
         signal.signal(signal.SIGTERM, _graceful_shutdown)
 
@@ -78,7 +78,7 @@ def _setup_dependencies() -> Dict[str, Any]:
     """Crea y retorna las dependencias específicas del servicio (la BD)."""
     global _db_connector
 
-    logging.info("Creando dependencia DatabaseConnector...")
+    logging.debug("Creando dependencia DatabaseConnector...")
 
     cfg_sql_sam = ConfigManager.get_sql_server_config("SQL_SAM")
     _db_connector = DatabaseConnector(
@@ -87,7 +87,7 @@ def _setup_dependencies() -> Dict[str, Any]:
         usuario=cfg_sql_sam["usuario"],
         contrasena=cfg_sql_sam["contrasena"],
     )
-    logging.info("Creando dependencia AutomationAnywhereClient (Config Web)...")
+    logging.debug("Creando dependencia AutomationAnywhereClient (Config Web)...")
     # 1. Usamos la config específica que busca INTERFAZ_WEB_AA_USER
     aa_config = ConfigManager.get_aa360_web_config()
 
@@ -137,7 +137,7 @@ def _run_service(deps: Dict[str, Any]) -> None:
     )
     _server_instance = uvicorn.Server(config)
 
-    logging.info("Servidor Uvicorn iniciado correctamente.")
+    logging.debug("Servidor Uvicorn iniciado correctamente.")
     _server_instance.run()
 
 
@@ -145,7 +145,7 @@ def _cleanup_resources() -> None:
     """Limpia la conexión a BD."""
     global _db_connector
 
-    logging.info("Iniciando limpieza de recursos...")
+    logging.debug("Iniciando limpieza de recursos...")
 
     if _db_connector:
         try:
