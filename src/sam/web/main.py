@@ -1,7 +1,11 @@
 # sam/web/main.py
 import asyncio
-import logging
 import platform
+
+if platform.system() == "Windows":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
