@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import httpx
 import pytz
@@ -47,17 +47,24 @@ class Desplegador:
         self._notificador = notificador
         self._cfg_lanzador = cfg_lanzador
         self._static_callback_api_key = callback_token
+
+        # Control para no spamear alertas de error 400 en el mismo ciclo
         self._equipos_alertados_400 = set()
 
-    async def desplegar_robots_pendientes(self):
+    async def desplegar_robots_pendientes(self) -> List[Dict[str, Any]]:
         """
-        Orquesta un ciclo completo de despliegue de robots.
+        Orquestación principal del despliegue:
+        1. Verifica pausa.
+        2. Obtiene robots de la BD.
+        3. Obtiene token API Gateway.
+        4. Ejecuta despliegues en paralelo.
+        5. Retorna resultados para que el Orquestador gestione alertas (ej. 412).
         """
         if self._esta_en_pausa():
-            logger.info("El servicio se encuentra en la ventana de pausa operacional. No se lanzarán robots.")
-            return
+            logger.info("Lanzador en PAUSA operativa configurada. Omitiendo ciclo.")
+            return []
 
-        logger.info("Buscando robots para ejecutar...")
+        logger.debug("Buscando robots para ejecutar...")
         robots_a_ejecutar = self._db_connector.obtener_robots_ejecutables()
 
         if not robots_a_ejecutar:
@@ -77,13 +84,19 @@ class Desplegador:
 
         successful_deploys = 0
         failed_deploys = 0
+        all_results = []
+
         for i in range(0, len(tasks), max_workers):
             batch = tasks[i : i + max_workers]
             results = await asyncio.gather(*batch)
+            all_results.extend(results)  # <--- 2. Guardar resultados del lote actual
+
             successful_deploys += sum(1 for r in results if r.get("status") == "exitoso")
             failed_deploys += sum(1 for r in results if r.get("status") == "fallido")
 
         logger.info(f"Ciclo de despliegue completado. Exitosos: {successful_deploys}, Fallidos: {failed_deploys}.")
+
+        return all_results
 
     async def _desplegar_y_registrar_robot(
         self, robot_info: dict, bot_input: dict, cabeceras_callback: dict
@@ -97,10 +110,12 @@ class Desplegador:
         equipo_id = robot_info.get("EquipoId")
         hora = robot_info.get("Hora")
 
+        detected_error_type = None
+
         # Configuración de reintentos
         max_intentos = self._cfg_lanzador.get("max_reintentos_deploy", 2)
         delay_seg = self._cfg_lanzador.get("delay_reintentos_deploy_seg", 5)
-
+        intento = 0
         for intento in range(1, max_intentos + 1):
             try:
                 # 1. INTENTAR DESPLEGAR
@@ -120,7 +135,7 @@ class Desplegador:
                 deployment_id = deployment_result["deploymentId"]
 
                 # 2. ÉXITO - Registrar en BD
-                logger.info(
+                logger.debug(
                     f"Robot {robot_id} desplegado con ID: {deployment_id} "
                     f"en Equipo {equipo_id} (Intento {intento}/{max_intentos})"
                 )
@@ -141,6 +156,7 @@ class Desplegador:
                 response_text = e.response.text[:200]  # Limitar para logs
 
                 if status_code == 412:
+                    detected_error_type = "412"
                     # ERROR TEMPORAL (Device Offline)
                     if intento < max_intentos:
                         logger.warning(
@@ -157,6 +173,7 @@ class Desplegador:
                         break
 
                 elif status_code == 400:
+                    detected_error_type = "400"
                     # ERROR PERMANENTE (Bad Request)
                     logger.warning(
                         f"Error 400 PERMANENTE Robot {robot_id} Equipo {equipo_id} Usuario {user_id}. "
@@ -166,7 +183,7 @@ class Desplegador:
                     # Solo alertar la primera vez por equipo
                     equipo_alertado_key = f"400_{equipo_id}"
                     if equipo_alertado_key not in self._equipos_alertados_400:
-                        logger.info(f"Intentando enviar alerta para error 400 en equipo {equipo_id}")
+                        logger.debug(f"Intentando enviar alerta para error 400 en equipo {equipo_id}")
                         try:
                             self._notificador.send_alert(
                                 subject=f"[SAM CRÍTICO] Error 400 Equipo {equipo_id}",
@@ -190,7 +207,7 @@ class Desplegador:
                             (robot_id, equipo_id),
                             es_select=False,
                         )
-                        logger.info(f"Asignación desactivada: Robot {robot_id} - Equipo {equipo_id}")
+                        logger.debug(f"Asignación desactivada: Robot {robot_id} - Equipo {equipo_id}")
                     except Exception as db_e:
                         logger.error(f"Error al desactivar asignación: {db_e}")
 
@@ -221,13 +238,18 @@ class Desplegador:
 
         # Fallo después de todos los intentos
         logger.error(f"Fallo definitivo Robot {robot_id} Equipo {equipo_id} después de {intento} intentos.")
-        return {"status": "fallido", "robot_id": robot_id}
+        return {
+            "status": "fallido",
+            "robot_id": robot_id,
+            "equipo_id": equipo_id,  # <--- IMPORTANTE: Necesario para la alerta
+            "error_type": detected_error_type,  # <--- IMPORTANTE: Pasa "412" si ocurrió
+        }
 
     async def _preparar_cabeceras_callback(self) -> Dict[str, str]:
         """Obtiene y combina las cabeceras de autorización para el callback."""
         combined_headers = {}
         try:
-            logger.info("Obteniendo token dinámico del API Gateway...")
+            logger.debug("Obteniendo token dinámico del API Gateway...")
             gateway_headers = await self._api_gateway_client.get_auth_header()
             if gateway_headers:
                 combined_headers.update(gateway_headers)
@@ -237,7 +259,7 @@ class Desplegador:
             logger.error(f"Excepción al obtener token del API Gateway: {token_error}.", exc_info=True)
 
         if self._static_callback_api_key:
-            logger.info("Añadiendo ApiKey estática (X-Authorization) a las cabeceras del callback.")
+            logger.debug("Añadiendo ApiKey estática (X-Authorization) a las cabeceras del callback.")
             combined_headers["X-Authorization"] = self._static_callback_api_key
         else:
             logger.warning("La ApiKey estática (CALLBACK_TOKEN) no está configurada.")

@@ -1,4 +1,4 @@
-# Agrega estas importaciones al inicio del archivo database.py
+# web/backend/database.py
 import asyncio
 import logging
 from typing import Any, Dict, List, Optional, Union
@@ -22,13 +22,15 @@ logger = logging.getLogger(__name__)
 # Sincronización con A360
 async def sync_with_a360(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:
     """
-    Orquesta la sincronización de las tablas Robots y Equipos con A360
-    utilizando el nuevo componente centralizado.
+    Orquesta la sincronización de las tablas Robots y Equipos con A360.
     """
     logger.info("Iniciando la sincronización con A360 desde el servicio WEB...")
     try:
         # El cliente aa_client ya viene creado e inyectado
         sincronizador = SincronizadorComun(db_connector=db, aa_client=aa_client)
+        # SincronizadorComun suele tener lógica mixta, así que lo invocamos directo si es async,
+        # pero si sincronizar_entidades fuera bloqueante, habría que envolverlo.
+        # Asumiendo que es async nativo:
         summary = await sincronizador.sincronizar_entidades()
         logger.info(f"Sincronización completada: {summary}")
         return summary
@@ -47,7 +49,8 @@ async def sync_robots_only(db: DatabaseConnector, aa_client: AutomationAnywhereC
         robots_api = await aa_client.obtener_robots()
         logger.info(f"Datos recibidos de A360: {len(robots_api)} robots.")
 
-        db.merge_robots(robots_api)
+        # Mover la escritura a DB a un hilo aparte para NO bloquear el loop
+        await asyncio.to_thread(db.merge_robots, robots_api)
 
         logger.info(f"Sincronización de robots completada. {len(robots_api)} robots procesados.")
         return {"robots_sincronizados": len(robots_api)}
@@ -71,8 +74,11 @@ async def sync_equipos_only(db: DatabaseConnector, aa_client: AutomationAnywhere
 
         logger.info(f"Datos recibidos de A360: {len(devices_api)} dispositivos, {len(users_api)} usuarios.")
 
+        # Procesamiento en CPU (podría bloquear un poco, pero es rápido)
         equipos_finales = sincronizador._procesar_y_mapear_equipos(devices_api, users_api)
-        db.merge_equipos(equipos_finales)
+
+        # DB Write en hilo aparte
+        await asyncio.to_thread(db.merge_equipos, equipos_finales)
 
         logger.info(f"Sincronización de equipos completada. {len(equipos_finales)} equipos procesados.")
         return {"equipos_sincronizados": len(equipos_finales)}
