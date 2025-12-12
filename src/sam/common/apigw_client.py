@@ -36,14 +36,14 @@ class ApiGatewayClient:
         # 3. Pasar el contexto al cliente httpx
         self._client = httpx.AsyncClient(timeout=self.timeout, verify=context)
 
-        logger.info("Cliente para API Gateway inicializado.")
+        logger.debug("Cliente para API Gateway inicializado.")
 
     async def _fetch_new_token(self):
         """
         Realiza la llamada a la API para obtener un nuevo token.
         Este método debe ser llamado dentro de un lock.
         """
-        logger.info("Solicitando nuevo token al API Gateway...")
+        logger.debug("Solicitando nuevo token al API Gateway...")
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = {
             "grant_type": self.grant_type,
