@@ -49,7 +49,7 @@ class Conciliador:
         """
         Orquesta un ciclo completo de conciliación de ejecuciones.
         """
-        logger.info("Iniciando conciliación de ejecuciones en curso...")
+        logger.debug("Iniciando conciliación de ejecuciones en curso...")
         try:
             ejecuciones_en_curso = self._db_connector.obtener_ejecuciones_en_curso()
             if not ejecuciones_en_curso:
@@ -126,7 +126,7 @@ class Conciliador:
             affected_count = self._db_connector.ejecutar_consulta_multiple(
                 query, updates_params, usar_fast_executemany=False
             )
-            logger.info(f"Se actualizaron {affected_count} registros a estados finales desde la API.")
+            logger.debug(f"Se actualizaron {affected_count} registros a estados finales desde la API.")
 
         # Actualizar los que reportaron UNKNOWN (sin marcar como final)
         if updates_unknown_params:
@@ -141,7 +141,7 @@ class Conciliador:
             affected_unknown = self._db_connector.ejecutar_consulta_multiple(
                 query_unknown, updates_unknown_params, usar_fast_executemany=False
             )
-            logger.info(
+            logger.debug(
                 f"Se marcaron {affected_unknown} registros como UNKNOWN (transitorio). "
                 f"Se reintentarán en próximos ciclos."
             )
@@ -164,7 +164,7 @@ class Conciliador:
             AND CallbackInfo IS NULL;
         """
         self._db_connector.ejecutar_consulta(query_increment, tuple(ids_perdidos), es_select=False)
-        logger.info(
+        logger.debug(
             f"Incrementado contador para {len(ids_perdidos)} deployment(s) no encontrados. "
             f"Se reintentarán en próxima conciliación."
         )
@@ -203,7 +203,7 @@ class Conciliador:
             WHERE EjecucionId IN ({placeholders});
         """
         self._db_connector.ejecutar_consulta(query_update, tuple(ids_a_actualizar), es_select=False)
-        logger.info(f"Se marcaron {len(ids_a_actualizar)} ejecuciones como UNKNOWN por antigüedad.")
+        logger.debug(f"Se marcaron {len(ids_a_actualizar)} ejecuciones como UNKNOWN por antigüedad.")
 
     def _convertir_utc_a_local_sam(self, fecha_utc_str: Optional[str]) -> Optional[datetime]:
         """Convierte una fecha en formato ISO UTC a la zona horaria local de SAM."""

@@ -64,7 +64,7 @@ class Desplegador:
             logger.info("Lanzador en PAUSA operativa configurada. Omitiendo ciclo.")
             return []
 
-        logger.info("Buscando robots para ejecutar...")
+        logger.debug("Buscando robots para ejecutar...")
         robots_a_ejecutar = self._db_connector.obtener_robots_ejecutables()
 
         if not robots_a_ejecutar:
@@ -135,7 +135,7 @@ class Desplegador:
                 deployment_id = deployment_result["deploymentId"]
 
                 # 2. ÉXITO - Registrar en BD
-                logger.info(
+                logger.debug(
                     f"Robot {robot_id} desplegado con ID: {deployment_id} "
                     f"en Equipo {equipo_id} (Intento {intento}/{max_intentos})"
                 )
@@ -183,7 +183,7 @@ class Desplegador:
                     # Solo alertar la primera vez por equipo
                     equipo_alertado_key = f"400_{equipo_id}"
                     if equipo_alertado_key not in self._equipos_alertados_400:
-                        logger.info(f"Intentando enviar alerta para error 400 en equipo {equipo_id}")
+                        logger.debug(f"Intentando enviar alerta para error 400 en equipo {equipo_id}")
                         try:
                             self._notificador.send_alert(
                                 subject=f"[SAM CRÍTICO] Error 400 Equipo {equipo_id}",
@@ -207,7 +207,7 @@ class Desplegador:
                             (robot_id, equipo_id),
                             es_select=False,
                         )
-                        logger.info(f"Asignación desactivada: Robot {robot_id} - Equipo {equipo_id}")
+                        logger.debug(f"Asignación desactivada: Robot {robot_id} - Equipo {equipo_id}")
                     except Exception as db_e:
                         logger.error(f"Error al desactivar asignación: {db_e}")
 
@@ -249,7 +249,7 @@ class Desplegador:
         """Obtiene y combina las cabeceras de autorización para el callback."""
         combined_headers = {}
         try:
-            logger.info("Obteniendo token dinámico del API Gateway...")
+            logger.debug("Obteniendo token dinámico del API Gateway...")
             gateway_headers = await self._api_gateway_client.get_auth_header()
             if gateway_headers:
                 combined_headers.update(gateway_headers)
@@ -259,7 +259,7 @@ class Desplegador:
             logger.error(f"Excepción al obtener token del API Gateway: {token_error}.", exc_info=True)
 
         if self._static_callback_api_key:
-            logger.info("Añadiendo ApiKey estática (X-Authorization) a las cabeceras del callback.")
+            logger.debug("Añadiendo ApiKey estática (X-Authorization) a las cabeceras del callback.")
             combined_headers["X-Authorization"] = self._static_callback_api_key
         else:
             logger.warning("La ApiKey estática (CALLBACK_TOKEN) no está configurada.")

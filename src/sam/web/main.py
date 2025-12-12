@@ -1,6 +1,7 @@
 # sam/web/main.py
 import asyncio
 import logging
+import platform
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,6 +17,10 @@ from .backend.api import router as api_router
 from .backend.dependencies import aa_client_provider, db_dependency_provider
 from .frontend.app import App, head
 
+#  Asegurar política también aquí
+if platform.system() == "Windows":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,25 +29,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Iniciando aplicación y recursos...")
 
-    # Obtener configs
-    # # 1: Usar el método correcto get_aa_config()
-    # aa_config = ConfigManager.get_aa360_config()
-
-    # # Crear cliente A360
-    # # 2: Usar las claves correctas de tu configuración
-    # aa_client = AutomationAnywhereClient(
-    #     cr_url=aa_config["cr_url"],
-    #     cr_user=aa_config["cr_user"],
-    #     cr_pwd=aa_config.get("cr_pwd"),
-    #     cr_api_key=aa_config.get("cr_api_key"),
-    #     api_timeout_seconds=aa_config.get("api_timeout_seconds", 60),
-    # )
-
-    # # Inyectar el cliente A360 en el proveedor de dependencias
-    # aa_client_provider.set_aa_client(aa_client)
-    # logger.info("Cliente A360 inicializado y proveedor configurado.")
-
-    # Solo verificamos que esté listo (opcional, ya debería estarlo)
+    # Solo verificamos que esté listo
     if not aa_client_provider.get_aa_client():
         logger.warning("El cliente AA no fue inyectado correctamente desde run_web.py")
 

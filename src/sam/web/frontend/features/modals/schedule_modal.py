@@ -78,6 +78,8 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
                     {
                         "type": "number",
                         "value": form_data.get("Tolerancia") or 30,
+                        "min": 0,
+                        "max": 1440,
                         "on_change": lambda e: handle_change("Tolerancia", int(e["target"]["value"] or 0)),
                     }
                 ),

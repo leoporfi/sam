@@ -18,7 +18,6 @@ class Sincronizador:
         """
         Inicializa el Sincronizador con sus dependencias.
         """
-        # RFR-29: Se instancia el sincronizador común aquí
         self._sincronizador_comun = SincronizadorComun(db_connector=db_connector, aa_client=aa_client)
 
     async def sincronizar_entidades(self):
@@ -26,9 +25,8 @@ class Sincronizador:
         Orquesta un ciclo completo de sincronización de entidades llamando
         a la lógica centralizada.
         """
-        logger.info("Iniciando ciclo de sincronización desde el servicio Lanzador...")
+        logger.debug("Iniciando ciclo de sincronización desde el servicio Lanzador...")
         try:
-            # RFR-29: Se delega toda la lógica al componente común
             await self._sincronizador_comun.sincronizar_entidades()
         except Exception as e:
             logger.error(f"Error grave durante el ciclo de sincronización del lanzador: {e}", exc_info=True)

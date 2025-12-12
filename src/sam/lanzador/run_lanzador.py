@@ -54,11 +54,11 @@ def _graceful_shutdown(signum: int, frame: Any) -> None:
         logging.warning("Señal de cierre duplicada recibida. Ya se está deteniendo.")
         return
     _shutdown_initiated = True
-    logging.info(f"Señal de parada recibida (Señal: {signum}). Iniciando cierre ordenado...")
+    logging.debug(f"Señal de parada recibida (Señal: {signum}). Iniciando cierre ordenado...")
 
     if _service_instance:
         if hasattr(_service_instance, "_shutdown_event"):
-            logging.info("Notificando a las tareas asíncronas que deben detenerse...")
+            logging.debug("Notificando a las tareas asíncronas que deben detenerse...")
             _service_instance._shutdown_event.set()
         else:
             # Fallback por si el service_instance no es el esperado
@@ -71,14 +71,14 @@ def _graceful_shutdown(signum: int, frame: Any) -> None:
 def _setup_signals() -> None:
     """Configura los manejadores de señales para Windows y Unix."""
     if sys.platform == "win32":
-        logging.info("Plataforma Windows detectada. Registrando SIGINT y SIGBREAK.")
+        logging.debug("Plataforma Windows detectada. Registrando SIGINT y SIGBREAK.")
         signal.signal(signal.SIGINT, _graceful_shutdown)
         try:
             signal.signal(signal.SIGBREAK, _graceful_shutdown)
         except AttributeError:
             logging.warning("signal.SIGBREAK no está disponible.")
     else:
-        logging.info("Plataforma No-Windows detectada. Registrando SIGINT y SIGTERM.")
+        logging.debug("Plataforma No-Windows detectada. Registrando SIGINT y SIGTERM.")
         signal.signal(signal.SIGINT, _graceful_shutdown)
         signal.signal(signal.SIGTERM, _graceful_shutdown)
 
@@ -90,7 +90,7 @@ def _setup_dependencies() -> Dict[str, Any]:
     """Crea y retorna las dependencias específicas del servicio."""
     global _db_connector, _aa_client, _gateway_client, _notificador
 
-    logging.info("Creando dependencias (DB, Clientes API)...")
+    logging.debug("Creando dependencias (DB, Clientes API)...")
 
     cfg_sql_sam = ConfigManager.get_sql_server_config("SQL_SAM")
     _db_connector = DatabaseConnector(
@@ -153,7 +153,7 @@ async def _run_service(deps: Dict[str, Any]) -> None:
         sync_enabled,
     )
 
-    logging.info("Iniciando los ciclos de tareas asíncronas...")
+    logging.debug("Iniciando los ciclos de tareas asíncronas...")
     await _service_instance.run()
 
 
@@ -168,7 +168,7 @@ async def _cleanup_resources() -> None:
 
     # 1. Esperar a que las tareas asíncronas terminen
     if _service_instance and hasattr(_service_instance, "_tasks") and _service_instance._tasks:
-        logging.info(f"Esperando a que las tareas finalicen (máx {shutdown_timeout} segundos)...")
+        logging.debug(f"Esperando a que las tareas finalicen (máx {shutdown_timeout} segundos)...")
         try:
             if hasattr(_service_instance, "_shutdown_event"):
                 _service_instance._shutdown_event.set()

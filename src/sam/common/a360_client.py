@@ -33,7 +33,7 @@ class AutomationAnywhereClient:
         self._token_lock = asyncio.Lock()
 
         self._client = httpx.AsyncClient(base_url=self.cr_url, verify=False, timeout=self.cr_api_timeout)
-        logger.info(f"Cliente API Asíncrono inicializado para CR: {self.cr_url}")
+        logger.debug(f"Cliente API Asíncrono inicializado para CR: {self.cr_url}")
 
     # --- Métodos Internos: Gestión de Token y Peticiones ---
 
@@ -42,7 +42,7 @@ class AutomationAnywhereClient:
         if is_retry:
             logger.warning("Intentando obtener un nuevo token de A360...")
         else:
-            logger.info("Obteniendo token de A360...")
+            logger.debug("Obteniendo token de A360...")
 
         payload = {"username": self.cr_user}
 
@@ -103,7 +103,7 @@ class AutomationAnywhereClient:
                 logger.warning("Recibido error 401. Intentando reautenticar...")
                 await self._asegurar_validez_del_token(is_retry=True)
 
-                logger.info(f"Reintentando petición a {endpoint} con nuevo token...")
+                logger.debug(f"Reintentando petición a {endpoint} con nuevo token...")
                 response_retry = await self._client.request(method, endpoint, **kwargs)
                 response_retry.raise_for_status()
                 return response_retry.json() if response_retry.content else {}
@@ -132,7 +132,7 @@ class AutomationAnywhereClient:
                 break
             offset += page_size
 
-        logger.info(f"Paginación: Se obtuvieron un total de {len(lista_completa)} entidades de {endpoint}.")
+        logger.debug(f"Paginación: Se obtuvieron un total de {len(lista_completa)} entidades de {endpoint}.")
         return lista_completa
 
     def _crear_filtro_deployment_ids(self, deployment_ids: List[str]) -> Dict:

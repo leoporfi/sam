@@ -236,7 +236,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                     "id": "min-equipos",
                                     "type": "range",
                                     "name": "range-min-equipos",
-                                    "min": "0",
+                                    "min": "1",
                                     "max": "99",
                                     "value": form_data.get("MinEquipos", 0),
                                     "on_change": lambda e: handle_form_change("MinEquipos", e["target"]["value"]),
@@ -281,7 +281,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                     "name": "range-prioridad",
                                     "min": "0",
                                     "max": "100",
-                                    "step": "10",
+                                    "step": "5",
                                     "value": form_data.get("PrioridadBalanceo", 100),
                                     "on_change": lambda e: handle_form_change(
                                         "PrioridadBalanceo", e["target"]["value"]

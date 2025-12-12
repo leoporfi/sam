@@ -223,12 +223,12 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                             for m in mappings
                         ]
                         if mappings
-                        else html.tr(
+                        else [html.tr(
                             html.td(
                                 {"colspan": 4, "style": {"text-align": "center", "padding": "2rem"}},
                                 "No hay mapeos definidos aún.",
                             )
-                        )
+                        )]
                     ),
                 ),
             ),

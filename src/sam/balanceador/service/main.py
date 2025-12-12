@@ -59,7 +59,7 @@ class BalanceadorService:
         self._is_shutting_down = False
         self.intervalo_ciclo = self.cfg_balanceador_specifics.get("intervalo_ciclo_seg", 120)
         schedule.every(self.intervalo_ciclo).seconds.do(self.ejecutar_ciclo_balanceo)
-        logger.info(f"Servicio configurado para ejecutarse cada {self.intervalo_ciclo} segundos.")
+        logger.debug(f"Servicio configurado para ejecutarse cada {self.intervalo_ciclo} segundos.")
 
     def _validar_configuracion_critica(self):
         """Valida que la configuración esencial esté presente."""
