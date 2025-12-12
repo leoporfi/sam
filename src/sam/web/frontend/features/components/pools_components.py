@@ -101,8 +101,7 @@ def PoolsTable(pools: List[Dict], on_edit: Callable, on_assign: Callable, on_del
             html.tbody(
                 *[PoolRow(pool=p, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete) for p in pools]
                 if pools
-                # RFR-17: Mensaje descriptivo cuando no hay datos.
-                else html.tr(html.td({"colSpan": 5, "style": {"text_align": "center"}}, "No se encontraron pools."))
+                else [html.tr(html.td({"colSpan": 5, "style": {"text_align": "center"}}, "No se encontraron pools."))]
             ),
         )
     )
@@ -235,7 +234,7 @@ def BalanceadorStrategyPanel():
                 await api.set_isolation_mode(val)
                 set_isolation_enabled(val)
         except asyncio.CancelledError:
-                raise
+            raise
         except Exception as e:
             print(f"Error guardando configuración: {e}")
         finally:
