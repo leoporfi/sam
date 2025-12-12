@@ -273,7 +273,7 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
     def sync_search_with_filters():
         async def do_sync():
             await asyncio.sleep(0.05)
-            if debounced_search == robots_state["filters"].get("name"):
+            if debounced_search == equipos_state["filters"].get("name"):
                 return
             equipos_state["set_filters"](lambda prev: {**prev, "name": debounced_search or None})
 
