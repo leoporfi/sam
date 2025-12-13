@@ -1,4 +1,10 @@
-# /src/web/features/robots/robots_components.py
+# sam/web/frontend/features/components/robot_list.py
+"""
+Componentes para la gestión de robots.
+
+Este módulo contiene los componentes para listar, mostrar y gestionar robots,
+siguiendo el estándar de ReactPy de SAM.
+"""
 
 from typing import Callable, Dict, List
 
@@ -6,7 +12,25 @@ from reactpy import component, event, html, use_state
 
 from sam.web.backend.schemas import Robot
 
-from ...shared.common_components import LoadingSpinner, Pagination
+from ...shared.async_content import AsyncContent
+from ...shared.common_components import Pagination
+from ...shared.styles import (
+    BUTTON_PRIMARY,
+    CARDS_CONTAINER_ROBOTS,
+    COLLAPSIBLE_PANEL,
+    COLLAPSIBLE_PANEL_EXPANDED,
+    DASHBOARD_CONTROLS,
+    MASTER_CONTROLS_GRID,
+    MOBILE_CONTROLS_TOGGLE,
+    ROBOT_CARD,
+    ROBOT_CARD_BODY,
+    ROBOT_CARD_FOOTER,
+    ROBOT_CARD_HEADER,
+    SEARCH_INPUT,
+    STATUS_EJECUCION_DEMANDA,
+    STATUS_EJECUCION_PROGRAMADO,
+    TABLE_CONTAINER,
+)
 
 
 @component
@@ -28,18 +52,16 @@ def RobotsControls(
     """Controles para el dashboard de Robots (título, botones, filtros)."""
     is_expanded, set_is_expanded = use_state(False)
 
-    collapsible_panel_class = "collapsible-panel"
-    if is_expanded:
-        collapsible_panel_class += " is-expanded"
+    collapsible_panel_class = COLLAPSIBLE_PANEL_EXPANDED if is_expanded else COLLAPSIBLE_PANEL
 
     return html.div(
-        {"class_name": "dashboard-controls"},
+        {"class_name": DASHBOARD_CONTROLS},
         html.div(
             {"class_name": "controls-header"},
             html.h2("Gestión de Robots"),
             html.button(
                 {
-                    "class_name": "mobile-controls-toggle outline secondary",
+                    "class_name": MOBILE_CONTROLS_TOGGLE,
                     "on_click": lambda e: set_is_expanded(not is_expanded),
                 },
                 html.i({"class_name": f"fa-solid fa-chevron-{'up' if is_expanded else 'down'}"}),
@@ -49,7 +71,7 @@ def RobotsControls(
         html.div(
             {"class_name": collapsible_panel_class},
             html.div(
-                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"}},
+                {"class_name": MASTER_CONTROLS_GRID, "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"}},
                 html.input(
                     {
                         "type": "search",
@@ -58,7 +80,7 @@ def RobotsControls(
                         "value": search_term,
                         "on_change": lambda event: on_search_change(event["target"]["value"]),
                         "aria-busy": str(is_searching).lower(),
-                        "class_name": "search-input",
+                        "class_name": SEARCH_INPUT,
                     }
                 ),
                 html.select(
@@ -82,7 +104,7 @@ def RobotsControls(
                     html.option({"value": "false"}, "Solo Programados"),
                 ),
                 html.button(
-                    {"on_click": on_create_robot, "type": "button", "class_name": "primary"},
+                    {"on_click": on_create_robot, "type": "button", "class_name": BUTTON_PRIMARY},
                     html.i({"class_name": "fa-solid fa-plus"}),
                     " Robot",
                 ),
@@ -93,18 +115,13 @@ def RobotsControls(
 
 @component
 def RobotsDashboard(robots: List[Robot], on_action: Callable, robots_state: Dict, set_current_page: Callable):
-    """Componente principal que ahora solo renderiza la tabla/tarjetas y la paginación."""
+    """Componente principal que renderiza la tabla/tarjetas y la paginación."""
     loading = robots_state["loading"]
     error = robots_state["error"]
     current_page = robots_state["current_page"]
     total_pages = robots_state["total_pages"]
     total_count = robots_state["total_count"]
     page_size = robots_state["page_size"]
-
-    if error:
-        return html.article({"aria_invalid": "true"}, f"Error al cargar datos: {error}")
-    if loading and not robots:
-        return LoadingSpinner()
 
     pagination_component = (
         Pagination(
@@ -118,20 +135,27 @@ def RobotsDashboard(robots: List[Robot], on_action: Callable, robots_state: Dict
         else None
     )
 
-    return html._(
-        pagination_component,
-        html.div(
-            {"class_name": "cards-container robot-cards"},
-            *[RobotCard(robot=robot, on_action=on_action) for robot in robots],
-        ),
-        html.div(
-            {"class_name": "table-container"},
-            RobotTable(
-                robots=robots,
-                on_action=on_action,
-                sort_by=robots_state["sort_by"],
-                sort_dir=robots_state["sort_dir"],
-                on_sort=robots_state["handle_sort"],
+    # Usar AsyncContent para manejar estados de carga/error/vacío
+    return AsyncContent(
+        loading=loading and not robots,
+        error=error,
+        data=robots,
+        empty_message="No se encontraron robots.",
+        children=html._(
+            pagination_component,
+            html.div(
+                {"class_name": CARDS_CONTAINER_ROBOTS},
+                *[RobotCard(robot=robot, on_action=on_action) for robot in robots],
+            ),
+            html.div(
+                {"class_name": TABLE_CONTAINER},
+                RobotTable(
+                    robots=robots,
+                    on_action=on_action,
+                    sort_by=robots_state["sort_by"],
+                    sort_dir=robots_state["sort_dir"],
+                    on_sort=robots_state["handle_sort"],
+                ),
             ),
         ),
     )
@@ -208,7 +232,7 @@ def RobotRow(robot: Robot, on_action: Callable):
 
     is_programado = robot.get("TieneProgramacion", False)
     tipo_ejecucion_text = "Programado" if is_programado else "A Demanda"
-    tipo_ejecucion_class = f"tag {'tag-ejecucion-programado' if is_programado else 'tag-ejecucion-demanda'}"
+    tipo_ejecucion_class = STATUS_EJECUCION_PROGRAMADO if is_programado else STATUS_EJECUCION_DEMANDA
 
     return html.tr(
         {"key": robot["RobotId"]},
@@ -306,16 +330,16 @@ def RobotCard(robot: Robot, on_action: Callable):
 
     is_programado = robot.get("TieneProgramacion", False)
     tipo_ejecucion_text = "Programado" if is_programado else "A Demanda"
-    tipo_ejecucion_class = f"tag {'tag-ejecucion-programado' if is_programado else 'tag-ejecucion-demanda'}"
+    tipo_ejecucion_class = STATUS_EJECUCION_PROGRAMADO if is_programado else STATUS_EJECUCION_DEMANDA
 
     return html.article(
-        {"key": robot["RobotId"], "class_name": "robot-card"},
+        {"key": robot["RobotId"], "class_name": ROBOT_CARD},
         html.div(
-            {"class_name": "robot-card-header"},
+            {"class_name": ROBOT_CARD_HEADER},
             html.h5(robot["Robot"]),
         ),
         html.div(
-            {"class_name": "robot-card-body"},
+            {"class_name": ROBOT_CARD_BODY},
             html.div(
                 {"class_name": "grid"},
                 html.label(
@@ -347,7 +371,7 @@ def RobotCard(robot: Robot, on_action: Callable):
             html.p("Ejecución: ", html.span({"class_name": tipo_ejecucion_class}, tipo_ejecucion_text)),
         ),
         html.footer(
-            {"class_name": "robot-card-footer"},
+            {"class_name": ROBOT_CARD_FOOTER},
             html.button({"class_name": "outline secondary", "on_click": event(handle_edit)}, "Editar"),
             html.button({"class_name": "outline secondary", "on_click": event(handle_assign)}, "Asignar"),
             html.button({"class_name": "outline secondary", "on_click": event(handle_schedule)}, "Programar"),
