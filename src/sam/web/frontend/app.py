@@ -9,13 +9,13 @@ from reactpy_router import browser_router, route
 from sam.web.frontend.api.api_client import get_api_client
 
 # Componentes de páginas
-from .features.components.equipos_components import EquiposControls, EquiposDashboard
+from .features.components.equipo_list import EquiposControls, EquiposDashboard
 from .features.components.mappings_page import MappingsPage
 
 # Busca esta línea y agrega el nuevo componente:
-from .features.components.pools_components import BalanceadorStrategyPanel, PoolsControls, PoolsDashboard
-from .features.components.robots_components import RobotsControls, RobotsDashboard
-from .features.components.schedules_components import SchedulesControls, SchedulesDashboard
+from .features.components.pool_list import BalanceadorStrategyPanel, PoolsControls, PoolsDashboard
+from .features.components.robot_list import RobotsControls, RobotsDashboard
+from .features.components.schedule_list import SchedulesControls, SchedulesDashboard
 
 # Modales
 from .features.modals.equipos_modals import EquipoEditModal
