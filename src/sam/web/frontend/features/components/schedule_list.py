@@ -1,3 +1,11 @@
+# sam/web/frontend/features/components/schedule_list.py
+"""
+Componentes para la gestión de programaciones (schedules).
+
+Este módulo contiene los componentes para listar, mostrar y gestionar programaciones,
+siguiendo el estándar de ReactPy de SAM.
+"""
+
 from typing import Callable, Dict, List, Optional
 
 from reactpy import component, event, html, use_state
@@ -5,7 +13,20 @@ from reactpy import component, event, html, use_state
 # Usamos el tipo ScheduleData de schemas para hint, aunque es un dict en runtime
 from sam.web.backend.schemas import ScheduleData
 
-from ...shared.common_components import LoadingSpinner, Pagination
+from ...shared.async_content import AsyncContent
+from ...shared.common_components import Pagination
+from ...shared.styles import (
+    CARDS_CONTAINER,
+    COLLAPSIBLE_PANEL,
+    COLLAPSIBLE_PANEL_EXPANDED,
+    DASHBOARD_CONTROLS,
+    MASTER_CONTROLS_GRID,
+    MOBILE_CONTROLS_TOGGLE,
+    SCHEDULE_CARD,
+    SEARCH_INPUT,
+    TAG,
+    TABLE_CONTAINER,
+)
 
 
 @component
@@ -21,16 +42,16 @@ def SchedulesControls(
     is_searching: bool,
 ):
     is_expanded, set_is_expanded = use_state(False)
-    collapsible_panel_class = f"collapsible-panel {'is-expanded' if is_expanded else ''}"
+    collapsible_panel_class = COLLAPSIBLE_PANEL_EXPANDED if is_expanded else COLLAPSIBLE_PANEL
 
     return html.div(
-        {"class_name": "dashboard-controls"},
+        {"class_name": DASHBOARD_CONTROLS},
         html.div(
             {"class_name": "controls-header"},
             html.h2("Gestión de Programaciones"),
             html.button(
                 {
-                    "class_name": "mobile-controls-toggle outline secondary",
+                    "class_name": MOBILE_CONTROLS_TOGGLE,
                     "on_click": lambda e: set_is_expanded(not is_expanded),
                 },
                 html.i({"class_name": f"fa-solid fa-chevron-{'up' if is_expanded else 'down'}"}),
@@ -41,7 +62,7 @@ def SchedulesControls(
             {"class_name": collapsible_panel_class},
             html.div(
                 {
-                    "class_name": "master-controls-grid",
+                    "class_name": MASTER_CONTROLS_GRID,
                     "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"},
                 },
                 html.input(
@@ -52,6 +73,7 @@ def SchedulesControls(
                         "value": search,
                         "on_change": lambda e: on_search(e["target"]["value"]),
                         "aria-busy": str(is_searching).lower(),
+                        "class_name": SEARCH_INPUT,
                     }
                 ),
                 html.select(
@@ -107,35 +129,37 @@ def SchedulesDashboard(
     error: str,
 ):
     """Componente principal que renderiza la tabla y paginación."""
-    if loading:
-        return LoadingSpinner()
+    pagination_component = (
+        Pagination(current_page, total_pages, len(schedules), total_count, on_page_change)
+        if total_pages > 1
+        else None
+    )
 
-    if error:
-        return html.article(
-            {"aria_invalid": "true", "style": {"color": "var(--pico-color-red-600)"}}, f"Error: {error}"
-        )
-
-    if not schedules:
-        return html.article({"style": {"textAlign": "center", "padding": "2rem"}}, "No se encontraron programaciones.")
-
-    return html._(
-        Pagination(current_page, total_pages, len(schedules), total_count, on_page_change),
-        html.div(
-            {"className": "cards-container"},
-            [
-                ScheduleCard(
-                    schedule=s,
-                    on_toggle=on_toggle,
-                    on_edit=on_edit,
-                    on_assign_equipos=on_assign_equipos,
-                    key=s["ProgramacionId"],  # Importante para el rendimiento de renderizado
-                )
-                for s in schedules
-            ],
-        ),
-        html.div(
-            {"className": "table-container"},
-            SchedulesTable(schedules, on_toggle, on_edit, on_assign_equipos),
+    # Usar AsyncContent para manejar estados de carga/error/vacío
+    return AsyncContent(
+        loading=loading,
+        error=error,
+        data=schedules,
+        empty_message="No se encontraron programaciones.",
+        children=html._(
+            pagination_component,
+            html.div(
+                {"class_name": CARDS_CONTAINER},
+                [
+                    ScheduleCard(
+                        schedule=s,
+                        on_toggle=on_toggle,
+                        on_edit=on_edit,
+                        on_assign_equipos=on_assign_equipos,
+                        key=s["ProgramacionId"],  # Importante para el rendimiento de renderizado
+                    )
+                    for s in schedules
+                ],
+            ),
+            html.div(
+                {"class_name": TABLE_CONTAINER},
+                SchedulesTable(schedules, on_toggle, on_edit, on_assign_equipos),
+            ),
         ),
     )
 
@@ -236,12 +260,12 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
 @component
 def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable):
     return html.article(
-        {"class_name": "schedule-card"},
+        {"class_name": SCHEDULE_CARD},
         html.header(
             html.div(
                 {"style": {"display": "flex", "justifyContent": "space-between", "alignItems": "center"}},
                 html.h5({"style": {"margin": 0}}, schedule["RobotNombre"]),
-                html.span({"class_name": "tag"}, schedule["TipoProgramacion"]),
+                html.span({"class_name": TAG}, schedule["TipoProgramacion"]),
             )
         ),
         html.div(
