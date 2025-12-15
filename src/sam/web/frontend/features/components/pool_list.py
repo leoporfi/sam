@@ -1,4 +1,10 @@
-# /src/sam/web/features/pools/pool_components.py
+# sam/web/frontend/features/components/pool_list.py
+"""
+Componentes para la gestión de pools.
+
+Este módulo contiene los componentes para listar, mostrar y gestionar pools,
+siguiendo el estándar de ReactPy de SAM.
+"""
 
 import asyncio
 from typing import Callable, Dict, List
@@ -7,7 +13,23 @@ from reactpy import component, event, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
 
-from ...shared.common_components import ConfirmationModal, LoadingSpinner
+from ...shared.async_content import AsyncContent
+from ...shared.common_components import ConfirmationModal
+from ...shared.styles import (
+    BUTTON_PRIMARY,
+    CARDS_CONTAINER_POOLS,
+    COLLAPSIBLE_PANEL,
+    COLLAPSIBLE_PANEL_EXPANDED,
+    DASHBOARD_CONTROLS,
+    MASTER_CONTROLS_GRID,
+    MOBILE_CONTROLS_TOGGLE,
+    POOL_CARD,
+    POOL_CARD_BODY,
+    POOL_CARD_FOOTER,
+    POOL_CARD_HEADER,
+    SEARCH_INPUT,
+    TABLE_CONTAINER,
+)
 
 
 @component
@@ -19,16 +41,16 @@ def PoolsControls(
 ):
     """Controles para el dashboard de Pools (título, buscador, botón)."""
     is_expanded, set_is_expanded = use_state(False)
-    collapsible_panel_class = f"collapsible-panel {'is-expanded' if is_expanded else ''}"
+    collapsible_panel_class = COLLAPSIBLE_PANEL_EXPANDED if is_expanded else COLLAPSIBLE_PANEL
 
     return html.div(
-        {"class_name": "dashboard-controls"},
+        {"class_name": DASHBOARD_CONTROLS},
         html.div(
             {"class_name": "controls-header"},
             html.h2("Gestión de Pools"),
             html.button(
                 {
-                    "class_name": "mobile-controls-toggle outline secondary",
+                    "class_name": MOBILE_CONTROLS_TOGGLE,
                     "on_click": lambda e: set_is_expanded(not is_expanded),
                 },
                 html.i({"class_name": f"fa-solid fa-chevron-{'up' if is_expanded else 'down'}"}),
@@ -38,7 +60,7 @@ def PoolsControls(
         html.div(
             {"class_name": collapsible_panel_class},
             html.div(
-                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr"}},
+                {"class_name": MASTER_CONTROLS_GRID, "style": {"gridTemplateColumns": "5fr 2fr"}},
                 html.input(
                     {
                         "type": "search",
@@ -47,11 +69,11 @@ def PoolsControls(
                         "value": search_term,
                         "on_change": lambda event: on_search_change(event["target"]["value"]),
                         "aria-busy": str(is_searching).lower(),
-                        "class_name": "search-input",
+                        "class_name": SEARCH_INPUT,
                     }
                 ),
                 html.button(
-                    {"on_click": on_create_pool},
+                    {"on_click": on_create_pool, "type": "button", "class_name": BUTTON_PRIMARY},
                     html.i({"class_name": "fa-solid fa-plus"}),
                     " Pool",
                 ),
@@ -64,22 +86,24 @@ def PoolsControls(
 def PoolsDashboard(
     pools: List[Dict], on_edit: Callable, on_assign: Callable, on_delete: Callable, loading: bool, error: str
 ):
-    """Componente principal que ahora solo renderiza la tabla/tarjetas."""
+    """Componente principal que renderiza la tabla/tarjetas."""
     pools_data = pools.get("pools", []) if isinstance(pools, dict) else pools
 
-    if error:
-        return html.article({"aria_invalid": "true"}, f"Error: {error}")
-    if loading and not pools:
-        return LoadingSpinner()
-
-    return html._(
-        html.div(
-            {"class_name": "cards-container pool-cards"},
-            *[PoolCard(pool=p, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete) for p in pools_data],
-        ),
-        html.div(
-            {"class_name": "table-container"},
-            PoolsTable(pools=pools, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete),
+    # Usar AsyncContent para manejar estados de carga/error/vacío
+    return AsyncContent(
+        loading=loading and not pools_data,
+        error=error,
+        data=pools_data,
+        empty_message="No se encontraron pools.",
+        children=html._(
+            html.div(
+                {"class_name": CARDS_CONTAINER_POOLS},
+                *[PoolCard(pool=p, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete) for p in pools_data],
+            ),
+            html.div(
+                {"class_name": TABLE_CONTAINER},
+                PoolsTable(pools=pools, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete),
+            ),
         ),
     )
 
@@ -156,14 +180,14 @@ def PoolRow(pool: Dict, on_edit: Callable, on_assign: Callable, on_delete: Calla
 def PoolCard(pool: Dict, on_edit: Callable, on_assign: Callable, on_delete: Callable):
     """Tarjeta individual para la vista móvil de pools."""
     return html.article(
-        {"key": pool["PoolId"], "class_name": "pool-card"},
+        {"key": pool["PoolId"], "class_name": POOL_CARD},
         html.div(
-            {"class_name": "pool-card-header"},
+            {"class_name": POOL_CARD_HEADER},
             html.h5(pool["Nombre"]),
             html.small(pool.get("Descripcion", "")),
         ),
         html.div(
-            {"class_name": "pool-card-body"},
+            {"class_name": POOL_CARD_BODY},
             html.div(
                 {"class_name": "resource-counts"},
                 html.span(html.i({"class_name": "fa-solid fa-robot"}), f" {pool.get('CantidadRobots', 0)} Robots"),
@@ -171,7 +195,7 @@ def PoolCard(pool: Dict, on_edit: Callable, on_assign: Callable, on_delete: Call
             ),
         ),
         html.footer(
-            {"class_name": "pool-card-footer"},
+            {"class_name": POOL_CARD_FOOTER},
             html.button({"class_name": "outline secondary", "on_click": lambda e: on_edit(pool)}, "Editar"),
             html.button({"class_name": "outline secondary", "on_click": lambda e: on_assign(pool)}, "Asignar"),
             html.button({"class_name": "outline secondary", "on_click": lambda e: on_delete(pool)}, "Eliminar"),
