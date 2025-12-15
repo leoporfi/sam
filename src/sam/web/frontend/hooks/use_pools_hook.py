@@ -1,17 +1,42 @@
-# sam/web/hooks/use_pools_hook.py
+# sam/web/frontend/hooks/use_pools_hook.py
+"""
+Hook para gestionar el estado del dashboard de pools.
+
+Este hook maneja la carga, creación, actualización y eliminación de pools,
+siguiendo el principio de Inyección de Dependencias de la Guía General de SAM.
+"""
 import asyncio
+from typing import Any, Callable, Dict, List, Optional
 
 from reactpy import use_callback, use_effect, use_ref, use_state
 
-from ..api.api_client import get_api_client
+from ..api.api_client import APIClient, get_api_client
 
 
-def use_pools_management():
+def use_pools_management(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
     """
     Hook completo para la gestión de pools (CRUD y refresh).
     Centraliza toda la lógica de estado y las llamadas a la API para los pools.
+    
+    Args:
+        api_client: Cliente API opcional para inyección de dependencias (para testing).
+                   Si no se proporciona, se obtiene del contexto o se usa get_api_client().
+    
+    Returns:
+        Dict con las siguientes keys:
+            - pools: List[Dict] - Lista de pools
+            - loading: bool - Estado de carga
+            - error: Optional[str] - Mensaje de error
+            - refresh: Callable - Función para recargar pools
+            - create_pool: Callable - Función para crear pool
+            - update_pool: Callable - Función para actualizar pool
+            - delete_pool: Callable - Función para eliminar pool
+            - get_pool_assignments: Callable - Función para obtener asignaciones
+            - update_pool_assignments: Callable - Función para actualizar asignaciones
     """
-    api_client = get_api_client()
+    # Aplicar Inyección de Dependencias: permitir inyectar api_client para testing
+    if api_client is None:
+        api_client = get_api_client()  # type: ignore
     pools, set_pools = use_state([])
     loading, set_loading = use_state(True)
     error, set_error = use_state(None)
