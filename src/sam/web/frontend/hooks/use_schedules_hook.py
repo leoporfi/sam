@@ -1,9 +1,16 @@
+# sam/web/frontend/hooks/use_schedules_hook.py
+"""
+Hook para gestionar el estado del dashboard de programaciones (schedules).
+
+Este hook maneja la carga, filtrado, paginación de programaciones,
+siguiendo el principio de Inyección de Dependencias de la Guía General de SAM.
+"""
 import asyncio
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from reactpy import use_callback, use_context, use_effect, use_memo, use_ref, use_state
 
-from ..api.api_client import get_api_client
+from ..api.api_client import APIClient, get_api_client
 from ..shared.notifications import NotificationContext
 
 PAGE_SIZE = 100
@@ -12,8 +19,36 @@ INITIAL_FILTERS = {"robot": None, "tipo": None, "activo": None, "search": None}
 POLL_INTERVAL = 120
 
 
-def use_schedules():
-    api = get_api_client()
+def use_schedules(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
+    """
+    Hook para gestionar programaciones (schedules).
+    
+    Args:
+        api_client: Cliente API opcional para inyección de dependencias (para testing).
+                   Si no se proporciona, se obtiene del contexto o se usa get_api_client().
+    
+    Returns:
+        Dict con las siguientes keys:
+            - schedules: List[Dict] - Lista de programaciones
+            - loading: bool - Estado de carga
+            - error: Optional[str] - Mensaje de error
+            - total_count: int - Total de programaciones
+            - filters: Dict - Filtros actuales
+            - set_filters: Callable - Función para actualizar filtros
+            - refresh: Callable - Función para recargar programaciones
+            - current_page: int - Página actual
+            - set_current_page: Callable - Función para cambiar página
+            - total_pages: int - Total de páginas
+            - page_size: int - Tamaño de página
+            - sort_by: str - Columna de ordenamiento
+            - sort_dir: str - Dirección de ordenamiento ("asc" o "desc")
+            - handle_sort: Callable - Función para manejar ordenamiento
+    """
+    # Aplicar Inyección de Dependencias: permitir inyectar api_client para testing
+    if api_client is None:
+        api = get_api_client()  # type: ignore
+    else:
+        api = api_client
     ctx = use_context(NotificationContext)
     show: Callable = ctx["show_notification"]
 
