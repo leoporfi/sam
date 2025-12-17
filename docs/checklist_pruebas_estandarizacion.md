@@ -16,26 +16,26 @@
 
 ## Pre-requisitos
 
-- [ ] El servidor inicia sin errores: `python -m sam.web.run_web`
-- [ ] No hay errores en la consola del navegador (F12 → Console)
-- [ ] La aplicación carga en `http://localhost:8000` (o puerto configurado)
+- [✅] El servidor inicia sin errores: `python -m sam.web.run_web`
+- [✅] No hay errores en la consola del navegador (F12 → Console)
+- [✅] La aplicación carga en `http://localhost:8000` (o puerto configurado)
 
 ---
 
 ## 1. Navegación y Estructura General
 
 ### 1.1 Navegación entre Páginas
-- [ ] Click en "Robots" → Carga página de robots
-- [ ] Click en "Equipos" → Carga página de equipos
-- [ ] Click en "Pools" → Carga página de pools
-- [ ] Click en "Programaciones" → Carga página de programaciones
-- [ ] Click en "Mapeos" → Carga página de mapeos
-- [ ] Navegación con URL directa funciona (ej: `/equipos`)
+- [✅] Click en "Robots" → Carga página de robots
+- [✅] Click en "Equipos" → Carga página de equipos
+- [✅] Click en "Pools" → Carga página de pools
+- [✅] Click en "Programaciones" → Carga página de programaciones
+- [✅] Click en "Mapeos" → Carga página de mapeos
+- [✅] Navegación con URL directa funciona (ej: `/equipos`)
 
 ### 1.2 Layout General
-- [ ] El header/navegación se muestra correctamente
-- [ ] El tema claro/oscuro funciona (si aplica)
-- [ ] No hay elementos rotos o desalineados
+- [✅] El header/navegación se muestra correctamente
+- [⚠️] El tema claro/oscuro funciona (si aplica)
+- [✅] No hay elementos rotos o desalineados
 
 ---
 
