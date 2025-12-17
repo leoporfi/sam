@@ -334,18 +334,25 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
 
+    # Obtener api_client del contexto
+    try:
+        from .state.app_context import use_app_context
+        app_context = use_app_context()
+        api_client = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_client = get_api_client()
+
     # --- LÓGICA 1: Cargar robots dinámicamente según el Tipo (CASCADA) ---
     @use_effect(dependencies=[tipo_filter])
     def init_data_load():
         async def fetch_data():
-            api = get_api_client()
             try:
                 # Solicitamos programaciones filtradas por tipo para extraer los robots relevantes
                 params = {"page": 1, "size": 300}
                 if tipo_filter:
                     params["tipo"] = tipo_filter
 
-                data = await api.get_schedules(params)
+                data = await api_client.get_schedules(params)
                 items = data.get("items") or data.get("schedules", [])
                 unique_robots = {}
                 for s in items:
