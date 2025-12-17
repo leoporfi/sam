@@ -11,6 +11,7 @@ from sam.web.frontend.api.api_client import get_api_client
 from sam.web.frontend.hooks.use_equipos_hook import use_equipos
 from sam.web.frontend.hooks.use_robots_hook import use_robots
 from sam.web.frontend.shared.common_components import LoadingSpinner, PageWithLayout
+from sam.web.frontend.state.app_context import use_app_context
 
 # Definición manual de la etiqueta datalist
 datalist = make_vdom_constructor("datalist")
@@ -33,12 +34,18 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
     new_robot_id, set_new_robot_id = use_state(None)
     robot_search, set_robot_search = use_state("")  # Texto que ve el usuario
 
+    # Obtener api_client del contexto
+    try:
+        app_context = use_app_context()
+        api_client = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_client = get_api_client()
+
     # Función para cargar datos
     async def fetch_data():
-        api = get_api_client()
         try:
-            m_data = await api.get_mappings()
-            r_data = await api.get_robots({"size": 1000, "active": True})
+            m_data = await api_client.get_mappings()
+            r_data = await api_client.get_robots({"size": 1000, "active": True})
 
             set_mappings(m_data)
             set_robots(r_data.get("robots", []))
@@ -79,8 +86,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
         prov_to_save = new_proveedor.strip() or "General"
 
         try:
-            api = get_api_client()
-            await api.create_mapping(
+            await api_client.create_mapping(
                 {
                     "Proveedor": prov_to_save,
                     "NombreExterno": new_externo,
@@ -99,8 +105,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
 
     async def handle_delete(mid):
         try:
-            api = get_api_client()
-            await api.delete_mapping(mid)
+            await api_client.delete_mapping(mid)
             await fetch_data()
         except Exception as e:
             print(f"Error eliminando mapeo: {e}")
