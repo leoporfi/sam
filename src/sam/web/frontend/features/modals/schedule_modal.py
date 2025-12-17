@@ -380,7 +380,13 @@ def ScheduleEquiposModal(
     """
     Modal para asignar/desasignar equipos a una programación específica.
     """
-    api = get_api_client()
+    # Obtener api_client del contexto
+    try:
+        from ...state.app_context import use_app_context
+        app_context = use_app_context()
+        api = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api = get_api_client()
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
 

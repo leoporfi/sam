@@ -110,7 +110,12 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     is_loading, set_is_loading = use_state(False)
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
-    api_service = get_api_client()
+    # Obtener api_client del contexto
+    try:
+        app_context = use_app_context()
+        api_service = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_service = get_api_client()
     is_edit_mode = bool(robot and robot.get("RobotId") is not None)
 
     @use_effect(dependencies=[robot])
@@ -335,7 +340,12 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
 
 @component
 def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callable, on_save_success: Callable):
-    api_service = get_api_client()
+    # Obtener api_client del contexto
+    try:
+        app_context = use_app_context()
+        api_service = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_service = get_api_client()
     assigned_devices, set_assigned_devices = use_state([])
     available_devices, set_available_devices = use_state([])
     is_loading, set_is_loading = use_state(False)
@@ -561,7 +571,12 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
 
 @component
 def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callable, on_save_success: Callable):
-    api_service = get_api_client()
+    # Obtener api_client del contexto
+    try:
+        app_context = use_app_context()
+        api_service = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_service = get_api_client()
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
     view_mode, set_view_mode = use_state("list")

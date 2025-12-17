@@ -14,6 +14,7 @@ from reactpy import component, event, html, use_effect, use_state
 from sam.web.frontend.api.api_client import get_api_client
 
 from ...shared.async_content import AsyncContent, LoadingSpinner
+from ...state.app_context import use_app_context
 from ...shared.common_components import ConfirmationModal
 from ...shared.styles import (
     BUTTON_PRIMARY,
@@ -215,14 +216,20 @@ def BalanceadorStrategyPanel():
     confirm_open, set_confirm_open = use_state(False)
     pending_change, set_pending_change = use_state(None)  # Dict con 'type' y 'value'
 
+    # Obtener api_client del contexto
+    try:
+        app_context = use_app_context()
+        api_client = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_client = get_api_client()
+
     # Cargar estado inicial
     @use_effect(dependencies=[])
     def init_data_load():
         async def fetch_data():
             try:
-                api = get_api_client()
-                p_data = await api.get_preemption_mode()
-                i_data = await api.get_isolation_mode()
+                p_data = await api_client.get_preemption_mode()
+                i_data = await api_client.get_isolation_mode()
                 set_preemption_enabled(p_data.get("enabled", False))
                 set_isolation_enabled(i_data.get("enabled", True))
             except asyncio.CancelledError:
@@ -250,12 +257,11 @@ def BalanceadorStrategyPanel():
         val = pending_change["value"]
 
         try:
-            api = get_api_client()
             if setting == "preemption":
-                await api.set_preemption_mode(val)
+                await api_client.set_preemption_mode(val)
                 set_preemption_enabled(val)
             elif setting == "isolation":
-                await api.set_isolation_mode(val)
+                await api_client.set_isolation_mode(val)
                 set_isolation_enabled(val)
         except asyncio.CancelledError:
             raise
