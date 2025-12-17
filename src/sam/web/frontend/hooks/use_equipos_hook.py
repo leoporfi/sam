@@ -12,6 +12,7 @@ from reactpy import use_callback, use_context, use_effect, use_memo, use_ref, us
 
 from ..api.api_client import APIClient, get_api_client
 from ..shared.notifications import NotificationContext
+from ..state.app_context import use_app_context
 
 PAGE_SIZE = 100
 INITIAL_FILTERS = {"name": None, "active": None, "balanceable": None}
@@ -48,8 +49,17 @@ def use_equipos(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
             - handle_sort: Callable - Función para manejar ordenamiento
     """
     # Aplicar Inyección de Dependencias: permitir inyectar api_client para testing
+    # Si no se proporciona, intentar obtener del contexto de la aplicación
     if api_client is None:
-        api_client = get_api_client()  # type: ignore
+        try:
+            app_context = use_app_context()
+            api_client = app_context.get("api_client")
+            if api_client is None:
+                # Fallback a get_api_client() para compatibilidad temporal
+                api_client = get_api_client()  # type: ignore
+        except Exception:
+            # Fallback a get_api_client() para compatibilidad temporal
+            api_client = get_api_client()  # type: ignore
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
 
