@@ -36,7 +36,7 @@ from .shared.common_components import ConfirmationModal, PageWithLayout
 from .shared.notifications import NotificationContext, ToastContainer
 
 # Contexto de la aplicación
-from .state.app_context import AppProvider
+from .state.app_context import AppContext
 
 
 # --- Componentes de Página (Lógica de cada ruta) ---
@@ -527,7 +527,7 @@ def App():
         "api_client": api_client,
     }
 
-    return AppProvider(
+    return AppContext(
         value=app_context_value,
         children=NotificationContext(
             html._(
