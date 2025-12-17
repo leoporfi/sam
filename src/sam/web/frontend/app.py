@@ -528,7 +528,6 @@ def App():
     }
 
     return AppContext(
-        app_context_value,
         NotificationContext(
             html._(
                 script_to_run,
@@ -544,6 +543,7 @@ def App():
             ),
             value=notification_context_value,
         ),
+        value=app_context_value,
     )
 
 
