@@ -528,8 +528,8 @@ def App():
     }
 
     return AppContext(
-        value=app_context_value,
-        children=NotificationContext(
+        app_context_value,
+        NotificationContext(
             html._(
                 script_to_run,
                 browser_router(
