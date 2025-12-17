@@ -6,7 +6,7 @@ import uuid
 from reactpy import component, html, use_context, use_effect, use_location, use_state
 from reactpy_router import browser_router, route
 
-from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.api.api_client import APIClient
 
 # Componentes de páginas
 from .features.components.equipo_list import EquiposControls, EquiposDashboard
@@ -34,6 +34,9 @@ from .hooks.use_schedules_hook import use_schedules
 # Componentes compartidos
 from .shared.common_components import ConfirmationModal, PageWithLayout
 from .shared.notifications import NotificationContext, ToastContainer
+
+# Contexto de la aplicación
+from .state.app_context import AppProvider
 
 
 # --- Componentes de Página (Lógica de cada ruta) ---
@@ -477,10 +480,19 @@ def NotFoundPage(theme_is_dark: bool, on_theme_toggle):
 # --- Estructura Principal de la App ---
 @component
 def App():
-    """Componente raíz que provee el contexto y el enrutador."""
+    """
+    Componente raíz que provee los contextos (notificaciones y dependencias) y el enrutador.
+    
+    Aplica el patrón de Inyección de Dependencias desde el punto más alto (componente raíz),
+    siguiendo la Guía General de SAM.
+    """
     notifications, set_notifications = use_state([])
     is_dark, set_is_dark = use_state(True)
     script_to_run, set_script_to_run = use_state(html._())
+
+    # Crear instancia única de APIClient para toda la aplicación
+    # Esto permite inyección de dependencias y facilita testing
+    api_client = APIClient(base_url="http://127.0.0.1:8000")
 
     @use_effect(dependencies=[is_dark])
     def apply_theme():
@@ -496,26 +508,35 @@ def App():
     def dismiss_notification(notification_id):
         set_notifications(lambda old: [n for n in old if n["id"] != notification_id])
 
-    context_value = {
+    # Contexto de notificaciones
+    notification_context_value = {
         "notifications": notifications,
         "show_notification": show_notification,
         "dismiss_notification": dismiss_notification,
     }
 
-    return NotificationContext(
-        html._(
-            script_to_run,
-            browser_router(
-                route("/", RobotsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                route("/equipos", EquiposPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                route("/programaciones", SchedulesPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                route("/mapeos", MappingsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+    # Contexto de la aplicación (dependencias inyectadas)
+    app_context_value = {
+        "api_client": api_client,
+    }
+
+    return AppProvider(
+        value=app_context_value,
+        children=NotificationContext(
+            html._(
+                script_to_run,
+                browser_router(
+                    route("/", RobotsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                    route("/equipos", EquiposPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                    route("/programaciones", SchedulesPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                    route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                    route("/mapeos", MappingsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                    route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                ),
+                ToastContainer(),
             ),
-            ToastContainer(),
+            value=notification_context_value,
         ),
-        value=context_value,
     )
 
 
