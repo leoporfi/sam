@@ -3,7 +3,7 @@ import asyncio
 import uuid
 
 # app.py - SECCIÓN DE IMPORTS
-from reactpy import component, html, use_context, use_effect, use_location, use_state
+from reactpy import component, html, use_context, use_effect, use_location, use_memo, use_state
 from reactpy_router import browser_router, route
 
 from sam.web.frontend.api.api_client import APIClient
@@ -148,8 +148,15 @@ def PoolsPage(theme_is_dark: bool, on_theme_toggle):
     modal_view, set_modal_view = use_state(None)
     pool_to_delete, set_pool_to_delete = use_state(None)
 
-    # Filtrar pools por búsqueda
-    filtered_pools = [pool for pool in pools_state["pools"] if not debounced_search or debounced_search.lower() in pool["Nombre"].lower()]
+    # Filtrar pools por búsqueda (memoizado para evitar recálculos innecesarios)
+    filtered_pools = use_memo(
+        lambda: [
+            pool
+            for pool in pools_state["pools"]
+            if not debounced_search or debounced_search.lower() in pool["Nombre"].lower()
+        ],
+        [pools_state["pools"], debounced_search],
+    )
 
     is_searching = debounced_search != search_input
 
