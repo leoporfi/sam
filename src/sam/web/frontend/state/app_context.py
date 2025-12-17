@@ -13,7 +13,7 @@ Uso:
         "api_client": api_client,
         # ... otras dependencias
     }
-    return AppProvider(value=context_value, children=...)
+    return AppContext(value=context_value, children=...)
     
     # En hooks o componentes
     from sam.web.frontend.state.app_context import use_app_context
@@ -30,19 +30,9 @@ from reactpy import create_context, use_context, component
 AppContext = create_context({})
 
 
-@component
-def AppProvider(children, value: Dict[str, Any]):
-    """
-    Proveedor del contexto global de la aplicación.
-    
-    Args:
-        children: Componentes hijos que tendrán acceso al contexto
-        value: Diccionario con las dependencias a compartir (ej: api_client)
-    
-    Returns:
-        Componente ReactPy que provee el contexto
-    """
-    return AppContext(value, children)
+# AppProvider no es necesario como componente separado
+# En ReactPy, el contexto creado con create_context se puede usar directamente
+# como componente: AppContext(value=context_value, children=...)
 
 
 def use_app_context() -> Dict[str, Any]:
