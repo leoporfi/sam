@@ -43,7 +43,7 @@ def use_app_context() -> Dict[str, Any]:
         Diccionario con las dependencias compartidas (ej: api_client)
     
     Raises:
-        RuntimeError: Si se usa fuera de un AppProvider
+        RuntimeError: Si se usa fuera de un AppContext provider
     """
     return use_context(AppContext)
 
