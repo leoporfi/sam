@@ -22,7 +22,8 @@ DEFAULT_ROBOT_STATE = {
     "TicketsPorEquipoAdicional": 10,
 }
 
-SCHEDULE_TYPES = ["Diaria", "Semanal", "Mensual", "Especifica"]
+# Incluir todos los tipos soportados por la BD (incluye RangoMensual)
+SCHEDULE_TYPES = ["Diaria", "Semanal", "Mensual", "RangoMensual", "Especifica"]
 DEFAULT_FORM_STATE = {
     "ProgramacionId": None,
     "TipoProgramacion": "Diaria",
@@ -31,6 +32,11 @@ DEFAULT_FORM_STATE = {
     "DiasSemana": "Lu,Ma,Mi,Ju,Vi,Sa,Do",
     "DiaDelMes": 1,
     "FechaEspecifica": "",
+    # Campos para RangoMensual
+    "DiaInicioMes": None,
+    "DiaFinMes": None,
+    "UltimosDiasMes": None,
+    "PrimerosDiasMes": None,
     "Equipos": [],
 }
 
@@ -666,6 +672,11 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
             "DiasSemana": schedule_to_edit.get("DiasSemana", ""),
             "DiaDelMes": schedule_to_edit.get("DiaDelMes", 1),
             "FechaEspecifica": (schedule_to_edit.get("FechaEspecifica") or "")[:10],
+            # Campos para RangoMensual (si existen en la respuesta)
+            "DiaInicioMes": schedule_to_edit.get("DiaInicioMes"),
+            "DiaFinMes": schedule_to_edit.get("DiaFinMes"),
+            "UltimosDiasMes": schedule_to_edit.get("UltimosDiasMes"),
+            "PrimerosDiasMes": schedule_to_edit.get("PrimerosDiasMes"),
             "Equipos": equipos_ids,
         }
         set_form_data(form_state)
@@ -845,14 +856,29 @@ def SchedulesList(
     schedule_to_delete, set_schedule_to_delete = use_state(None)
 
     def format_schedule_details(schedule):
-        details = f"{schedule.get('TipoProgramacion', 'N/A')} a las {schedule.get('HoraInicio', '')}"
         tipo = schedule.get("TipoProgramacion")
+        hora = schedule.get("HoraInicio", "")
+        details = f"{tipo or 'N/A'} a las {hora}"
+
         if tipo == "Semanal":
             details += f" los días {schedule.get('DiasSemana', '')}"
         elif tipo == "Mensual":
             details += f" el día {schedule.get('DiaDelMes', '')} de cada mes"
         elif tipo == "Especifica":
             details += f" en la fecha {schedule.get('FechaEspecifica', '')}"
+        elif tipo == "RangoMensual":
+            dia_inicio = schedule.get("DiaInicioMes")
+            dia_fin = schedule.get("DiaFinMes")
+            ultimos = schedule.get("UltimosDiasMes")
+
+            if ultimos:
+                details += f" los últimos {ultimos} día(s) del mes"
+            elif dia_inicio and dia_fin:
+                if dia_inicio == 1:
+                    details += f" los primeros {dia_fin} día(s) del mes"
+                else:
+                    details += f" del {dia_inicio} al {dia_fin} de cada mes"
+
         return details
 
     async def handle_confirm_delete():
@@ -1014,6 +1040,148 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                     "on_change": lambda e: on_change("DiaDelMes", int(e["target"]["value"]) if e["target"]["value"] else 1),
                 }
             ),
+        )
+    elif tipo == "RangoMensual":
+        dia_inicio = form_data.get("DiaInicioMes")
+        dia_fin = form_data.get("DiaFinMes")
+        ultimos = form_data.get("UltimosDiasMes")
+        primeros = form_data.get("PrimerosDiasMes")
+
+        # Deducir opción seleccionada si no existe 'rango_option'
+        rango_option = form_data.get("rango_option")
+        if not rango_option:
+            if ultimos:
+                rango_option = "ultimos"
+            elif primeros or (dia_inicio == 1 and dia_fin):
+                rango_option = "primeros"
+            elif dia_inicio and dia_fin:
+                rango_option = "rango"
+
+        def set_option(option: str):
+            # Actualizamos campo de ayuda y limpiamos los que no aplican
+            payload: Dict[str, Any] = {"rango_option": option}
+            if option == "rango":
+                payload["PrimerosDiasMes"] = None
+                payload["UltimosDiasMes"] = None
+            elif option == "primeros":
+                payload["DiaInicioMes"] = 1
+                # Mantener DiaFinMes como N (primeros N días)
+                payload["UltimosDiasMes"] = None
+            elif option == "ultimos":
+                payload["DiaInicioMes"] = None
+                payload["DiaFinMes"] = None
+                payload["PrimerosDiasMes"] = None
+            for k, v in payload.items():
+                on_change(k, v)
+
+        return html.div(
+            {"class_name": "rango-mensual-options"},
+            html.p({"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}}, "Seleccione una opción:"),
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "rango",
+                        "checked": rango_option == "rango",
+                        "on_change": lambda e: set_option("rango"),
+                    }
+                ),
+                " Rango específico (ej: del 1 al 10)",
+            ),
+            html.div(
+                {"class_name": "grid", "style": {"display": "flex", "gap": "1rem"}},
+                html.label(
+                    "Día Inicio",
+                    html.input(
+                        {
+                            "type": "number",
+                            "min": 1,
+                            "max": 31,
+                            "value": dia_inicio or "",
+                            "placeholder": "1",
+                            "on_change": lambda e: on_change(
+                                "DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                            ),
+                        }
+                    ),
+                ),
+                html.label(
+                    "Día Fin",
+                    html.input(
+                        {
+                            "type": "number",
+                            "min": 1,
+                            "max": 31,
+                            "value": dia_fin or "",
+                            "placeholder": "10",
+                            "on_change": lambda e: on_change(
+                                "DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                            ),
+                        }
+                    ),
+                ),
+            )
+            if rango_option == "rango"
+            else None,
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "primeros",
+                        "checked": rango_option == "primeros",
+                        "on_change": lambda e: set_option("primeros"),
+                    }
+                ),
+                " Primeros N días del mes",
+            ),
+            html.label(
+                "Cantidad de días",
+                html.input(
+                    {
+                        "type": "number",
+                        "min": 1,
+                        "max": 31,
+                        "value": primeros or (dia_fin if dia_inicio == 1 and dia_fin else ""),
+                        "placeholder": "10",
+                        "on_change": lambda e: on_change(
+                            "PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                        ),
+                    }
+                ),
+            )
+            if rango_option == "primeros"
+            else None,
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "ultimos",
+                        "checked": rango_option == "ultimos",
+                        "on_change": lambda e: set_option("ultimos"),
+                    }
+                ),
+                " Últimos N días del mes",
+            ),
+            html.label(
+                "Cantidad de días",
+                html.input(
+                    {
+                        "type": "number",
+                        "min": 1,
+                        "max": 31,
+                        "value": ultimos or "",
+                        "placeholder": "5",
+                        "on_change": lambda e: on_change(
+                            "UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                        ),
+                    }
+                ),
+            )
+            if rango_option == "ultimos"
+            else None,
         )
     elif tipo == "Especifica":
         return html.label(

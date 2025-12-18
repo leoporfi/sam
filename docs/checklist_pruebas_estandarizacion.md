@@ -42,7 +42,7 @@
 ## 2. Página de Robots (`/`)
 
 ### 2.1 Controles y Filtros
-- [ ] El panel de controles se muestra correctamente
+- [ ✅] El panel de controles se muestra correctamente
 - [ ] El botón "Controles" (móvil) expande/colapsa el panel
 - [ ] El campo de búsqueda funciona (buscar por nombre de robot)
 - [ ] El filtro "Activo" funciona (Todos/Activos/Inactivos)

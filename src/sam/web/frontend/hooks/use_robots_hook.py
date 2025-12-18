@@ -16,7 +16,12 @@ from ..state.app_context import use_app_context
 
 # --- Constantes de configuración ---
 PAGE_SIZE = 100
-INITIAL_FILTERS = {"name": None, "active": True, "online": None}
+# Filtros iniciales:
+# - name: búsqueda por nombre de robot
+# - active: solo activos por defecto
+# - online: filtro por robots online/offline (None = todos)
+# - programado: filtra por robots con/sin programaciones activas (None = todos)
+INITIAL_FILTERS = {"name": None, "active": True, "online": None, "programado": None}
 POLLING_INTERVAL_SECONDS = 120
 SYNC_POLLING_INTERVAL_SECONDS = 3
 
