@@ -6,7 +6,7 @@ Este módulo contiene los componentes para listar, mostrar y gestionar programac
 siguiendo el estándar de ReactPy de SAM.
 """
 
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from reactpy import component, event, html, use_state
 
@@ -178,6 +178,40 @@ def SchedulesDashboard(
     )
 
 
+def _format_time(hora: Optional[str]) -> str:
+    """Formatea la hora como HH:MM (sin segundos)."""
+    if not hora:
+        return "-"
+    # Acepta formatos 'HH:MM' o 'HH:MM:SS' y se queda solo con los primeros 5 caracteres.
+    return str(hora)[:5]
+
+
+def _format_equipos_cell(equipos_str: Optional[str]) -> Any:
+    """
+    Muestra los equipos de forma compacta en la tabla principal de Programaciones.
+    - Hasta 10 equipos: se muestran todos.
+    - Más de 10: se muestran los primeros 10 + indicador "(+N más)".
+    - El tooltip (title) contiene siempre la lista completa.
+    """
+    if not equipos_str:
+        return "-"
+
+    nombres = sorted({name.strip() for name in equipos_str.split(",") if name.strip()})
+    if not nombres:
+        return "-"
+
+    total = len(nombres)
+    max_visible = 10
+
+    if total <= max_visible:
+        texto = ", ".join(nombres)
+    else:
+        texto = ", ".join(nombres[:max_visible]) + f" (+{total - max_visible} más)"
+
+    full_text = ", ".join(nombres)
+    return html.span({"title": full_text}, texto)
+
+
 def _format_schedule_details(s: ScheduleData) -> str:
     """Helper para formatear los detalles de la programación (días/fecha)"""
     t = s["TipoProgramacion"]
@@ -220,12 +254,12 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                         {"key": s["ProgramacionId"]},
                         html.td(s["RobotNombre"]),
                         html.td(html.span({"class_name": "tag"}, s["TipoProgramacion"])),
-                        html.td(html.strong(s["HoraInicio"] or "-")),
+                        html.td(html.strong(_format_time(s["HoraInicio"]))),
                         html.td(_format_schedule_details(s)),
                         html.td(f"{s['Tolerancia']} min"),
                         html.td(
                             {"style": {"fontSize": "0.9em", "maxWidth": "250px", "whiteSpace": "normal"}},
-                            s["EquiposProgramados"] or "-",
+                            _format_equipos_cell(s.get("EquiposProgramados")),
                         ),
                         html.td(
                             html.label(
@@ -310,7 +344,7 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                         "style": {"marginRight": "8px", "color": "var(--pico-muted-color)"},
                     }
                 ),
-                html.strong(schedule["HoraInicio"] or "N/A"),
+                html.strong(_format_time(schedule["HoraInicio"])),
             ),
             html.p(
                 html.i(
