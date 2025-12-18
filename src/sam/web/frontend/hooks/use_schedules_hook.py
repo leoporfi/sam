@@ -199,6 +199,45 @@ def use_schedules(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
                 show(f"Error al guardar equipos: {e}", "error")
             raise
 
+    @use_callback
+    async def delete_schedule(schedule_data: dict):
+        """Elimina una programación. Requiere confirmación previa."""
+        if not is_mounted.current:
+            return
+
+        schedule_id = schedule_data.get("ProgramacionId")
+        robot_id = schedule_data.get("RobotId")
+
+        if not schedule_id or not robot_id:
+            show("No se pudo eliminar: datos incompletos.", "error")
+            raise ValueError("ID de programación o robot no encontrado")
+
+        try:
+            await api.delete_schedule(schedule_id, robot_id)
+            if is_mounted.current:
+                show("Programación eliminada", "success")
+                await load_schedules()
+        except Exception as e:
+            if is_mounted.current:
+                show(f"Error al eliminar: {e}", "error")
+            raise
+
+    @use_callback
+    async def create_schedule(schedule_data: dict):
+        """Crea una nueva programación."""
+        if not is_mounted.current:
+            return
+
+        try:
+            await api.create_schedule(schedule_data)
+            if is_mounted.current:
+                show("Programación creada", "success")
+                await load_schedules()
+        except Exception as e:
+            if is_mounted.current:
+                show(f"Error al crear: {e}", "error")
+            raise
+
     total_pages = use_memo(lambda: max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE), [total, PAGE_SIZE])
 
     return {
@@ -214,5 +253,7 @@ def use_schedules(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
         "toggle_active": toggle_active,
         "save_schedule": save_schedule,
         "save_schedule_equipos": save_schedule_equipos,
+        "delete_schedule": delete_schedule,
+        "create_schedule": create_schedule,
         "refresh": load_schedules,
     }

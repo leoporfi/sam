@@ -93,6 +93,7 @@ def get_robots(
     name: Optional[str] = None,
     active: Optional[bool] = None,
     online: Optional[bool] = None,
+    programado: Optional[bool] = None,
     page: int = 1,
     size: int = 100,
     sort_by: str = "Robot",
@@ -123,6 +124,17 @@ def get_robots(
     if online is not None:
         conditions.append("r.EsOnline = ?")
         params.append(online)
+    if programado is not None:
+        # Programado = True  -> robots que tienen al menos una programación activa
+        # Programado = False -> robots sin programaciones activas
+        if programado:
+            conditions.append(
+                "EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)"
+            )
+        else:
+            conditions.append(
+                "NOT EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)"
+            )
 
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
 
@@ -397,7 +409,14 @@ def create_schedule(db: DatabaseConnector, data: ScheduleData):
         if equipos_nombres_result and equipos_nombres_result[0]["Nombres"]:
             equipos_str = equipos_nombres_result[0]["Nombres"]
 
-    query = "EXEC dbo.CrearProgramacion @Robot=?, @Equipos=?, @TipoProgramacion=?, @HoraInicio=?, @Tolerancia=?, @DiasSemana=?, @DiaDelMes=?, @FechaEspecifica=?"
+    # Mapear PrimerosDiasMes a DiaInicioMes=1, DiaFinMes=N
+    dia_inicio = data.DiaInicioMes
+    dia_fin = data.DiaFinMes
+    if data.PrimerosDiasMes:
+        dia_inicio = 1
+        dia_fin = data.PrimerosDiasMes
+
+    query = "EXEC dbo.CrearProgramacion @Robot=?, @Equipos=?, @TipoProgramacion=?, @HoraInicio=?, @Tolerancia=?, @DiasSemana=?, @DiaDelMes=?, @FechaEspecifica=?, @DiaInicioMes=?, @DiaFinMes=?, @UltimosDiasMes=?"
     params = (
         robot_str,
         equipos_str,
@@ -407,6 +426,9 @@ def create_schedule(db: DatabaseConnector, data: ScheduleData):
         data.DiasSemana,
         data.DiaDelMes,
         data.FechaEspecifica,
+        dia_inicio,
+        dia_fin,
+        data.UltimosDiasMes,
     )
     db.ejecutar_consulta(query, params, es_select=False)
 
@@ -434,7 +456,28 @@ def update_schedule(db: DatabaseConnector, schedule_id: int, data: ScheduleData)
         if equipos_nombres_result and equipos_nombres_result[0]["Nombres"]:
             equipos_str = equipos_nombres_result[0]["Nombres"]
 
-    query = "EXEC dbo.ActualizarProgramacionCompleta @ProgramacionId=?, @RobotId=?, @TipoProgramacion=?, @HoraInicio=?, @DiaSemana=?, @DiaDelMes=?, @FechaEspecifica=?, @Tolerancia=?, @Equipos=?"
+    # Mapear PrimerosDiasMes a DiaInicioMes=1, DiaFinMes=N
+    dia_inicio = data.DiaInicioMes
+    dia_fin = data.DiaFinMes
+    if data.PrimerosDiasMes:
+        dia_inicio = 1
+        dia_fin = data.PrimerosDiasMes
+
+    query = """
+        EXEC dbo.ActualizarProgramacionCompleta
+            @ProgramacionId=?,
+            @RobotId=?,
+            @TipoProgramacion=?,
+            @HoraInicio=?,
+            @DiaSemana=?,
+            @DiaDelMes=?,
+            @FechaEspecifica=?,
+            @Tolerancia=?,
+            @Equipos=?,
+            @DiaInicioMes=?,
+            @DiaFinMes=?,
+            @UltimosDiasMes=?
+    """
     params = (
         schedule_id,
         data.RobotId,
@@ -445,6 +488,9 @@ def update_schedule(db: DatabaseConnector, schedule_id: int, data: ScheduleData)
         data.FechaEspecifica or None,
         data.Tolerancia,
         equipos_str,
+        dia_inicio,
+        dia_fin,
+        data.UltimosDiasMes,
     )
     db.ejecutar_consulta(query, params, es_select=False)
 
@@ -462,6 +508,13 @@ def update_schedule_simple(db: DatabaseConnector, schedule_id: int, data: Schedu
     if data.TipoProgramacion == "Especifica" and not data.FechaEspecifica:
         raise ValueError("Para programación Específica, se requiere FechaEspecifica.")
 
+    # Mapear PrimerosDiasMes a DiaInicioMes=1, DiaFinMes=N
+    dia_inicio = data.DiaInicioMes
+    dia_fin = data.DiaFinMes
+    if data.PrimerosDiasMes:
+        dia_inicio = 1
+        dia_fin = data.PrimerosDiasMes
+
     sql = """
         EXEC dbo.ActualizarProgramacionSimple
             @ProgramacionId=?, 
@@ -471,7 +524,10 @@ def update_schedule_simple(db: DatabaseConnector, schedule_id: int, data: Schedu
             @DiaDelMes=?, 
             @FechaEspecifica=?, 
             @Tolerancia=?,
-            @Activo=?
+            @Activo=?,
+            @DiaInicioMes=?,
+            @DiaFinMes=?,
+            @UltimosDiasMes=?
     """
     params = (
         schedule_id,
@@ -482,6 +538,9 @@ def update_schedule_simple(db: DatabaseConnector, schedule_id: int, data: Schedu
         data.FechaEspecifica or None,
         data.Tolerancia,
         data.Activo,
+        dia_inicio,
+        dia_fin,
+        data.UltimosDiasMes,
     )
     db.ejecutar_consulta(sql, params, es_select=False)
 

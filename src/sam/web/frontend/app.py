@@ -21,6 +21,7 @@ from .features.components.schedule_list import SchedulesControls, SchedulesDashb
 from .features.modals.equipos_modals import EquipoEditModal
 from .features.modals.pool_modals import PoolAssignmentsModal, PoolEditModal
 from .features.modals.robots_modals import AssignmentsModal, RobotEditModal, SchedulesModal
+from .features.modals.schedule_create_modal import ScheduleCreateModal
 from .features.modals.schedule_modal import ScheduleEditModal, ScheduleEquiposModal
 
 # Hooks
@@ -79,16 +80,46 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
             set_selected_robot(robot)
             set_modal_view(action)
 
+    # --- Mapeo del filtro "Online" / "Solo Programados" ---
+    robots_filters = robots_state["filters"]
+    # Determinar el valor visible del select a partir de los filtros actuales:
+    # - "all"  -> ni online ni programado filtrados
+    # - "true" -> solo online
+    # - "false"-> solo programados (tienen programaciones activas)
+    if robots_filters.get("programado"):
+        online_filter_value = "false"
+    elif robots_filters.get("online") is None:
+        online_filter_value = "all"
+    else:
+        online_filter_value = str(robots_filters.get("online")).lower()
+
+    def handle_online_change(value: str):
+        def updater(prev):
+            if value == "all":
+                # Sin filtros de Online / Programado
+                return {**prev, "online": None, "programado": None}
+            if value == "true":
+                # Solo robots Online (sin importar programación)
+                return {**prev, "online": True, "programado": None}
+            # value == "false" -> Solo Programados
+            # Programados: robots que tienen al menos una programación activa
+            # (por regla de negocio, además tienen EsOnline = 0)
+            return {**prev, "online": None, "programado": True}
+
+        robots_state["set_filters"](updater)
+
     page_controls = RobotsControls(
         is_syncing=robots_state["is_syncing"],
         on_sync=robots_state["trigger_sync"],
         on_create_robot=handle_create_robot,
         search_term=search_input,
         on_search_change=set_search_input,
-        active_filter="all" if robots_state["filters"].get("active") is None else str(robots_state["filters"].get("active")).lower(),
-        on_active_change=lambda value: robots_state["set_filters"](lambda prev: {**prev, "active": None if value == "all" else value == "true"}),
-        online_filter="all" if robots_state["filters"].get("online") is None else str(robots_state["filters"].get("online")).lower(),
-        on_online_change=lambda value: robots_state["set_filters"](lambda prev: {**prev, "online": None if value == "all" else value == "true"}),
+        active_filter="all" if robots_filters.get("active") is None else str(robots_filters.get("active")).lower(),
+        on_active_change=lambda value: robots_state["set_filters"](
+            lambda prev: {**prev, "active": None if value == "all" else value == "true"}
+        ),
+        online_filter=online_filter_value,
+        on_online_change=handle_online_change,
         is_searching=is_searching,
         is_syncing_equipos=equipos_state.get("is_syncing", False),
         on_sync_equipos=equipos_state.get("trigger_sync"),
@@ -150,11 +181,7 @@ def PoolsPage(theme_is_dark: bool, on_theme_toggle):
 
     # Filtrar pools por búsqueda (memoizado para evitar recálculos innecesarios)
     filtered_pools = use_memo(
-        lambda: [
-            pool
-            for pool in pools_state["pools"]
-            if not debounced_search or debounced_search.lower() in pool["Nombre"].lower()
-        ],
+        lambda: [pool for pool in pools_state["pools"] if not debounced_search or debounced_search.lower() in pool["Nombre"].lower()],
         [pools_state["pools"], debounced_search],
     )
 
@@ -344,6 +371,7 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
     # Obtener api_client del contexto
     try:
         from .state.app_context import use_app_context
+
         app_context = use_app_context()
         api_client = app_context.get("api_client") or get_api_client()
     except Exception:
@@ -412,6 +440,37 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
             set_assign_equipos_sid(sid)
             set_modal_row(schedule_data)
 
+    # Estado para confirmación de eliminación
+    schedule_to_delete, set_schedule_to_delete = use_state(None)
+
+    def handle_delete_schedule(schedule_data):
+        """Abre el modal de confirmación para eliminar."""
+        set_schedule_to_delete(schedule_data)
+
+    async def confirm_delete_schedule():
+        """Confirma y ejecuta la eliminación."""
+        if schedule_to_delete:
+            try:
+                await schedules_state["delete_schedule"](schedule_to_delete)
+                set_schedule_to_delete(None)
+            except Exception as e:
+                show_notification(f"Error al eliminar: {e}", "error")
+
+    # Estado para modal de creación
+    is_create_modal_open, set_is_create_modal_open = use_state(False)
+
+    def handle_create_schedule(e=None):
+        """Abre el modal para crear una nueva programación."""
+        set_is_create_modal_open(True)
+
+    async def handle_create_schedule_save(schedule_data):
+        """Guarda la nueva programación."""
+        try:
+            await schedules_state["create_schedule"](schedule_data)
+            set_is_create_modal_open(False)
+        except Exception as e:
+            show_notification(f"Error al crear: {e}", "error")
+
     return PageWithLayout(
         theme_is_dark=theme_is_dark,
         on_theme_toggle=on_theme_toggle,
@@ -425,7 +484,7 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
                 on_robot=set_robot_filter,
                 tipo_filter=tipo_filter,
                 on_tipo=set_tipo_filter,
-                on_new=lambda: show_notification("Función no implementada", "warning"),
+                on_new=handle_create_schedule,
                 robots_list=dropdown_robots,
                 is_searching=schedules_state["loading"],
             ),
@@ -443,6 +502,7 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
                     on_toggle=schedules_state["toggle_active"],
                     on_edit=open_edit_modal,
                     on_assign_equipos=open_schedule_equipos_modal,
+                    on_delete=handle_delete_schedule,
                     current_page=schedules_state["current_page"],
                     total_pages=schedules_state["total_pages"],
                     on_page_change=schedules_state["set_page"],
@@ -468,6 +528,29 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
                 on_save=schedules_state["save_schedule_equipos"],
             )
             if assign_equipos_sid is not None
+            else None,
+            # 3. Modal de Confirmación para Eliminar
+            ConfirmationModal(
+                is_open=schedule_to_delete is not None,
+                title="Confirmar Eliminación",
+                message=f"¿Estás seguro de que deseas eliminar la programación de '{schedule_to_delete.get('RobotNombre', '') if schedule_to_delete else ''}'? Esta acción no se puede deshacer.",
+                on_confirm=confirm_delete_schedule,
+                on_cancel=lambda: set_schedule_to_delete(None),
+            )
+            if schedule_to_delete
+            else None,
+            # 4. Modal de Creación
+            ScheduleCreateModal(
+                is_open=is_create_modal_open,
+                on_close=lambda: set_is_create_modal_open(False),
+                on_save=handle_create_schedule_save,
+                robots_list=[
+                    {"RobotId": r["RobotId"], "Robot": r["Robot"]}
+                    for r in robots_state["robots"]
+                    if r.get("ActivoSAM", True)  # Solo robots activos (sin filtrar por Online)
+                ],
+            )
+            if is_create_modal_open
             else None,
         ),
     )
@@ -496,7 +579,7 @@ def NotFoundPage(theme_is_dark: bool, on_theme_toggle):
 def App():
     """
     Componente raíz que provee los contextos (notificaciones y dependencias) y el enrutador.
-    
+
     Aplica el patrón de Inyección de Dependencias desde el punto más alto (componente raíz),
     siguiendo la Guía General de SAM.
     """
@@ -538,13 +621,21 @@ def App():
         NotificationContext(
             html._(
                 script_to_run,
-                browser_router(
-                    route("/", RobotsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                    route("/equipos", EquiposPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                    route("/programaciones", SchedulesPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                    route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                    route("/mapeos", MappingsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                    route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                # Forzamos un remount del árbol de rutas cuando cambia el tema
+                # para que todos los componentes (incluido el ThemeSwitcher)
+                # reciban siempre el valor actualizado de `is_dark`.
+                html.div(
+                    {
+                        "key": f"router-theme-{is_dark}",
+                    },
+                    browser_router(
+                        route("/", RobotsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("/equipos", EquiposPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("/programaciones", SchedulesPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("/mapeos", MappingsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                    ),
                 ),
                 ToastContainer(),
             ),

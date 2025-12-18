@@ -338,7 +338,10 @@ def ThemeSwitcher(is_dark: bool, on_toggle: Callable):
     """Un interruptor para cambiar entre tema claro y oscuro."""
 
     def handle_change(event):
-        on_toggle(not is_dark)
+        # Usamos directamente el valor del checkbox para evitar desincronización
+        # entre el estado visual del switch y el tema aplicado.
+        is_checked = bool(event["target"]["checked"])
+        on_toggle(is_checked)
 
     return html.label(
         {"htmlFor": "theme-switcher", "class_name": "theme-switcher"},
