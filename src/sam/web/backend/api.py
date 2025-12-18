@@ -160,6 +160,7 @@ def get_robots_with_assignments(
     name: Optional[str] = None,
     active: Optional[bool] = None,
     online: Optional[bool] = None,
+    programado: Optional[bool] = None,
     page: int = Query(1, ge=1),
     size: int = Query(100, ge=1, le=1000),
     sort_by: Optional[str] = Query("Robot"),
@@ -167,7 +168,15 @@ def get_robots_with_assignments(
 ):
     try:
         return db_service.get_robots(
-            db=db, name=name, active=active, online=online, page=page, size=size, sort_by=sort_by, sort_dir=sort_dir
+            db=db,
+            name=name,
+            active=active,
+            online=online,
+            programado=programado,
+            page=page,
+            size=size,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
         )
     except Exception as e:
         _handle_endpoint_errors("get_robots_with_assignments", e, "Robots")
