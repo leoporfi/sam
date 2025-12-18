@@ -442,10 +442,16 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
     )
 
     def move_items(source_list, set_source, dest_list, set_dest, selected_ids, clear_selection):
-        items_to_move = {item["EquipoId"]: item for item in source_list if item["EquipoId"] in selected_ids}
+        """Mueve elementos entre listas asegurando que no queden duplicados por EquipoId."""
+        items_to_move = {item["EquipoId"]: item for item in source_list if item.get("EquipoId") in selected_ids}
 
-        new_dest_list = sort_devices(dest_list + list(items_to_move.values()))
-        new_source_list = sort_devices([item for item in source_list if item["EquipoId"] not in items_to_move])
+        # Construimos un diccionario único para el destino (dest_list + items_to_move),
+        # dejando que la versión "movida" reemplace a una previa si ya existía.
+        dest_dict = {item["EquipoId"]: item for item in dest_list if item.get("EquipoId") is not None}
+        dest_dict.update(items_to_move)
+
+        new_dest_list = sort_devices(list(dest_dict.values()))
+        new_source_list = sort_devices([item for item in source_list if item.get("EquipoId") not in items_to_move])
 
         set_dest(new_dest_list)
         set_source(new_source_list)
@@ -791,7 +797,7 @@ def DeviceList(
                     "name": "search-equipos",
                     "placeholder": "Filtrar equipos...",
                     "value": search_term,
-                    "onChange": lambda e: on_search_change(e["target"]["value"]),
+                "on_change": lambda e: on_search_change(e["target"]["value"]),
                 }
             ),
         ),
@@ -803,7 +809,7 @@ def DeviceList(
                     html.tr(
                         html.th(
                             {"scope": "col", "style": {"width": "40px"}},
-                            html.input({"type": "checkbox", "name": "checkbox-equipos", "onChange": handle_select_all}),
+                            html.input({"type": "checkbox", "name": "checkbox-equipos", "on_change": handle_select_all}),
                         ),
                         html.th({"scope": "col"}, "Nombre Equipo"),
                         html.th({"scope": "col", "style": {"width": "120px"}}, "Estado") if has_status_column else None,
@@ -818,7 +824,9 @@ def DeviceList(
                                     {
                                         "type": "checkbox",
                                         "checked": device["EquipoId"] in selected_ids,
-                                        "onChange": lambda e, eid=device["EquipoId"]: handle_select_one(eid, e["target"]["checked"]),
+                                        "on_change": lambda e, eid=device["EquipoId"]: handle_select_one(
+                                            eid, e["target"]["checked"]
+                                        ),
                                     }
                                 )
                             ),
@@ -855,10 +863,16 @@ def SchedulesList(
     show_notification = notification_ctx["show_notification"]
     schedule_to_delete, set_schedule_to_delete = use_state(None)
 
+    def _format_time(hora: str | None) -> str:
+        """Formatea la hora como HH:MM (sin segundos)."""
+        if not hora:
+            return ""
+        return str(hora)[:5]
+
     def format_schedule_details(schedule):
         tipo = schedule.get("TipoProgramacion")
-        hora = schedule.get("HoraInicio", "")
-        details = f"{tipo or 'N/A'} a las {hora}"
+        hora = _format_time(schedule.get("HoraInicio"))
+        details = f"{tipo or 'N/A'} a las {hora}" if hora else (tipo or "N/A")
 
         if tipo == "Semanal":
             details += f" los días {schedule.get('DiasSemana', '')}"
@@ -881,6 +895,27 @@ def SchedulesList(
 
         return details
 
+    def _format_equipos_cell(equipos: List[Dict]) -> Any:
+        """Muestra los equipos de forma compacta para no romper el layout del modal."""
+        if not equipos:
+            return "Ninguno"
+
+        nombres = sorted({d.get("Equipo", "") for d in equipos if d.get("Equipo")})
+        if not nombres:
+            return "Ninguno"
+
+        total = len(nombres)
+        max_visible = 6
+
+        if total <= max_visible:
+            texto = ", ".join(nombres)
+        else:
+            texto = ", ".join(nombres[:max_visible]) + f" (+{total - max_visible} más)"
+
+        # Usamos title para mostrar el detalle completo al pasar el mouse
+        full_text = ", ".join(nombres)
+        return html.span({"title": full_text}, texto)
+
     async def handle_confirm_delete():
         if not schedule_to_delete:
             return
@@ -898,7 +933,7 @@ def SchedulesList(
             html.tr(
                 {"key": s["ProgramacionId"]},
                 html.td(format_schedule_details(s)),
-                html.td(", ".join(sorted([device["Equipo"] for device in s.get("Equipos", [])])) or "Ninguno"),
+                html.td(_format_equipos_cell(s.get("Equipos", []))),
                 html.td(
                     html.div(
                         {"class_name": "grid"},

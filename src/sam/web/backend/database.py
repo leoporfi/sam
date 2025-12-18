@@ -401,8 +401,10 @@ def create_schedule(db: DatabaseConnector, data: ScheduleData):
     equipos_str = ""
     if data.Equipos:
         placeholders = ",".join("?" for _ in data.Equipos)
+        # Usamos NVARCHAR(MAX) para evitar el límite de 8000 bytes de STRING_AGG
         equipos_nombres_result = db.ejecutar_consulta(
-            f"SELECT STRING_AGG(Equipo, ',') AS Nombres FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
+            f"SELECT STRING_AGG(CAST(Equipo AS NVARCHAR(MAX)), ',') AS Nombres "
+            f"FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
             tuple(data.Equipos),
             es_select=True,
         )
@@ -448,8 +450,10 @@ def update_schedule(db: DatabaseConnector, schedule_id: int, data: ScheduleData)
     equipos_str = ""
     if data.Equipos:
         placeholders = ",".join("?" for _ in data.Equipos)
+        # Usamos NVARCHAR(MAX) para evitar el límite de 8000 bytes de STRING_AGG
         equipos_nombres_result = db.ejecutar_consulta(
-            f"SELECT STRING_AGG(Equipo, ',') AS Nombres FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
+            f"SELECT STRING_AGG(CAST(Equipo AS NVARCHAR(MAX)), ',') AS Nombres "
+            f"FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
             tuple(data.Equipos),
             es_select=True,
         )
