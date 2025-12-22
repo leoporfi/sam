@@ -46,9 +46,9 @@ from .styles import (
     STATUS_RUNNING,
     STATUS_STOPPED,
     STATUS_UNKNOWN,
+    TABLE_CONTAINER,
     TAG,
     TAG_SECONDARY,
-    TABLE_CONTAINER,
 )
 
 __all__ = [
@@ -106,4 +106,3 @@ __all__ = [
     "PRIMARY",
     "SECONDARY",
 ]
-
