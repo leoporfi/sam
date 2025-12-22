@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional
 from reactpy import component, event, html, use_context, use_effect, use_memo, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
-from sam.web.frontend.shared.common_components import ConfirmationModal
+from sam.web.frontend.shared.common_components import ConfirmationModal, LoadingOverlay
 
 from ...shared.notifications import NotificationContext
 
@@ -391,6 +391,7 @@ def ScheduleCreateModal(
         html.dialog(
             {"open": True, "class_name": "modal-dialog"},
             html.article(
+                {"style": {"position": "relative"}},
                 html.header(
                     html.a(
                         {
@@ -398,6 +399,7 @@ def ScheduleCreateModal(
                             "aria-label": "Close",
                             "class_name": "close",
                             "on_click": event(lambda e: on_close(), prevent_default=True),
+                            "style": {"pointerEvents": "none" if is_loading else "auto", "opacity": "0.5" if is_loading else "1"},
                         }
                     ),
                     html.h3("Crear Nueva Programación"),
@@ -405,6 +407,10 @@ def ScheduleCreateModal(
                 html.form(
                     {"id": "create-schedule-form", "on_submit": event(lambda e: handle_save_click(e), prevent_default=True)},
                     ScheduleCreateForm(form_data, set_form_data, robots_list),
+                ),
+                LoadingOverlay(
+                    is_loading=is_loading,
+                    message="Creando programación, esto puede tardar unos segundos..." if is_loading else None,
                 ),
                 html.footer(
                     html.div(
@@ -426,7 +432,7 @@ def ScheduleCreateModal(
                                 "aria-busy": str(is_loading).lower(),
                                 "disabled": is_loading,
                             },
-                            "Crear Programación",
+                            "Procesando..." if is_loading else "Crear Programación",
                         ),
                     )
                 ),
