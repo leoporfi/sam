@@ -5,6 +5,7 @@ Hook para gestionar el estado del dashboard de robots.
 Este hook maneja la carga, filtrado, paginación y sincronización de robots,
 siguiendo el principio de Inyección de Dependencias de la Guía General de SAM.
 """
+
 import asyncio
 from typing import Any, Callable, Dict, List, Optional
 
@@ -29,11 +30,11 @@ SYNC_POLLING_INTERVAL_SECONDS = 3
 def use_robots(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
     """
     Hook para gestionar el estado del dashboard de robots con recuperación de estado de Sync.
-    
+
     Args:
         api_client: Cliente API opcional para inyección de dependencias (para testing).
                    Si no se proporciona, se obtiene del contexto o se usa get_api_client().
-    
+
     Returns:
         Dict con las siguientes keys:
             - robots: List[Dict] - Lista de robots

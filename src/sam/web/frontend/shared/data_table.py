@@ -7,12 +7,12 @@ en toda la aplicación para mostrar listas de datos de manera consistente.
 
 Uso:
     from sam.web.frontend.shared.data_table import DataTable
-    
+
     columns = [
         {"key": "name", "label": "Nombre", "render": lambda row: row["name"]},
         {"key": "status", "label": "Estado", "render": lambda row: StatusBadge(row["status"])},
     ]
-    
+
     return DataTable(
         data=robots,
         columns=columns,
@@ -46,7 +46,7 @@ def DataTable(
 ) -> html.article:
     """
     Tabla genérica reutilizable para listados de datos.
-    
+
     Args:
         data: Lista de diccionarios con los datos a mostrar
         columns: Lista de definiciones de columnas. Cada columna debe tener:
@@ -64,7 +64,7 @@ def DataTable(
         on_sort: Callback cuando se hace click en un header ordenable
         row_key: Función para generar la key única de cada fila (default: usa "id" o índice)
         row_class_name: Función para generar la clase CSS de cada fila
-    
+
     Returns:
         Componente ReactPy con la tabla
     """
@@ -102,14 +102,14 @@ def _render_table(
     row_class_name: Optional[Callable] = None,
 ) -> html.article:
     """Renderiza la tabla con los datos."""
-    
+
     def get_row_key(row: Dict[str, Any], index: int) -> str:
         """Obtiene la key única para una fila."""
         if row_key:
             return str(row_key(row))
         # Intentar usar "id" o "Id" o el índice
         return str(row.get("id") or row.get("Id") or row.get("RobotId") or row.get("EquipoId") or index)
-    
+
     def get_row_class(row: Dict[str, Any]) -> str:
         """Obtiene la clase CSS para una fila."""
         base_class = "clickable" if on_row_click else ""
@@ -117,89 +117,90 @@ def _render_table(
             custom_class = row_class_name(row)
             return f"{base_class} {custom_class}".strip()
         return base_class
-    
+
     def render_header(column: Dict[str, Any]) -> html.th:
         """Renderiza el header de una columna."""
         is_sortable = column.get("sortable", True)
         column_key = column.get("key", "")
-        
+
         if not is_sortable or not on_sort:
             return html.th({"scope": "col"}, column.get("label", ""))
-        
+
         # Columna ordenable
         sort_indicator = ""
         if sort_by == column_key:
             sort_indicator = " ▲" if sort_dir == "asc" else " ▼"
-        
+
         return html.th(
             {"scope": "col"},
             html.a(
                 {
                     "href": "#",
-                    "on_click": event(
-                        lambda e, key=column_key: on_sort(key) if on_sort else None,
-                        prevent_default=True
-                    ),
+                    "on_click": event(lambda e, key=column_key: on_sort(key) if on_sort else None, prevent_default=True),
                 },
                 column.get("label", ""),
                 sort_indicator,
             ),
         )
-    
+
     def render_cell(row: Dict[str, Any], column: Dict[str, Any]) -> html.td:
         """Renderiza una celda de la tabla."""
         # Si hay función de renderizado personalizada, usarla
         if "render" in column and callable(column["render"]):
             return html.td(column["render"](row))
-        
+
         # Si no, usar el valor directo
         key = column.get("key", "")
         value = row.get(key, "")
         return html.td(str(value))
-    
+
     def render_row(row: Dict[str, Any], index: int) -> html.tr:
         """Renderiza una fila de la tabla."""
         row_key_value = get_row_key(row, index)
         row_class = get_row_class(row)
-        
+
         row_attrs = {
             "key": row_key_value,
         }
-        
+
         if row_class:
             row_attrs["class_name"] = row_class
-        
+
         if on_row_click:
             row_attrs["on_click"] = lambda e, r=row: on_row_click(r)
-        
+
         cells = [render_cell(row, col) for col in columns]
-        
+
         # Agregar columna de acciones si existe
         if actions:
             action_cells = _render_actions(row, actions)
             cells.append(html.td(action_cells))
-        
+
         return html.tr(row_attrs, cells)
-    
+
     # Renderizar headers
     headers = [render_header(col) for col in columns]
     if actions:
         headers.append(html.th({"scope": "col"}, "Acciones"))
-    
+
     # Renderizar filas
     rows = [render_row(row, idx) for idx, row in enumerate(data)]
-    
+
     return html.article(
         html.table(
             html.thead(html.tr(headers)),
-            html.tbody(rows if rows else [
-                html.tr(
-                    html.td(
-                        {"colSpan": len(columns) + (1 if actions else 0), "style": {"textAlign": "center"}},
-                        empty_message if data is not None else "No hay datos disponibles",
+            html.tbody(
+                rows
+                if rows
+                else [
+                    html.tr(
+                        html.td(
+                            {"colSpan": len(columns) + (1 if actions else 0), "style": {"textAlign": "center"}},
+                            empty_message if data is not None else "No hay datos disponibles",
+                        )
                     )
-                )
-            ]),
+                ]
+            ),
         )
     )
 
@@ -207,20 +208,20 @@ def _render_table(
 def _render_actions(row: Dict[str, Any], actions: List[Dict[str, Any]]) -> html.div:
     """Renderiza las acciones para una fila."""
     action_buttons = []
-    
+
     for action in actions:
         label = action.get("label", "")
         on_click = action.get("on_click")
         class_name = action.get("class_name", "secondary")
         icon = action.get("icon")
-        
+
         if not on_click:
             continue
-        
+
         button_content = [label]
         if icon:
             button_content.insert(0, html.i({"class_name": icon}))
-        
+
         action_buttons.append(
             html.button(
                 {
@@ -231,6 +232,5 @@ def _render_actions(row: Dict[str, Any], actions: List[Dict[str, Any]]) -> html.
                 *button_content,
             )
         )
-    
-    return html.div({"style": {"display": "flex", "gap": "0.5rem"}}, *action_buttons)
 
+    return html.div({"style": {"display": "flex", "gap": "0.5rem"}}, *action_buttons)
