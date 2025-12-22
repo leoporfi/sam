@@ -8,6 +8,7 @@ from ...api.api_client import ApiClient, get_api_client
 from ...shared.common_components import ConfirmationModal, LoadingOverlay
 from ...shared.formatters import format_equipos_list, format_schedule_details, format_time
 from ...shared.notifications import NotificationContext
+from ...state.app_context import use_app_context
 
 # --- Constantes y Estados por Defecto ---
 
@@ -825,7 +826,7 @@ def DeviceList(
                     "name": "search-equipos",
                     "placeholder": "Filtrar equipos...",
                     "value": search_term,
-                "on_change": lambda e: on_search_change(e["target"]["value"]),
+                    "on_change": lambda e: on_search_change(e["target"]["value"]),
                 }
             ),
         ),
@@ -852,9 +853,7 @@ def DeviceList(
                                     {
                                         "type": "checkbox",
                                         "checked": device["EquipoId"] in selected_ids,
-                                        "on_change": lambda e, eid=device["EquipoId"]: handle_select_one(
-                                            eid, e["target"]["checked"]
-                                        ),
+                                        "on_change": lambda e, eid=device["EquipoId"]: handle_select_one(eid, e["target"]["checked"]),
                                     }
                                 )
                             ),
@@ -1129,9 +1128,7 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                             "max": 31,
                             "value": dia_inicio or "",
                             "placeholder": "1",
-                            "on_change": lambda e: on_change(
-                                "DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None
-                            ),
+                            "on_change": lambda e: on_change("DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None),
                         }
                     ),
                 ),
@@ -1144,9 +1141,7 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                             "max": 31,
                             "value": dia_fin or "",
                             "placeholder": "10",
-                            "on_change": lambda e: on_change(
-                                "DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None
-                            ),
+                            "on_change": lambda e: on_change("DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None),
                         }
                     ),
                 ),
@@ -1174,9 +1169,7 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                         "max": 31,
                         "value": primeros or (dia_fin if dia_inicio == 1 and dia_fin else ""),
                         "placeholder": "10",
-                        "on_change": lambda e: on_change(
-                            "PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
-                        ),
+                        "on_change": lambda e: on_change("PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
                     }
                 ),
             )
@@ -1203,9 +1196,7 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                         "max": 31,
                         "value": ultimos or "",
                         "placeholder": "5",
-                        "on_change": lambda e: on_change(
-                            "UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
-                        ),
+                        "on_change": lambda e: on_change("UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
                     }
                 ),
             )

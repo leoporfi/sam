@@ -10,14 +10,15 @@ patrón singleton.
 Uso:
     # Crear instancia (en app.py o punto de inyección)
     api_client = APIClient(base_url="http://127.0.0.1:8000")
-    
+
     # Inyectar en contexto
     context_value = {"api_client": api_client}
-    
+
     # Usar en hooks
     api_client = use_app_context()["api_client"]
     data = await api_client.get("/api/robots")
 """
+
 import asyncio
 import warnings
 from typing import Any, Dict, List, Optional
@@ -36,9 +37,7 @@ class APIClient:
         self._client = None
 
     async def __aenter__(self):
-        self._client = httpx.AsyncClient(
-            base_url=self.base_url, timeout=30.0, headers={"Content-Type": "application/json"}
-        )
+        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=30.0, headers={"Content-Type": "application/json"})
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -48,9 +47,7 @@ class APIClient:
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
             # if self._client is None:
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url, timeout=30.0, headers={"Content-Type": "application/json"}
-            )
+            self._client = httpx.AsyncClient(base_url=self.base_url, timeout=30.0, headers={"Content-Type": "application/json"})
         return self._client
 
     async def _request(
@@ -84,69 +81,69 @@ class APIClient:
                 await asyncio.sleep(2**attempt)
             except APIException:
                 raise
-    
+
     # ============================================================================
     # MÉTODOS GENÉRICOS (según estándar)
     # ============================================================================
-    
+
     async def get(self, endpoint: str, params: Optional[Dict] = None) -> Any:
         """
         GET request con manejo de errores centralizado.
-        
+
         Args:
             endpoint: Ruta del endpoint (ej: "/api/robots")
             params: Parámetros de query string
-        
+
         Returns:
             Respuesta JSON parseada
-        
+
         Raises:
             APIException: Si hay error en la petición
         """
         return await self._request("GET", endpoint, params=params)
-    
+
     async def post(self, endpoint: str, data: Dict) -> Any:
         """
         POST request con manejo de errores.
-        
+
         Args:
             endpoint: Ruta del endpoint
             data: Datos a enviar en el body (se serializan a JSON)
-        
+
         Returns:
             Respuesta JSON parseada
-        
+
         Raises:
             APIException: Si hay error en la petición
         """
         return await self._request("POST", endpoint, json_data=data)
-    
+
     async def put(self, endpoint: str, data: Dict) -> Any:
         """
         PUT request con manejo de errores.
-        
+
         Args:
             endpoint: Ruta del endpoint
             data: Datos a enviar en el body
-        
+
         Returns:
             Respuesta JSON parseada
-        
+
         Raises:
             APIException: Si hay error en la petición
         """
         return await self._request("PUT", endpoint, json_data=data)
-    
+
     async def delete(self, endpoint: str) -> Any:
         """
         DELETE request con manejo de errores.
-        
+
         Args:
             endpoint: Ruta del endpoint
-        
+
         Returns:
             Respuesta JSON parseada
-        
+
         Raises:
             APIException: Si hay error en la petición
         """
@@ -357,25 +354,24 @@ _api_client_instance = None
 def get_api_client() -> APIClient:
     """
     ⚠️ DEPRECATED: Esta función usa patrón singleton y será eliminada.
-    
+
     Usa inyección de dependencias a través del contexto en su lugar:
-    
+
     # ❌ NO USAR (deprecated):
     api_client = get_api_client()
-    
+
     # ✅ USAR (recomendado):
     from sam.web.frontend.state.app_context import use_app_context
     api_client = use_app_context()["api_client"]
-    
+
     Returns:
         Instancia singleton de APIClient (temporal, para compatibilidad)
     """
     global _api_client_instance
     warnings.warn(
-        "get_api_client() está deprecated. Usa inyección de dependencias "
-        "a través de use_app_context()['api_client'] en su lugar.",
+        "get_api_client() está deprecated. Usa inyección de dependencias a través de use_app_context()['api_client'] en su lugar.",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
     if _api_client_instance is None:
         _api_client_instance = APIClient()
