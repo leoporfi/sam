@@ -132,6 +132,60 @@ def LoadingSpinner(size: str = "medium"):
 
 
 @component
+def LoadingOverlay(is_loading: bool, message: Optional[str] = None):
+    """
+    Muestra un overlay semi-transparente con spinner cuando is_loading es True.
+    Útil para deshabilitar interacciones durante operaciones asíncronas.
+
+    Args:
+        is_loading: Si True, muestra el overlay
+        message: Mensaje opcional a mostrar debajo del spinner
+    """
+    if not is_loading:
+        return None
+
+    return html.div(
+        {
+            "style": {
+                "position": "absolute",
+                "top": 0,
+                "left": 0,
+                "right": 0,
+                "bottom": 0,
+                "backgroundColor": "rgba(0, 0, 0, 0.5)",
+                "display": "flex",
+                "flexDirection": "column",
+                "alignItems": "center",
+                "justifyContent": "center",
+                "zIndex": 1000,
+                "backdropFilter": "blur(2px)",
+            },
+        },
+        html.div(
+            {
+                "style": {
+                    "backgroundColor": "var(--pico-background-color)",
+                    "padding": "2rem",
+                    "borderRadius": "0.5rem",
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "alignItems": "center",
+                    "gap": "1rem",
+                    "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.1)",
+                },
+            },
+            LoadingSpinner(size="large"),
+            html.p(
+                {"style": {"margin": 0, "color": "var(--pico-color)"}},
+                message or "Procesando...",
+            )
+            if message
+            else None,
+        ),
+    )
+
+
+@component
 def ErrorMessage(error: Optional[str]):
     """
     Muestra un mensaje de error en un 'article' de PicoCSS si el error no es None.
