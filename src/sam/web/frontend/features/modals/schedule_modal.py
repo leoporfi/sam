@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict
 from reactpy import component, event, html, use_context, use_effect, use_memo, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
-from sam.web.frontend.shared.common_components import ConfirmationModal
+from sam.web.frontend.shared.common_components import ConfirmationModal, LoadingOverlay
 
 from ...shared.notifications import NotificationContext
 
@@ -40,6 +40,10 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
             new_form_data["DiasSemana"] = None
             new_form_data["DiaDelMes"] = None
             new_form_data["FechaEspecifica"] = None
+            new_form_data["DiaInicioMes"] = None
+            new_form_data["DiaFinMes"] = None
+            new_form_data["UltimosDiasMes"] = None
+            new_form_data["PrimerosDiasMes"] = None
 
         on_change(new_form_data)
 
@@ -56,6 +60,7 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
                 html.option({"value": "Diaria"}, "Diaria"),
                 html.option({"value": "Semanal"}, "Semanal"),
                 html.option({"value": "Mensual"}, "Mensual"),
+                html.option({"value": "RangoMensual"}, "Rango Mensual"),
                 html.option({"value": "Especifica"}, "Específica"),
             ),
         ),
@@ -126,6 +131,110 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
         )
         if (tipo_actual == "Mensual")
         else None,
+        # Si es RangoMensual
+        html.div(
+            {"class_name": "rango-mensual-options"},
+            html.p({"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}}, "Seleccione una opción:"),
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "rango",
+                        "checked": form_data.get("DiaInicioMes") is not None and form_data.get("DiaFinMes") is not None and not form_data.get("PrimerosDiasMes") and not form_data.get("UltimosDiasMes"),
+                        "on_change": lambda e: handle_change("rango_option", "rango"),
+                    }
+                ),
+                " Rango específico (ej: del 1 al 10)",
+            ),
+            html.div(
+                {"class_name": "grid", "style": {"display": "flex", "gap": "1rem"}},
+                html.label(
+                    "Día Inicio",
+                    html.input(
+                        {
+                            "type": "number",
+                            "value": form_data.get("DiaInicioMes") or "",
+                            "min": 1,
+                            "max": 31,
+                            "placeholder": "1",
+                            "on_change": lambda e: handle_change("DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                        }
+                    ),
+                ),
+                html.label(
+                    "Día Fin",
+                    html.input(
+                        {
+                            "type": "number",
+                            "value": form_data.get("DiaFinMes") or "",
+                            "min": 1,
+                            "max": 31,
+                            "placeholder": "10",
+                            "on_change": lambda e: handle_change("DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                        }
+                    ),
+                ),
+            )
+            if (form_data.get("rango_option") == "rango" or (form_data.get("DiaInicioMes") is not None and form_data.get("DiaFinMes") is not None and not form_data.get("PrimerosDiasMes") and not form_data.get("UltimosDiasMes")))
+            else None,
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "primeros",
+                        "checked": form_data.get("PrimerosDiasMes") is not None,
+                        "on_change": lambda e: handle_change("rango_option", "primeros"),
+                    }
+                ),
+                " Primeros N días del mes",
+            ),
+            html.label(
+                "Cantidad de días",
+                html.input(
+                    {
+                        "type": "number",
+                        "value": form_data.get("PrimerosDiasMes") or "",
+                        "min": 1,
+                        "max": 31,
+                        "placeholder": "10",
+                        "on_change": lambda e: handle_change("PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                    }
+                ),
+            )
+            if (form_data.get("rango_option") == "primeros" or form_data.get("PrimerosDiasMes") is not None)
+            else None,
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "ultimos",
+                        "checked": form_data.get("UltimosDiasMes") is not None,
+                        "on_change": lambda e: handle_change("rango_option", "ultimos"),
+                    }
+                ),
+                " Últimos N días del mes",
+            ),
+            html.label(
+                "Cantidad de días",
+                html.input(
+                    {
+                        "type": "number",
+                        "value": form_data.get("UltimosDiasMes") or "",
+                        "min": 1,
+                        "max": 31,
+                        "placeholder": "5",
+                        "on_change": lambda e: handle_change("UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                    }
+                ),
+            )
+            if (form_data.get("rango_option") == "ultimos" or form_data.get("UltimosDiasMes") is not None)
+            else None,
+        )
+        if tipo_actual == "RangoMensual"
+        else None,
         # Si es Específica
         html.label(
             "Fecha Específica",
@@ -195,6 +304,12 @@ def ScheduleEditModal(
                 raise ValueError("Para 'Semanal', los días de la semana son obligatorios.")
             if tipo == "Mensual" and not form_data.get("DiaDelMes"):
                 raise ValueError("Para 'Mensual', el día del mes es obligatorio.")
+            if tipo == "RangoMensual":
+                has_rango = form_data.get("DiaInicioMes") and form_data.get("DiaFinMes")
+                has_primeros = form_data.get("PrimerosDiasMes")
+                has_ultimos = form_data.get("UltimosDiasMes")
+                if not (has_rango or has_primeros or has_ultimos):
+                    raise ValueError("Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días.")
             if tipo == "Especifica" and not form_data.get("FechaEspecifica"):
                 raise ValueError("Para 'Específica', la fecha es obligatoria.")
 
@@ -216,6 +331,12 @@ def ScheduleEditModal(
                 raise ValueError("Para 'Semanal', los días de la semana son obligatorios.")
             if tipo == "Mensual" and not form_data.get("DiaDelMes"):
                 raise ValueError("Para 'Mensual', el día del mes es obligatorio.")
+            if tipo == "RangoMensual":
+                has_rango = form_data.get("DiaInicioMes") and form_data.get("DiaFinMes")
+                has_primeros = form_data.get("PrimerosDiasMes")
+                has_ultimos = form_data.get("UltimosDiasMes")
+                if not (has_rango or has_primeros or has_ultimos):
+                    raise ValueError("Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días.")
             if tipo == "Especifica" and not form_data.get("FechaEspecifica"):
                 raise ValueError("Para 'Específica', la fecha es obligatoria.")
 
@@ -237,6 +358,7 @@ def ScheduleEditModal(
         html.dialog(
             {"open": True, "class_name": "modal-dialog"},
             html.article(
+                {"style": {"position": "relative"}},
                 html.header(
                     html.a(
                         {
@@ -244,6 +366,7 @@ def ScheduleEditModal(
                             "aria-label": "Close",
                             "class_name": "close",
                             "on_click": event(lambda e: on_close(), prevent_default=True),
+                            "style": {"pointerEvents": "none" if is_loading else "auto", "opacity": "0.5" if is_loading else "1"},
                         }
                     ),
                     html.h3(f"Editar Programación: {schedule.get('RobotNombre', '')}"),
@@ -251,6 +374,10 @@ def ScheduleEditModal(
                 html.form(
                     {"id": "edit-schedule-form", "on_submit": event(handle_submit, prevent_default=True)},
                     FullScheduleEditForm(form_data, set_form_data),
+                ),
+                LoadingOverlay(
+                    is_loading=is_loading,
+                    message="Guardando cambios, esto puede tardar unos segundos..." if is_loading else None,
                 ),
                 html.footer(
                     html.div(
@@ -272,7 +399,7 @@ def ScheduleEditModal(
                                 "aria-busy": str(is_loading).lower(),
                                 "disabled": is_loading,
                             },
-                            "Guardar Cambios",
+                            "Procesando..." if is_loading else "Guardar Cambios",
                         ),
                     )
                 ),
@@ -380,7 +507,13 @@ def ScheduleEquiposModal(
     """
     Modal para asignar/desasignar equipos a una programación específica.
     """
-    api = get_api_client()
+    # Obtener api_client del contexto
+    try:
+        from ...state.app_context import use_app_context
+        app_context = use_app_context()
+        api = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api = get_api_client()
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
 

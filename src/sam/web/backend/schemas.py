@@ -34,6 +34,11 @@ class ScheduleData(BaseModel):
     DiasSemana: Optional[str] = None
     DiaDelMes: Optional[int] = None
     FechaEspecifica: Optional[str] = None
+    # Campos para RangoMensual
+    DiaInicioMes: Optional[int] = None  # Día inicial del rango (1-31)
+    DiaFinMes: Optional[int] = None  # Día final del rango (1-31)
+    UltimosDiasMes: Optional[int] = None  # Últimos N días del mes (1-31)
+    PrimerosDiasMes: Optional[int] = None  # Primeros N días del mes (1-31) - se mapea a DiaInicioMes=1, DiaFinMes=N
 
 
 class ScheduleEditData(BaseModel):
@@ -49,6 +54,11 @@ class ScheduleEditData(BaseModel):
     FechaEspecifica: Optional[date] = None
     Tolerancia: int
     Activo: bool
+    # Campos para RangoMensual
+    DiaInicioMes: Optional[int] = None
+    DiaFinMes: Optional[int] = None
+    UltimosDiasMes: Optional[int] = None
+    PrimerosDiasMes: Optional[int] = None  # Se mapea a DiaInicioMes=1, DiaFinMes=N
     # (Nota: No incluimos 'Equipos' a propósito)
 
 
@@ -77,6 +87,7 @@ class RobotFilters(TypedDict, total=False):
     name: Optional[str]
     active: Optional[bool]
     online: Optional[bool]
+    programado: Optional[bool]
     page: Optional[int]
     size: Optional[int]
 
