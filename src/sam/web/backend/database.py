@@ -300,6 +300,7 @@ def get_available_devices_for_robot_inline(db: DatabaseConnector, robot_id: int)
     """
     Implementación inline como fallback o para desarrollo.
     Esta query es equivalente pero más legible que la versión con NOT EXISTS anidados.
+    Incluye información sobre si el equipo está programado en otro robot.
     """
     query = """
         WITH EquiposReservados AS (
@@ -314,16 +315,28 @@ def get_available_devices_for_robot_inline(db: DatabaseConnector, robot_id: int)
             SELECT DISTINCT EquipoId
             FROM dbo.Asignaciones
             WHERE RobotId = ?
+        ),
+        EquiposProgramadosEnOtrosRobots AS (
+            -- Equipos programados en otros robots (no en este)
+            SELECT DISTINCT EquipoId, CAST(1 AS BIT) AS EsProgramado
+            FROM dbo.Asignaciones
+            WHERE EsProgramado = 1
+              AND RobotId != ?
         )
-        SELECT E.EquipoId, E.Equipo
+        SELECT 
+            E.EquipoId, 
+            E.Equipo,
+            ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
+            CAST(0 AS BIT) AS Reservado
         FROM dbo.Equipos E
+        LEFT JOIN EquiposProgramadosEnOtrosRobots P ON E.EquipoId = P.EquipoId
         WHERE E.Activo_SAM = 1
           AND E.Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')
           AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservados)
           AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposYaAsignados)
         ORDER BY E.Equipo
     """
-    return db.ejecutar_consulta(query, (robot_id,), es_select=True)
+    return db.ejecutar_consulta(query, (robot_id, robot_id), es_select=True)
 
 
 def get_devices(
@@ -591,40 +604,88 @@ def toggle_schedule_active(db: DatabaseConnector, schedule_id: int, activo: bool
 def get_schedule_devices_data(db: DatabaseConnector, schedule_id: int) -> Dict[str, List[Dict]]:
     """
     Obtiene los equipos asignados a una programación específica y los disponibles.
+    Incluye información sobre si los equipos están programados en otras programaciones.
     """
     # 1. Obtener los asignados a ESTA programación
     query_assigned = """
-        SELECT e.EquipoId AS ID, e.Equipo AS Nombre, e.Licencia
+        SELECT e.EquipoId AS ID, e.Equipo AS Nombre, e.Licencia,
+               CAST(1 AS BIT) AS EsProgramado, CAST(0 AS BIT) AS Reservado
         FROM Equipos e
         INNER JOIN Asignaciones a ON e.EquipoId = a.EquipoId
         WHERE a.ProgramacionId = ?
     """
     assigned = db.ejecutar_consulta(query_assigned, (schedule_id,), es_select=True)
 
-    # 2. Obtener TODOS los disponibles (que estén activos en SAM)
-    # Excluimos los que ya están asignados a esta programación para no duplicar
+    # 2. Obtener equipos disponibles (que estén activos en SAM)
+    # Excluimos:
+    # - Los que ya están asignados a esta programación
+    # - Los que están reservados manualmente (Reservado = 1)
+    # - Los que están asignados dinámicamente (EsProgramado = 0 AND Reservado = 0)
+    # Incluimos información sobre si están programados en otras programaciones
     assigned_ids = [item["ID"] for item in assigned]
 
     # Si hay asignados, construimos los placeholders (?,?,?)
     if assigned_ids:
         placeholders = ",".join("?" * len(assigned_ids))
         query_available = f"""
-            SELECT EquipoId AS ID, Equipo AS Nombre, Licencia
-            FROM Equipos
-            WHERE Activo_SAM = 1
-              AND EquipoId NOT IN ({placeholders})
-            ORDER BY Equipo ASC
+            WITH EquiposReservadosODinamicos AS (
+                -- Equipos reservados manualmente o asignados dinámicamente
+                SELECT DISTINCT EquipoId
+                FROM dbo.Asignaciones
+                WHERE Reservado = 1
+                   OR (EsProgramado = 0 AND Reservado = 0)
+            ),
+            EquiposProgramadosEnOtrasProgramaciones AS (
+                -- Equipos programados en otras programaciones (no en esta)
+                SELECT DISTINCT EquipoId, CAST(1 AS BIT) AS EsProgramado
+                FROM dbo.Asignaciones
+                WHERE EsProgramado = 1
+                  AND ProgramacionId != ?
+            )
+            SELECT 
+                e.EquipoId AS ID, 
+                e.Equipo AS Nombre, 
+                e.Licencia,
+                ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
+                CAST(0 AS BIT) AS Reservado
+            FROM Equipos e
+            LEFT JOIN EquiposProgramadosEnOtrasProgramaciones P ON e.EquipoId = P.EquipoId
+            WHERE e.Activo_SAM = 1
+              AND e.EquipoId NOT IN ({placeholders})
+              AND e.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservadosODinamicos)
+            ORDER BY e.Equipo ASC
         """
-        params = tuple(assigned_ids)
+        params = tuple([schedule_id] + list(assigned_ids))
     else:
-        # Si no hay nadie asignado, traemos todos los activos
+        # Si no hay nadie asignado, traemos todos los activos (excluyendo reservados/dinámicos)
         query_available = """
-            SELECT EquipoId AS ID, Equipo AS Nombre, Licencia
-            FROM Equipos
-            WHERE Activo_SAM = 1
-            ORDER BY Equipo ASC
+            WITH EquiposReservadosODinamicos AS (
+                -- Equipos reservados manualmente o asignados dinámicamente
+                SELECT DISTINCT EquipoId
+                FROM dbo.Asignaciones
+                WHERE Reservado = 1
+                   OR (EsProgramado = 0 AND Reservado = 0)
+            ),
+            EquiposProgramadosEnOtrasProgramaciones AS (
+                -- Equipos programados en otras programaciones (no en esta)
+                SELECT DISTINCT EquipoId, CAST(1 AS BIT) AS EsProgramado
+                FROM dbo.Asignaciones
+                WHERE EsProgramado = 1
+                  AND ProgramacionId != ?
+            )
+            SELECT 
+                e.EquipoId AS ID, 
+                e.Equipo AS Nombre, 
+                e.Licencia,
+                ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
+                CAST(0 AS BIT) AS Reservado
+            FROM Equipos e
+            LEFT JOIN EquiposProgramadosEnOtrasProgramaciones P ON e.EquipoId = P.EquipoId
+            WHERE e.Activo_SAM = 1
+              AND e.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservadosODinamicos)
+            ORDER BY e.Equipo ASC
         """
-        params = ()
+        params = (schedule_id,)
 
     available = db.ejecutar_consulta(query_available, params, es_select=True)
 
