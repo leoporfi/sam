@@ -6,7 +6,7 @@ import uuid
 from reactpy import component, html, use_context, use_effect, use_location, use_memo, use_state
 from reactpy_router import browser_router, route
 
-from sam.web.frontend.api.api_client import APIClient
+from sam.web.frontend.api.api_client import APIClient, get_api_client
 
 # Componentes de páginas
 from .features.components.equipo_list import EquiposControls, EquiposDashboard
@@ -115,9 +115,7 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
         search_term=search_input,
         on_search_change=set_search_input,
         active_filter="all" if robots_filters.get("active") is None else str(robots_filters.get("active")).lower(),
-        on_active_change=lambda value: robots_state["set_filters"](
-            lambda prev: {**prev, "active": None if value == "all" else value == "true"}
-        ),
+        on_active_change=lambda value: robots_state["set_filters"](lambda prev: {**prev, "active": None if value == "all" else value == "true"}),
         online_filter=online_filter_value,
         on_online_change=handle_online_change,
         is_searching=is_searching,
