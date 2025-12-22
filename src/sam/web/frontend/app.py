@@ -655,6 +655,7 @@ route("/test", TestLocation())
 # --- Elementos del <head> ---
 head = html.head(
     html.title("SAM"),
+    html.link({"rel": "icon", "type": "image/png", "href": "/static/favicon.png"}),
     html.meta({"charset": "utf-8"}),
     html.meta({"name": "viewport", "content": "width=device-width, initial-scale=1"}),
     html.link({"rel": "stylesheet", "href": "/static/css/pico.violet.min.css"}),

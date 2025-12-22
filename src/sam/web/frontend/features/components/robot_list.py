@@ -78,7 +78,7 @@ def RobotsControls(
                         "name": "search-robot",
                         "placeholder": "Buscar robots por nombre...",
                         "value": search_term,
-                        "on_change": lambda event: on_search_change(event["target"]["value"]),
+                        "on_change": lambda event: on_search_change(event["target"]["value"].strip()),
                         "aria-busy": str(is_searching).lower(),
                         "class_name": SEARCH_INPUT,
                     }
