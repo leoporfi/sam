@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict
 from reactpy import component, event, html, use_context, use_effect, use_memo, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
-from sam.web.frontend.shared.common_components import ConfirmationModal
+from sam.web.frontend.shared.common_components import ConfirmationModal, LoadingOverlay
 
 from ...shared.notifications import NotificationContext
 
@@ -358,6 +358,7 @@ def ScheduleEditModal(
         html.dialog(
             {"open": True, "class_name": "modal-dialog"},
             html.article(
+                {"style": {"position": "relative"}},
                 html.header(
                     html.a(
                         {
@@ -365,6 +366,7 @@ def ScheduleEditModal(
                             "aria-label": "Close",
                             "class_name": "close",
                             "on_click": event(lambda e: on_close(), prevent_default=True),
+                            "style": {"pointerEvents": "none" if is_loading else "auto", "opacity": "0.5" if is_loading else "1"},
                         }
                     ),
                     html.h3(f"Editar Programación: {schedule.get('RobotNombre', '')}"),
@@ -372,6 +374,10 @@ def ScheduleEditModal(
                 html.form(
                     {"id": "edit-schedule-form", "on_submit": event(handle_submit, prevent_default=True)},
                     FullScheduleEditForm(form_data, set_form_data),
+                ),
+                LoadingOverlay(
+                    is_loading=is_loading,
+                    message="Guardando cambios, esto puede tardar unos segundos..." if is_loading else None,
                 ),
                 html.footer(
                     html.div(
@@ -393,7 +399,7 @@ def ScheduleEditModal(
                                 "aria-busy": str(is_loading).lower(),
                                 "disabled": is_loading,
                             },
-                            "Guardar Cambios",
+                            "Procesando..." if is_loading else "Guardar Cambios",
                         ),
                     )
                 ),
