@@ -9,6 +9,7 @@ from ...shared.common_components import ConfirmationModal, LoadingOverlay
 from ...shared.formatters import format_equipos_list, format_schedule_details, format_time
 from ...shared.notifications import NotificationContext
 from ...state.app_context import use_app_context
+from ..components.bot_input_editor import BotInputEditor
 
 # --- Constantes y Estados por Defecto ---
 
@@ -22,6 +23,7 @@ DEFAULT_ROBOT_STATE = {
     "MaxEquipos": -1,
     "PrioridadBalanceo": 100,
     "TicketsPorEquipoAdicional": 10,
+    "Parametros": None,
 }
 
 # Incluir todos los tipos soportados por la BD (incluye RangoMensual)
@@ -140,6 +142,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
             # Modo creación: reseteamos explicitamente al estado por defecto
             set_form_data(DEFAULT_ROBOT_STATE)
 
+
     def handle_form_change(field_name, field_value):
         if field_name in ["RobotId", "MinEquipos", "MaxEquipos", "PrioridadBalanceo", "TicketsPorEquipoAdicional"]:
             try:
@@ -153,6 +156,9 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
         set_is_loading(True)
         try:
             if is_edit_mode:
+                # El JSON de parámetros ya está validado por el BotInputEditor
+                parametros_json = form_data.get("Parametros")
+
                 payload_to_send = {
                     "Robot": form_data.get("Robot"),
                     "Descripcion": form_data.get("Descripcion"),
@@ -160,6 +166,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                     "MaxEquipos": form_data.get("MaxEquipos"),
                     "PrioridadBalanceo": form_data.get("PrioridadBalanceo"),
                     "TicketsPorEquipoAdicional": form_data.get("TicketsPorEquipoAdicional"),
+                    "Parametros": parametros_json if parametros_json and parametros_json.strip() else None,
                 }
                 await api_service.update_robot(robot["RobotId"], payload_to_send)
                 show_notification("Robot actualizado con éxito.", "success")
@@ -184,6 +191,57 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     return html.dialog(
         {"open": True if robot is not None else False},
         html.article(
+            html.script(
+                """
+                (function() {
+                    // Función para configurar los acordeones mutuamente exclusivos
+                    function setupMutuallyExclusiveAccordions() {
+                        const configAccordion = document.getElementById('accordion-config');
+                        const paramsAccordion = document.getElementById('accordion-params');
+                        
+                        if (!configAccordion || !paramsAccordion) {
+                            // Si los elementos no existen aún, reintentar después de un breve delay
+                            setTimeout(setupMutuallyExclusiveAccordions, 50);
+                            return;
+                        }
+                        
+                        const closeOther = (current) => {
+                            if (current === configAccordion && paramsAccordion.hasAttribute('open')) {
+                                paramsAccordion.removeAttribute('open');
+                            } else if (current === paramsAccordion && configAccordion.hasAttribute('open')) {
+                                configAccordion.removeAttribute('open');
+                            }
+                        };
+                        
+                        // Remover listeners anteriores si existen (para evitar duplicados)
+                        if (configAccordion._toggleHandler) {
+                            configAccordion.removeEventListener('toggle', configAccordion._toggleHandler);
+                        }
+                        if (paramsAccordion._toggleHandler) {
+                            paramsAccordion.removeEventListener('toggle', paramsAccordion._toggleHandler);
+                        }
+                        
+                        // Agregar nuevos listeners
+                        configAccordion._toggleHandler = function(e) {
+                            if (e.target.open) {
+                                closeOther(e.target);
+                            }
+                        };
+                        paramsAccordion._toggleHandler = function(e) {
+                            if (e.target.open) {
+                                closeOther(e.target);
+                            }
+                        };
+                        
+                        configAccordion.addEventListener('toggle', configAccordion._toggleHandler);
+                        paramsAccordion.addEventListener('toggle', paramsAccordion._toggleHandler);
+                    }
+                    
+                    // Ejecutar después de un pequeño delay para asegurar que los elementos existan
+                    setTimeout(setupMutuallyExclusiveAccordions, 100);
+                })();
+                """
+            ),
             html.header(
                 html.button({"aria-label": "Close", "rel": "prev", "on_click": event(on_close, prevent_default=True)}),
                 html.h2("Editar Robot") if is_edit_mode else html.h2("Crear Nuevo Robot"),
@@ -224,102 +282,152 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                         ),
                     ),
                 ),
-                html.label(
-                    {"htmlFor": "robot-desc"},
-                    "Descripción",
-                    html.textarea(
+                # Acordeón de Configuración Avanzada
+                html.details(
+                    {
+                        "id": "accordion-config",
+                        "style": {"marginTop": "1rem"},
+                        "form": "robot-form",
+                    },
+                    html.summary(
                         {
-                            "id": "robot-desc",
-                            "rows": 3,
-                            "value": form_data.get("Descripcion", ""),
-                            "on_change": lambda e: handle_form_change("Descripcion", e["target"]["value"]),
-                        }
+                            "style": {
+                                "cursor": "pointer",
+                                "fontWeight": "bold",
+                                "padding": "0.5rem",
+                                "backgroundColor": "var(--pico-card-background-color)",
+                                "borderRadius": "var(--pico-border-radius)",
+                            }
+                        },
+                        "Configuración Avanzada",
+                    ),
+                    html.div(
+                        {"style": {"padding": "1rem", "borderTop": "1px solid var(--pico-border-color)"}},
+                        html.label(
+                            {"htmlFor": "robot-desc"},
+                            "Descripción",
+                            html.textarea(
+                                {
+                                    "id": "robot-desc",
+                                    "rows": 3,
+                                    "value": form_data.get("Descripcion", ""),
+                                    "on_change": lambda e: handle_form_change("Descripcion", e["target"]["value"]),
+                                }
+                            ),
+                        ),
+                        html.div(
+                            {"class_name": "grid", "style": {"marginTop": "1rem"}},
+                            html.label(
+                                {"htmlFor": "min-equipos"},
+                                "Mín. Equipos",
+                                html.div(
+                                    {"class_name": "range"},
+                                    html.output(form_data.get("MinEquipos", "0")),
+                                    html.input(
+                                        {
+                                            "id": "min-equipos",
+                                            "type": "range",
+                                            "name": "range-min-equipos",
+                                            "min": "1",
+                                            "max": "99",
+                                            "value": form_data.get("MinEquipos", 0),
+                                            "on_change": lambda e: handle_form_change("MinEquipos", e["target"]["value"]),
+                                            "style": {"flexGrow": "1"},
+                                        }
+                                    ),
+                                ),
+                            ),
+                            html.label(
+                                {"htmlFor": "max-equipos"},
+                                "Máx. Equipos",
+                                html.div(
+                                    {"class_name": "range"},
+                                    html.output(form_data.get("MaxEquipos", "0")),
+                                    html.input(
+                                        {
+                                            "id": "max-equipos",
+                                            "type": "range",
+                                            "name": "range-max-equipos",
+                                            "min": "-1",
+                                            "max": "100",
+                                            "value": form_data.get("MaxEquipos", -1),
+                                            "on_change": lambda e: handle_form_change("MaxEquipos", e["target"]["value"]),
+                                            "style": {"flexGrow": "1"},
+                                        }
+                                    ),
+                                ),
+                            ),
+                        ),
+                        html.div(
+                            {"class_name": "grid", "style": {"marginTop": "1rem"}},
+                            html.label(
+                                {"htmlFor": "prioridad"},
+                                "Prioridad",
+                                html.div(
+                                    {"class_name": "range"},
+                                    html.output({"class_name": "button"}, form_data.get("PrioridadBalanceo", "0")),
+                                    html.input(
+                                        {
+                                            "id": "prioridad",
+                                            "type": "range",
+                                            "name": "range-prioridad",
+                                            "min": "0",
+                                            "max": "100",
+                                            "step": "5",
+                                            "value": form_data.get("PrioridadBalanceo", 100),
+                                            "on_change": lambda e: handle_form_change("PrioridadBalanceo", e["target"]["value"]),
+                                            "style": {"flexGrow": "1"},
+                                        }
+                                    ),
+                                ),
+                            ),
+                            html.label(
+                                {"htmlFor": "tickets"},
+                                "Tickets/Equipo Adic.",
+                                html.div(
+                                    {"class_name": "range"},
+                                    html.output(form_data.get("TicketsPorEquipoAdicional", "0")),
+                                    html.input(
+                                        {
+                                            "id": "tickets",
+                                            "type": "range",
+                                            "name": "range-tickets",
+                                            "min": "1",
+                                            "max": "100",
+                                            "value": form_data.get("TicketsPorEquipoAdicional", 10),
+                                            "on_change": lambda e: handle_form_change("TicketsPorEquipoAdicional", e["target"]["value"]),
+                                            "style": {"flexGrow": "1"},
+                                        }
+                                    ),
+                                ),
+                            ),
+                        ),
                     ),
                 ),
-                html.div(
-                    {"class_name": "grid"},
-                    html.label(
-                        {"htmlFor": "min-equipos"},
-                        "Mín. Equipos",
-                        html.div(
-                            {"class_name": "range"},
-                            html.output(form_data.get("MinEquipos", "0")),
-                            html.input(
-                                {
-                                    "id": "min-equipos",
-                                    "type": "range",
-                                    "name": "range-min-equipos",
-                                    "min": "1",
-                                    "max": "99",
-                                    "value": form_data.get("MinEquipos", 0),
-                                    "on_change": lambda e: handle_form_change("MinEquipos", e["target"]["value"]),
-                                    "style": {"flexGrow": "1"},
-                                }
-                            ),
-                        ),
+                # Editor amigable de parámetros en un acordeón
+                html.details(
+                    {
+                        "id": "accordion-params",
+                        "style": {"marginTop": "1rem"},
+                        "form": "robot-form",
+                    },
+                    html.summary(
+                        {
+                            "style": {
+                                "cursor": "pointer",
+                                "fontWeight": "bold",
+                                "padding": "0.5rem",
+                                "backgroundColor": "var(--pico-card-background-color)",
+                                "borderRadius": "var(--pico-border-radius)",
+                            }
+                        },
+                        "Parámetros de Bot Input (Opcional)",
                     ),
-                    html.label(
-                        {"htmlFor": "max-equipos"},
-                        "Máx. Equipos",
-                        html.div(
-                            {"class_name": "range"},
-                            html.output(form_data.get("MaxEquipos", "0")),
-                            html.input(
-                                {
-                                    "id": "max-equipos",
-                                    "type": "range",
-                                    "name": "range-max-equipos",
-                                    "min": "-1",
-                                    "max": "100",
-                                    "value": form_data.get("MaxEquipos", -1),
-                                    "on_change": lambda e: handle_form_change("MaxEquipos", e["target"]["value"]),
-                                    "style": {"flexGrow": "1"},
-                                }
-                            ),
-                        ),
-                    ),
-                ),
-                html.div(
-                    {"class_name": "grid"},
-                    html.label(
-                        {"htmlFor": "prioridad"},
-                        "Prioridad",
-                        html.div(
-                            {"class_name": "range"},
-                            html.output({"class_name": "button"}, form_data.get("PrioridadBalanceo", "0")),
-                            html.input(
-                                {
-                                    "id": "prioridad",
-                                    "type": "range",
-                                    "name": "range-prioridad",
-                                    "min": "0",
-                                    "max": "100",
-                                    "step": "5",
-                                    "value": form_data.get("PrioridadBalanceo", 100),
-                                    "on_change": lambda e: handle_form_change("PrioridadBalanceo", e["target"]["value"]),
-                                    "style": {"flexGrow": "1"},
-                                }
-                            ),
-                        ),
-                    ),
-                    html.label(
-                        {"htmlFor": "tickets"},
-                        "Tickets/Equipo Adic.",
-                        html.div(
-                            {"class_name": "range"},
-                            html.output(form_data.get("TicketsPorEquipoAdicional", "0")),
-                            html.input(
-                                {
-                                    "id": "tickets",
-                                    "type": "range",
-                                    "name": "range-tickets",
-                                    "min": "1",
-                                    "max": "100",
-                                    "value": form_data.get("TicketsPorEquipoAdicional", 10),
-                                    "on_change": lambda e: handle_form_change("TicketsPorEquipoAdicional", e["target"]["value"]),
-                                    "style": {"flexGrow": "1"},
-                                }
-                            ),
+                    html.div(
+                        {"style": {"padding": "1rem", "borderTop": "1px solid var(--pico-border-color)"}},
+                        BotInputEditor(
+                            value=form_data.get("Parametros"),
+                            on_change=lambda json_str: handle_form_change("Parametros", json_str),
                         ),
                     ),
                 ),
