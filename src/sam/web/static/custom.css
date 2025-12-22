@@ -189,6 +189,7 @@ nav ul li a.active {
 .tag-programado { background-color: var(--pico-color-blue-500); color: white; }
 .tag-reservado  { background-color: var(--pico-color-orange-500); color: white; }
 .tag-dinamico   { background-color: var(--pico-color-green-500); color: white; }
+.tag-libre      { background-color: var(--pico-color-slate-400); color: white; }
 
 /* Tipos de Ejecución */
 .tag-ejecucion-programado { background-color: var(--pico-color-pink-550); color: white; }
