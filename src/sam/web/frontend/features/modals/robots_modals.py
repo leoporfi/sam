@@ -22,7 +22,8 @@ DEFAULT_ROBOT_STATE = {
     "TicketsPorEquipoAdicional": 10,
 }
 
-SCHEDULE_TYPES = ["Diaria", "Semanal", "Mensual", "Especifica"]
+# Incluir todos los tipos soportados por la BD (incluye RangoMensual)
+SCHEDULE_TYPES = ["Diaria", "Semanal", "Mensual", "RangoMensual", "Especifica"]
 DEFAULT_FORM_STATE = {
     "ProgramacionId": None,
     "TipoProgramacion": "Diaria",
@@ -31,6 +32,11 @@ DEFAULT_FORM_STATE = {
     "DiasSemana": "Lu,Ma,Mi,Ju,Vi,Sa,Do",
     "DiaDelMes": 1,
     "FechaEspecifica": "",
+    # Campos para RangoMensual
+    "DiaInicioMes": None,
+    "DiaFinMes": None,
+    "UltimosDiasMes": None,
+    "PrimerosDiasMes": None,
     "Equipos": [],
 }
 
@@ -110,7 +116,12 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     is_loading, set_is_loading = use_state(False)
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
-    api_service = get_api_client()
+    # Obtener api_client del contexto
+    try:
+        app_context = use_app_context()
+        api_service = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_service = get_api_client()
     is_edit_mode = bool(robot and robot.get("RobotId") is not None)
 
     @use_effect(dependencies=[robot])
@@ -335,7 +346,12 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
 
 @component
 def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callable, on_save_success: Callable):
-    api_service = get_api_client()
+    # Obtener api_client del contexto
+    try:
+        app_context = use_app_context()
+        api_service = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_service = get_api_client()
     assigned_devices, set_assigned_devices = use_state([])
     available_devices, set_available_devices = use_state([])
     is_loading, set_is_loading = use_state(False)
@@ -426,10 +442,16 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
     )
 
     def move_items(source_list, set_source, dest_list, set_dest, selected_ids, clear_selection):
-        items_to_move = {item["EquipoId"]: item for item in source_list if item["EquipoId"] in selected_ids}
+        """Mueve elementos entre listas asegurando que no queden duplicados por EquipoId."""
+        items_to_move = {item["EquipoId"]: item for item in source_list if item.get("EquipoId") in selected_ids}
 
-        new_dest_list = sort_devices(dest_list + list(items_to_move.values()))
-        new_source_list = sort_devices([item for item in source_list if item["EquipoId"] not in items_to_move])
+        # Construimos un diccionario único para el destino (dest_list + items_to_move),
+        # dejando que la versión "movida" reemplace a una previa si ya existía.
+        dest_dict = {item["EquipoId"]: item for item in dest_list if item.get("EquipoId") is not None}
+        dest_dict.update(items_to_move)
+
+        new_dest_list = sort_devices(list(dest_dict.values()))
+        new_source_list = sort_devices([item for item in source_list if item.get("EquipoId") not in items_to_move])
 
         set_dest(new_dest_list)
         set_source(new_source_list)
@@ -561,7 +583,12 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
 
 @component
 def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callable, on_save_success: Callable):
-    api_service = get_api_client()
+    # Obtener api_client del contexto
+    try:
+        app_context = use_app_context()
+        api_service = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_service = get_api_client()
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
     view_mode, set_view_mode = use_state("list")
@@ -651,6 +678,11 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
             "DiasSemana": schedule_to_edit.get("DiasSemana", ""),
             "DiaDelMes": schedule_to_edit.get("DiaDelMes", 1),
             "FechaEspecifica": (schedule_to_edit.get("FechaEspecifica") or "")[:10],
+            # Campos para RangoMensual (si existen en la respuesta)
+            "DiaInicioMes": schedule_to_edit.get("DiaInicioMes"),
+            "DiaFinMes": schedule_to_edit.get("DiaFinMes"),
+            "UltimosDiasMes": schedule_to_edit.get("UltimosDiasMes"),
+            "PrimerosDiasMes": schedule_to_edit.get("PrimerosDiasMes"),
             "Equipos": equipos_ids,
         }
         set_form_data(form_state)
@@ -765,7 +797,7 @@ def DeviceList(
                     "name": "search-equipos",
                     "placeholder": "Filtrar equipos...",
                     "value": search_term,
-                    "onChange": lambda e: on_search_change(e["target"]["value"]),
+                "on_change": lambda e: on_search_change(e["target"]["value"]),
                 }
             ),
         ),
@@ -777,7 +809,7 @@ def DeviceList(
                     html.tr(
                         html.th(
                             {"scope": "col", "style": {"width": "40px"}},
-                            html.input({"type": "checkbox", "name": "checkbox-equipos", "onChange": handle_select_all}),
+                            html.input({"type": "checkbox", "name": "checkbox-equipos", "on_change": handle_select_all}),
                         ),
                         html.th({"scope": "col"}, "Nombre Equipo"),
                         html.th({"scope": "col", "style": {"width": "120px"}}, "Estado") if has_status_column else None,
@@ -792,7 +824,9 @@ def DeviceList(
                                     {
                                         "type": "checkbox",
                                         "checked": device["EquipoId"] in selected_ids,
-                                        "onChange": lambda e, eid=device["EquipoId"]: handle_select_one(eid, e["target"]["checked"]),
+                                        "on_change": lambda e, eid=device["EquipoId"]: handle_select_one(
+                                            eid, e["target"]["checked"]
+                                        ),
                                     }
                                 )
                             ),
@@ -829,16 +863,58 @@ def SchedulesList(
     show_notification = notification_ctx["show_notification"]
     schedule_to_delete, set_schedule_to_delete = use_state(None)
 
+    def _format_time(hora: str | None) -> str:
+        """Formatea la hora como HH:MM (sin segundos)."""
+        if not hora:
+            return ""
+        return str(hora)[:5]
+
     def format_schedule_details(schedule):
-        details = f"{schedule.get('TipoProgramacion', 'N/A')} a las {schedule.get('HoraInicio', '')}"
         tipo = schedule.get("TipoProgramacion")
+        hora = _format_time(schedule.get("HoraInicio"))
+        details = f"{tipo or 'N/A'} a las {hora}" if hora else (tipo or "N/A")
+
         if tipo == "Semanal":
             details += f" los días {schedule.get('DiasSemana', '')}"
         elif tipo == "Mensual":
             details += f" el día {schedule.get('DiaDelMes', '')} de cada mes"
         elif tipo == "Especifica":
             details += f" en la fecha {schedule.get('FechaEspecifica', '')}"
+        elif tipo == "RangoMensual":
+            dia_inicio = schedule.get("DiaInicioMes")
+            dia_fin = schedule.get("DiaFinMes")
+            ultimos = schedule.get("UltimosDiasMes")
+
+            if ultimos:
+                details += f" los últimos {ultimos} día(s) del mes"
+            elif dia_inicio and dia_fin:
+                if dia_inicio == 1:
+                    details += f" los primeros {dia_fin} día(s) del mes"
+                else:
+                    details += f" del {dia_inicio} al {dia_fin} de cada mes"
+
         return details
+
+    def _format_equipos_cell(equipos: List[Dict]) -> Any:
+        """Muestra los equipos de forma compacta para no romper el layout del modal."""
+        if not equipos:
+            return "Ninguno"
+
+        nombres = sorted({d.get("Equipo", "") for d in equipos if d.get("Equipo")})
+        if not nombres:
+            return "Ninguno"
+
+        total = len(nombres)
+        max_visible = 6
+
+        if total <= max_visible:
+            texto = ", ".join(nombres)
+        else:
+            texto = ", ".join(nombres[:max_visible]) + f" (+{total - max_visible} más)"
+
+        # Usamos title para mostrar el detalle completo al pasar el mouse
+        full_text = ", ".join(nombres)
+        return html.span({"title": full_text}, texto)
 
     async def handle_confirm_delete():
         if not schedule_to_delete:
@@ -857,7 +933,7 @@ def SchedulesList(
             html.tr(
                 {"key": s["ProgramacionId"]},
                 html.td(format_schedule_details(s)),
-                html.td(", ".join(sorted([device["Equipo"] for device in s.get("Equipos", [])])) or "Ninguno"),
+                html.td(_format_equipos_cell(s.get("Equipos", []))),
                 html.td(
                     html.div(
                         {"class_name": "grid"},
@@ -999,6 +1075,148 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                     "on_change": lambda e: on_change("DiaDelMes", int(e["target"]["value"]) if e["target"]["value"] else 1),
                 }
             ),
+        )
+    elif tipo == "RangoMensual":
+        dia_inicio = form_data.get("DiaInicioMes")
+        dia_fin = form_data.get("DiaFinMes")
+        ultimos = form_data.get("UltimosDiasMes")
+        primeros = form_data.get("PrimerosDiasMes")
+
+        # Deducir opción seleccionada si no existe 'rango_option'
+        rango_option = form_data.get("rango_option")
+        if not rango_option:
+            if ultimos:
+                rango_option = "ultimos"
+            elif primeros or (dia_inicio == 1 and dia_fin):
+                rango_option = "primeros"
+            elif dia_inicio and dia_fin:
+                rango_option = "rango"
+
+        def set_option(option: str):
+            # Actualizamos campo de ayuda y limpiamos los que no aplican
+            payload: Dict[str, Any] = {"rango_option": option}
+            if option == "rango":
+                payload["PrimerosDiasMes"] = None
+                payload["UltimosDiasMes"] = None
+            elif option == "primeros":
+                payload["DiaInicioMes"] = 1
+                # Mantener DiaFinMes como N (primeros N días)
+                payload["UltimosDiasMes"] = None
+            elif option == "ultimos":
+                payload["DiaInicioMes"] = None
+                payload["DiaFinMes"] = None
+                payload["PrimerosDiasMes"] = None
+            for k, v in payload.items():
+                on_change(k, v)
+
+        return html.div(
+            {"class_name": "rango-mensual-options"},
+            html.p({"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}}, "Seleccione una opción:"),
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "rango",
+                        "checked": rango_option == "rango",
+                        "on_change": lambda e: set_option("rango"),
+                    }
+                ),
+                " Rango específico (ej: del 1 al 10)",
+            ),
+            html.div(
+                {"class_name": "grid", "style": {"display": "flex", "gap": "1rem"}},
+                html.label(
+                    "Día Inicio",
+                    html.input(
+                        {
+                            "type": "number",
+                            "min": 1,
+                            "max": 31,
+                            "value": dia_inicio or "",
+                            "placeholder": "1",
+                            "on_change": lambda e: on_change(
+                                "DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                            ),
+                        }
+                    ),
+                ),
+                html.label(
+                    "Día Fin",
+                    html.input(
+                        {
+                            "type": "number",
+                            "min": 1,
+                            "max": 31,
+                            "value": dia_fin or "",
+                            "placeholder": "10",
+                            "on_change": lambda e: on_change(
+                                "DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                            ),
+                        }
+                    ),
+                ),
+            )
+            if rango_option == "rango"
+            else None,
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "primeros",
+                        "checked": rango_option == "primeros",
+                        "on_change": lambda e: set_option("primeros"),
+                    }
+                ),
+                " Primeros N días del mes",
+            ),
+            html.label(
+                "Cantidad de días",
+                html.input(
+                    {
+                        "type": "number",
+                        "min": 1,
+                        "max": 31,
+                        "value": primeros or (dia_fin if dia_inicio == 1 and dia_fin else ""),
+                        "placeholder": "10",
+                        "on_change": lambda e: on_change(
+                            "PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                        ),
+                    }
+                ),
+            )
+            if rango_option == "primeros"
+            else None,
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "ultimos",
+                        "checked": rango_option == "ultimos",
+                        "on_change": lambda e: set_option("ultimos"),
+                    }
+                ),
+                " Últimos N días del mes",
+            ),
+            html.label(
+                "Cantidad de días",
+                html.input(
+                    {
+                        "type": "number",
+                        "min": 1,
+                        "max": 31,
+                        "value": ultimos or "",
+                        "placeholder": "5",
+                        "on_change": lambda e: on_change(
+                            "UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                        ),
+                    }
+                ),
+            )
+            if rango_option == "ultimos"
+            else None,
         )
     elif tipo == "Especifica":
         return html.label(
