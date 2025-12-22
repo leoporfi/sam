@@ -1,10 +1,18 @@
-# sam/web/hooks/use_equipos_hook.py
+# sam/web/frontend/hooks/use_equipos_hook.py
+"""
+Hook para gestionar el estado del dashboard de equipos.
+
+Este hook maneja la carga, filtrado, paginación y sincronización de equipos,
+siguiendo el principio de Inyección de Dependencias de la Guía General de SAM.
+"""
 import asyncio
+from typing import Any, Callable, Dict, List, Optional
 
 from reactpy import use_callback, use_context, use_effect, use_memo, use_ref, use_state
 
-from ..api.api_client import get_api_client
+from ..api.api_client import APIClient, get_api_client
 from ..shared.notifications import NotificationContext
+from ..state.app_context import use_app_context
 
 PAGE_SIZE = 100
 INITIAL_FILTERS = {"name": None, "active": None, "balanceable": None}
@@ -12,11 +20,46 @@ POLLING_INTERVAL_SECONDS = 60
 SYNC_POLLING_INTERVAL_SECONDS = 3
 
 
-def use_equipos():
+def use_equipos(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
     """
     Hook para gestionar equipos con recuperación de estado de Sync.
+    
+    Args:
+        api_client: Cliente API opcional para inyección de dependencias (para testing).
+                   Si no se proporciona, se obtiene del contexto o se usa get_api_client().
+    
+    Returns:
+        Dict con las siguientes keys:
+            - equipos: List[Dict] - Lista de equipos
+            - loading: bool - Estado de carga
+            - is_syncing: bool - Si está sincronizando
+            - error: Optional[str] - Mensaje de error
+            - total_count: int - Total de equipos
+            - filters: Dict - Filtros actuales
+            - set_filters: Callable - Función para actualizar filtros
+            - update_equipo_status: Callable - Función para actualizar estado de equipo
+            - refresh: Callable - Función para recargar equipos
+            - trigger_sync: Callable - Función para iniciar sincronización
+            - current_page: int - Página actual
+            - set_current_page: Callable - Función para cambiar página
+            - total_pages: int - Total de páginas
+            - page_size: int - Tamaño de página
+            - sort_by: str - Columna de ordenamiento
+            - sort_dir: str - Dirección de ordenamiento ("asc" o "desc")
+            - handle_sort: Callable - Función para manejar ordenamiento
     """
-    api_client = get_api_client()
+    # Aplicar Inyección de Dependencias: permitir inyectar api_client para testing
+    # Si no se proporciona, intentar obtener del contexto de la aplicación
+    if api_client is None:
+        try:
+            app_context = use_app_context()
+            api_client = app_context.get("api_client")
+            if api_client is None:
+                # Fallback a get_api_client() para compatibilidad temporal
+                api_client = get_api_client()  # type: ignore
+        except Exception:
+            # Fallback a get_api_client() para compatibilidad temporal
+            api_client = get_api_client()  # type: ignore
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
 

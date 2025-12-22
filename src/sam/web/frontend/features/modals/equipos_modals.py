@@ -38,7 +38,13 @@ def EquipoEditModal(
     error, set_error = use_state("")
     notification_ctx = use_context(NotificationContext)
     show_notification = notification_ctx["show_notification"]
-    api_client = get_api_client()
+    # Obtener api_client del contexto
+    try:
+        from ...state.app_context import use_app_context
+        app_context = use_app_context()
+        api_client = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_client = get_api_client()
 
     # Determinar si estamos en modo creación o edición
     # Por ahora, este modal SOLO crea, así que is_edit_mode siempre será False
