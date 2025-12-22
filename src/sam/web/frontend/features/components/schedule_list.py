@@ -1,11 +1,37 @@
-from typing import Callable, Dict, List, Optional
+# sam/web/frontend/features/components/schedule_list.py
+"""
+Componentes para la gestión de programaciones (schedules).
+
+Este módulo contiene los componentes para listar, mostrar y gestionar programaciones,
+siguiendo el estándar de ReactPy de SAM.
+"""
+
+from typing import Any, Callable, Dict, List, Optional
 
 from reactpy import component, event, html, use_state
 
 # Usamos el tipo ScheduleData de schemas para hint, aunque es un dict en runtime
 from sam.web.backend.schemas import ScheduleData
 
-from ...shared.common_components import LoadingSpinner, Pagination
+from ...shared.async_content import AsyncContent
+from ...shared.common_components import Pagination
+from ...shared.formatters import format_equipos_list, format_schedule_details, format_time
+from ...shared.styles import (
+    CARDS_CONTAINER,
+    COLLAPSIBLE_PANEL,
+    COLLAPSIBLE_PANEL_EXPANDED,
+    DASHBOARD_CONTROLS,
+    MASTER_CONTROLS_GRID,
+    MOBILE_CONTROLS_TOGGLE,
+    SCHEDULE_CARD,
+    SEARCH_INPUT,
+    TAG,
+    TABLE_CONTAINER,
+)
+
+
+# Tipos de programación disponibles (se usan en varios lugares)
+SCHEDULE_TYPES = ["Diaria", "Semanal", "Mensual", "RangoMensual", "Especifica"]
 
 
 @component
@@ -21,16 +47,21 @@ def SchedulesControls(
     is_searching: bool,
 ):
     is_expanded, set_is_expanded = use_state(False)
-    collapsible_panel_class = f"collapsible-panel {'is-expanded' if is_expanded else ''}"
+    collapsible_panel_class = COLLAPSIBLE_PANEL_EXPANDED if is_expanded else COLLAPSIBLE_PANEL
+
+    # Valor controlado del select de Tipo:
+    # - "ALL" representa "Tipo: Todos" (sin filtro)
+    # - Cualquier otro valor debe ser uno de SCHEDULE_TYPES
+    tipo_select_value = tipo_filter if tipo_filter in SCHEDULE_TYPES else "ALL"
 
     return html.div(
-        {"class_name": "dashboard-controls"},
+        {"class_name": DASHBOARD_CONTROLS},
         html.div(
             {"class_name": "controls-header"},
             html.h2("Gestión de Programaciones"),
             html.button(
                 {
-                    "class_name": "mobile-controls-toggle outline secondary",
+                    "class_name": MOBILE_CONTROLS_TOGGLE,
                     "on_click": lambda e: set_is_expanded(not is_expanded),
                 },
                 html.i({"class_name": f"fa-solid fa-chevron-{'up' if is_expanded else 'down'}"}),
@@ -41,7 +72,7 @@ def SchedulesControls(
             {"class_name": collapsible_panel_class},
             html.div(
                 {
-                    "class_name": "master-controls-grid",
+                    "class_name": MASTER_CONTROLS_GRID,
                     "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"},
                 },
                 html.input(
@@ -52,16 +83,21 @@ def SchedulesControls(
                         "value": search,
                         "on_change": lambda e: on_search(e["target"]["value"]),
                         "aria-busy": str(is_searching).lower(),
+                        "class_name": SEARCH_INPUT,
                     }
                 ),
                 html.select(
                     {
-                        "name": "filter-activo",
-                        "value": tipo_filter or "",
-                        "on_change": lambda e: on_tipo(e["target"]["value"] or None),
+                        "name": "filter-tipo",
+                        "value": tipo_select_value,
+                        # Cuando el usuario selecciona "Tipo: Todos" (ALL),
+                        # enviamos None al estado de filtros para que no aplique filtro de tipo.
+                        "on_change": lambda e: on_tipo(
+                            e["target"]["value"] if e["target"]["value"] != "ALL" else None
+                        ),
                     },
-                    html.option({"value": ""}, "Tipo: Todos"),
-                    *[html.option({"value": t}, t) for t in ["Diaria", "Semanal", "Mensual", "Especifica"]],
+                    html.option({"value": "ALL"}, "Tipo: Todos"),
+                    *[html.option({"value": t}, t) for t in SCHEDULE_TYPES],
                 ),
                 html.select(
                     {
@@ -75,8 +111,7 @@ def SchedulesControls(
                 html.button(
                     {
                         "on_click": on_new,
-                        "disabled": True,
-                        "data-tooltip": "Próximamente",
+                        "data-tooltip": "Crear nueva programación",
                         # Añadimos estilo para centrar ícono
                         "style": {
                             "display": "flex",
@@ -99,6 +134,7 @@ def SchedulesDashboard(
     on_toggle: Callable,
     on_edit: Callable,
     on_assign_equipos: Callable,
+    on_delete: Callable,
     current_page: int,
     total_pages: int,
     on_page_change: Callable,
@@ -107,53 +143,46 @@ def SchedulesDashboard(
     error: str,
 ):
     """Componente principal que renderiza la tabla y paginación."""
-    if loading:
-        return LoadingSpinner()
+    pagination_component = (
+        Pagination(current_page, total_pages, len(schedules), total_count, on_page_change)
+        if total_pages > 1
+        else None
+    )
 
-    if error:
-        return html.article(
-            {"aria_invalid": "true", "style": {"color": "var(--pico-color-red-600)"}}, f"Error: {error}"
-        )
-
-    if not schedules:
-        return html.article({"style": {"textAlign": "center", "padding": "2rem"}}, "No se encontraron programaciones.")
-
-    return html._(
-        Pagination(current_page, total_pages, len(schedules), total_count, on_page_change),
-        html.div(
-            {"className": "cards-container"},
-            [
-                ScheduleCard(
-                    schedule=s,
-                    on_toggle=on_toggle,
-                    on_edit=on_edit,
-                    on_assign_equipos=on_assign_equipos,
-                    key=s["ProgramacionId"],  # Importante para el rendimiento de renderizado
-                )
-                for s in schedules
-            ],
-        ),
-        html.div(
-            {"className": "table-container"},
-            SchedulesTable(schedules, on_toggle, on_edit, on_assign_equipos),
+    # Usar AsyncContent para manejar estados de carga/error/vacío
+    return AsyncContent(
+        loading=loading,
+        error=error,
+        data=schedules,
+        empty_message="No se encontraron programaciones.",
+        children=html._(
+            pagination_component,
+            html.div(
+                {"class_name": CARDS_CONTAINER},
+                [
+                    ScheduleCard(
+                        schedule=s,
+                        on_toggle=on_toggle,
+                        on_edit=on_edit,
+                        on_assign_equipos=on_assign_equipos,
+                        on_delete=on_delete,
+                        key=s["ProgramacionId"],  # Importante para el rendimiento de renderizado
+                    )
+                    for s in schedules
+                ],
+            ),
+            html.div(
+                {"class_name": TABLE_CONTAINER},
+                SchedulesTable(schedules, on_toggle, on_edit, on_assign_equipos, on_delete),
+            ),
         ),
     )
 
 
-def _format_schedule_details(s: ScheduleData) -> str:
-    """Helper para formatear los detalles de la programación (días/fecha)"""
-    t = s["TipoProgramacion"]
-    if t == "Semanal":
-        return s["DiasSemana"] or "-"
-    if t == "Mensual":
-        return f"Día {s['DiaDelMes']}" if s["DiaDelMes"] else "-"
-    if t == "Especifica":
-        return s["FechaEspecifica"] or "-"
-    return "-"  # Diaria no tiene detalles específicos aparte de la hora
 
 
 @component
-def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable):
+def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable, on_delete: Callable):
     headers = ["Robot", "Tipo", "Hora", "Días / Fecha", "Tol.", "Equipos", "Activo", "Acciones"]
 
     return html.article(
@@ -165,12 +194,12 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                         {"key": s["ProgramacionId"]},
                         html.td(s["RobotNombre"]),
                         html.td(html.span({"class_name": "tag"}, s["TipoProgramacion"])),
-                        html.td(html.strong(s["HoraInicio"] or "-")),
-                        html.td(_format_schedule_details(s)),
+                        html.td(html.strong(format_time(s["HoraInicio"]))),
+                        html.td(format_schedule_details(s)),
                         html.td(f"{s['Tolerancia']} min"),
                         html.td(
                             {"style": {"fontSize": "0.9em", "maxWidth": "250px", "whiteSpace": "normal"}},
-                            s["EquiposProgramados"] or "-",
+                            format_equipos_list(s.get("EquiposProgramados"), max_visible=10),
                         ),
                         html.td(
                             html.label(
@@ -216,10 +245,13 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                                 html.a(
                                     {
                                         "href": "#",
-                                        "data-tooltip": "Eliminar Programacion",
+                                        "on_click": event(
+                                            lambda e, sched=s: on_delete(sched),
+                                            prevent_default=True,
+                                        ),
+                                        "data-tooltip": "Eliminar Programación",
                                         "data-placement": "left",
                                         "class_name": "secondary",
-                                        "disabled": True,
                                     },
                                     html.i({"class_name": "fa-solid fa-trash"}),
                                 ),
@@ -234,14 +266,14 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
 
 
 @component
-def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable):
+def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable, on_delete: Callable):
     return html.article(
-        {"class_name": "schedule-card"},
+        {"class_name": SCHEDULE_CARD},
         html.header(
             html.div(
                 {"style": {"display": "flex", "justifyContent": "space-between", "alignItems": "center"}},
                 html.h5({"style": {"margin": 0}}, schedule["RobotNombre"]),
-                html.span({"class_name": "tag"}, schedule["TipoProgramacion"]),
+                html.span({"class_name": TAG}, schedule["TipoProgramacion"]),
             )
         ),
         html.div(
@@ -252,7 +284,7 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                         "style": {"marginRight": "8px", "color": "var(--pico-muted-color)"},
                     }
                 ),
-                html.strong(schedule["HoraInicio"] or "N/A"),
+                html.strong(format_time(schedule["HoraInicio"])),
             ),
             html.p(
                 html.i(
@@ -261,7 +293,7 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                         "style": {"marginRight": "8px", "color": "var(--pico-muted-color)"},
                     }
                 ),
-                f"{_format_schedule_details(schedule)}",
+                f"{format_schedule_details(schedule)}",
             ),
             html.p(
                 html.i(
@@ -312,6 +344,14 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                     },
                     html.i({"class_name": "fa-solid fa-pencil"}),
                     " Editar",
+                ),
+                html.button(
+                    {
+                        "class_name": "outline secondary",
+                        "on_click": lambda e, s=schedule: on_delete(s),
+                    },
+                    html.i({"class_name": "fa-solid fa-trash"}),
+                    " Eliminar",
                 ),
             )
         ),
