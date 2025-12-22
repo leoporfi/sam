@@ -23,6 +23,7 @@ class RobotUpdateRequest(BaseModel):
     MaxEquipos: int
     PrioridadBalanceo: int
     TicketsPorEquipoAdicional: Optional[int] = None
+    Parametros: Optional[str] = None  # JSON string con los parámetros de bot_input
 
 
 class ScheduleData(BaseModel):
@@ -79,6 +80,7 @@ class Robot(TypedDict):
     MaxEquipos: int
     PrioridadBalanceo: int
     TicketsPorEquipoAdicional: Optional[int]
+    Parametros: Optional[str]  # JSON string con los parámetros de bot_input
     CantidadEquiposAsignados: int
 
 
