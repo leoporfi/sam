@@ -141,7 +141,10 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
                         "type": "radio",
                         "name": "rango-option",
                         "value": "rango",
-                        "checked": form_data.get("DiaInicioMes") is not None and form_data.get("DiaFinMes") is not None and not form_data.get("PrimerosDiasMes") and not form_data.get("UltimosDiasMes"),
+                        "checked": form_data.get("DiaInicioMes") is not None
+                        and form_data.get("DiaFinMes") is not None
+                        and not form_data.get("PrimerosDiasMes")
+                        and not form_data.get("UltimosDiasMes"),
                         "on_change": lambda e: handle_change("rango_option", "rango"),
                     }
                 ),
@@ -176,7 +179,15 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
                     ),
                 ),
             )
-            if (form_data.get("rango_option") == "rango" or (form_data.get("DiaInicioMes") is not None and form_data.get("DiaFinMes") is not None and not form_data.get("PrimerosDiasMes") and not form_data.get("UltimosDiasMes")))
+            if (
+                form_data.get("rango_option") == "rango"
+                or (
+                    form_data.get("DiaInicioMes") is not None
+                    and form_data.get("DiaFinMes") is not None
+                    and not form_data.get("PrimerosDiasMes")
+                    and not form_data.get("UltimosDiasMes")
+                )
+            )
             else None,
             html.label(
                 html.input(
@@ -510,6 +521,7 @@ def ScheduleEquiposModal(
     # Obtener api_client del contexto
     try:
         from ...state.app_context import use_app_context
+
         app_context = use_app_context()
         api = app_context.get("api_client") or get_api_client()
     except Exception:
