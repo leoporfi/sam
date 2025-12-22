@@ -8,7 +8,10 @@ from reactpy import component, event, html, use_effect, use_state
 from reactpy.core.vdom import make_vdom_constructor
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.hooks.use_equipos_hook import use_equipos
+from sam.web.frontend.hooks.use_robots_hook import use_robots
 from sam.web.frontend.shared.common_components import LoadingSpinner, PageWithLayout
+from sam.web.frontend.state.app_context import use_app_context
 
 # Definición manual de la etiqueta datalist
 datalist = make_vdom_constructor("datalist")
@@ -16,6 +19,8 @@ datalist = make_vdom_constructor("datalist")
 
 @component
 def MappingsPage(theme_is_dark: bool, on_theme_toggle):
+    robots_state = use_robots()
+    equipos_state = use_equipos()
     mappings, set_mappings = use_state([])
     robots, set_robots = use_state([])
     known_providers, set_known_providers = use_state(["A360", "Orquestador", "RPA360", "Tisam", "General"])
@@ -29,21 +34,25 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
     new_robot_id, set_new_robot_id = use_state(None)
     robot_search, set_robot_search = use_state("")  # Texto que ve el usuario
 
+    # Obtener api_client del contexto
+    try:
+        app_context = use_app_context()
+        api_client = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_client = get_api_client()
+
     # Función para cargar datos
     async def fetch_data():
-        api = get_api_client()
         try:
-            m_data = await api.get_mappings()
-            r_data = await api.get_robots({"size": 1000, "active": True})
+            m_data = await api_client.get_mappings()
+            r_data = await api_client.get_robots({"size": 1000, "active": True})
 
             set_mappings(m_data)
             set_robots(r_data.get("robots", []))
 
             # Extraer proveedores existentes
             existing_providers = sorted(list(set(m["Proveedor"] for m in m_data)))
-            all_providers = sorted(
-                list(set(existing_providers + ["A360", "Orquestador", "RPA360", "Tisam", "General"]))
-            )
+            all_providers = sorted(list(set(existing_providers + ["A360", "Orquestador", "RPA360", "Tisam", "General"])))
             set_known_providers(all_providers)
         except asyncio.CancelledError:
             raise
@@ -77,8 +86,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
         prov_to_save = new_proveedor.strip() or "General"
 
         try:
-            api = get_api_client()
-            await api.create_mapping(
+            await api_client.create_mapping(
                 {
                     "Proveedor": prov_to_save,
                     "NombreExterno": new_externo,
@@ -97,8 +105,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
 
     async def handle_delete(mid):
         try:
-            api = get_api_client()
-            await api.delete_mapping(mid)
+            await api_client.delete_mapping(mid)
             await fetch_data()
         except Exception as e:
             print(f"Error eliminando mapeo: {e}")
@@ -106,8 +113,8 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
     return PageWithLayout(
         theme_is_dark=theme_is_dark,
         on_theme_toggle=on_theme_toggle,
-        robots_state={},
-        equipos_state={},
+        robots_state=robots_state,
+        equipos_state=equipos_state,
         children=html.div(
             html.h2("Mapeo de Robots (Alias)"),
             html.p("Asocia nombres externos con los Robots reales de SAM."),
@@ -212,9 +219,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                                             "href": "#",
                                             "class_name": "secondary",
                                             "data-tooltip": "Eliminar Alias",
-                                            "on_click": lambda e, mid=m["MapeoId"]: asyncio.create_task(
-                                                handle_delete(mid)
-                                            ),
+                                            "on_click": lambda e, mid=m["MapeoId"]: asyncio.create_task(handle_delete(mid)),
                                         },
                                         html.i({"class_name": "fa-solid fa-trash"}),
                                     )
@@ -223,12 +228,14 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                             for m in mappings
                         ]
                         if mappings
-                        else [html.tr(
-                            html.td(
-                                {"colspan": 4, "style": {"text-align": "center", "padding": "2rem"}},
-                                "No hay mapeos definidos aún.",
+                        else [
+                            html.tr(
+                                html.td(
+                                    {"colspan": 4, "style": {"text-align": "center", "padding": "2rem"}},
+                                    "No hay mapeos definidos aún.",
+                                )
                             )
-                        )]
+                        ]
                     ),
                 ),
             ),
