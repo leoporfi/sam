@@ -14,7 +14,7 @@ Uso:
         # ... otras dependencias
     }
     return AppContext(value=context_value, children=...)
-    
+
     # En hooks o componentes
     from sam.web.frontend.state.app_context import use_app_context
     context = use_app_context()
@@ -23,8 +23,7 @@ Uso:
 
 from typing import Any, Dict
 
-from reactpy import create_context, use_context, component
-
+from reactpy import component, create_context, use_context
 
 # Crear el contexto global
 AppContext = create_context({})
@@ -38,12 +37,11 @@ AppContext = create_context({})
 def use_app_context() -> Dict[str, Any]:
     """
     Hook para acceder al contexto global de la aplicación.
-    
+
     Returns:
         Diccionario con las dependencias compartidas (ej: api_client)
-    
+
     Raises:
         RuntimeError: Si se usa fuera de un AppContext provider
     """
     return use_context(AppContext)
-
