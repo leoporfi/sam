@@ -13,8 +13,6 @@ from fastapi import FastAPI
 from reactpy.backend.fastapi import Options, configure
 from starlette.staticfiles import StaticFiles
 
-from sam.common.a360_client import AutomationAnywhereClient
-from sam.common.config_manager import ConfigManager
 from sam.common.database import DatabaseConnector
 
 from .backend.api import router as api_router

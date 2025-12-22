@@ -81,21 +81,11 @@ def Pagination(
                     html.a(
                         {
                             "href": "#",
-                            "on_click": (lambda p: lambda e: handle_page_click(p))(page)
-                            if isinstance(page, int)
-                            else None,
+                            "on_click": (lambda p: lambda e: handle_page_click(p))(page) if isinstance(page, int) else None,
                             "aria-current": "page" if page == current_page else None,
-                            "style": {"cursor": "default", "pointerEvents": "none"}
-                            if not isinstance(page, int)
-                            else {},
+                            "style": {"cursor": "default", "pointerEvents": "none"} if not isinstance(page, int) else {},
                             "aria-label": f"Ir a página {page}" if isinstance(page, int) else None,
-                            "class_name": (
-                                "primary"
-                                if page == current_page
-                                else "secondary outline"
-                                if isinstance(page, int)
-                                else ""
-                            ),
+                            "class_name": ("primary" if page == current_page else "secondary outline" if isinstance(page, int) else ""),
                         },
                         "…" if page == "..." else str(page),  # text inside <a>
                     )

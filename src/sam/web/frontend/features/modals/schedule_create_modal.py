@@ -5,6 +5,7 @@ Modal para crear una nueva programación.
 Este modal permite crear programaciones con todos los tipos disponibles,
 incluyendo el nuevo tipo RangoMensual con opciones de rangos de días.
 """
+
 import asyncio
 from typing import Any, Callable, Dict, List, Optional
 
@@ -29,14 +30,11 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
     """
     tipo_actual = form_data.get("TipoProgramacion", "Diaria")
     robot_search, set_robot_search = use_state("")
-    
+
     # Filtrar robots según búsqueda
     filtered_robots = use_memo(
-        lambda: [
-            r for r in robots_list
-            if not robot_search or robot_search.lower() in r.get("Robot", "").lower()
-        ],
-        dependencies=[robot_search, robots_list]
+        lambda: [r for r in robots_list if not robot_search or robot_search.lower() in r.get("Robot", "").lower()],
+        dependencies=[robot_search, robots_list],
     )
 
     def handle_change(field, value):
@@ -314,6 +312,7 @@ def ScheduleCreateModal(
     # Obtener api_client del contexto
     try:
         from ...state.app_context import use_app_context
+
         app_context = use_app_context()
         api_client = app_context.get("api_client") or get_api_client()
     except Exception:
@@ -448,4 +447,3 @@ def ScheduleCreateModal(
         if show_confirm
         else None,
     )
-

@@ -5,6 +5,7 @@ Funciones de formateo compartidas para la aplicación SAM.
 Este módulo contiene funciones reutilizables para formatear datos
 como horas, listas de equipos y detalles de programaciones.
 """
+
 from typing import Any, Dict, List, Optional, Union
 
 from reactpy import html
@@ -61,13 +62,7 @@ def format_equipos_list(
     elif isinstance(equipos, list):
         if equipos and isinstance(equipos[0], dict):
             # Lista de diccionarios: extraer 'Equipo' o 'Nombre'
-            nombres = sorted(
-                {
-                    d.get("Equipo") or d.get("Nombre", "")
-                    for d in equipos
-                    if d.get("Equipo") or d.get("Nombre")
-                }
-            )
+            nombres = sorted({d.get("Equipo") or d.get("Nombre", "") for d in equipos if d.get("Equipo") or d.get("Nombre")})
         else:
             # Lista de strings
             nombres = sorted({str(name).strip() for name in equipos if str(name).strip()})
@@ -124,4 +119,3 @@ def format_schedule_details(schedule: Dict) -> str:
     if t == "Especifica":
         return schedule.get("FechaEspecifica") or "-"
     return "-"  # Diaria no tiene detalles específicos aparte de la hora
-

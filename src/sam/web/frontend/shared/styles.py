@@ -7,7 +7,7 @@ clases CSS reutilizables siguiendo el estándar de ReactPy de SAM.
 
 Uso:
     from sam.web.frontend.shared.styles import BUTTON_PRIMARY, STATUS_RUNNING
-    
+
     html.button(
         {"class_name": BUTTON_PRIMARY},
         "Guardar"
@@ -96,4 +96,3 @@ CLICKABLE = "clickable"
 OUTLINE = "outline"
 SECONDARY = "secondary"
 PRIMARY = "primary"
-

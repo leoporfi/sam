@@ -7,7 +7,7 @@ error y vacío en componentes que cargan datos de forma asíncrona.
 
 Uso:
     from sam.web.frontend.shared.async_content import AsyncContent
-    
+
     return AsyncContent(
         loading=is_loading,
         error=error_message,
@@ -20,7 +20,7 @@ from typing import Any, List, Optional
 
 from reactpy import component, html
 
-from .common_components import ErrorMessage, LoadingSpinner
+from .common_components import LoadingSpinner
 
 
 @component
@@ -36,7 +36,7 @@ def AsyncContent(
 ):
     """
     Wrapper para manejar estados de carga de manera consistente.
-    
+
     Args:
         loading: Si True, muestra el componente de carga
         error: Mensaje de error a mostrar (si existe)
@@ -46,7 +46,7 @@ def AsyncContent(
         empty_component: Componente personalizado para estado vacío
         empty_message: Mensaje a mostrar cuando no hay datos
         children: Contenido a mostrar cuando hay datos y no hay errores
-    
+
     Returns:
         Componente ReactPy según el estado actual
     """
@@ -55,19 +55,19 @@ def AsyncContent(
         if error_component:
             return error_component
         return ErrorAlert(message=error)
-    
+
     # Prioridad 2: Cargando
     if loading:
         if loading_component:
             return loading_component
         return LoadingSpinner()
-    
+
     # Prioridad 3: Datos vacíos
     if data is not None and len(data) == 0:
         if empty_component:
             return empty_component
         return EmptyState(message=empty_message)
-    
+
     # Prioridad 4: Mostrar contenido
     return children
 
@@ -76,11 +76,12 @@ def AsyncContent(
 def LoadingSpinner(size: str = "medium"):
     """
     Muestra un spinner de carga.
-    
+
     Re-exporta el LoadingSpinner de common_components para mantener
     compatibilidad y consistencia.
     """
     from .common_components import LoadingSpinner as CommonLoadingSpinner
+
     return CommonLoadingSpinner(size=size)
 
 
@@ -88,16 +89,16 @@ def LoadingSpinner(size: str = "medium"):
 def ErrorAlert(message: str):
     """
     Muestra un mensaje de error de manera consistente.
-    
+
     Args:
         message: Mensaje de error a mostrar
-    
+
     Returns:
         Componente ReactPy con el mensaje de error
     """
     if not message:
         return None
-    
+
     return html.article(
         {
             "aria_invalid": "true",
@@ -120,10 +121,10 @@ def ErrorAlert(message: str):
 def EmptyState(message: str = "No hay datos disponibles"):
     """
     Muestra un estado vacío cuando no hay datos.
-    
+
     Args:
         message: Mensaje a mostrar cuando no hay datos
-    
+
     Returns:
         Componente ReactPy con el mensaje de estado vacío
     """
@@ -141,4 +142,3 @@ def EmptyState(message: str = "No hay datos disponibles"):
         ),
         html.p(message),
     )
-

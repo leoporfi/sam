@@ -1,5 +1,4 @@
 # sam/web/features/modals/equipos_modals.py
-# --- NUEVO ARCHIVO ---
 import asyncio
 from typing import Any, Callable, Dict, Optional
 
@@ -41,6 +40,7 @@ def EquipoEditModal(
     # Obtener api_client del contexto
     try:
         from ...state.app_context import use_app_context
+
         app_context = use_app_context()
         api_client = app_context.get("api_client") or get_api_client()
     except Exception:

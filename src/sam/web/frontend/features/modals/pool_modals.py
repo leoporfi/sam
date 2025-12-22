@@ -103,6 +103,7 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
     # Obtener api_client del contexto
     try:
         from ...state.app_context import use_app_context
+
         app_context = use_app_context()
         api_client = app_context.get("api_client") or get_api_client()
     except Exception:
