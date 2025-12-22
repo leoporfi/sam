@@ -1,5 +1,25 @@
-# sam/web/api_client.py
+# sam/web/frontend/api/api_client.py
+"""
+Cliente HTTP centralizado para comunicación con FastAPI backend.
+
+Este módulo proporciona un cliente HTTP que sigue el principio de Inyección
+de Dependencias de la Guía General de SAM. Las instancias deben crearse
+y ser inyectadas a través del contexto de la aplicación, no usando el
+patrón singleton.
+
+Uso:
+    # Crear instancia (en app.py o punto de inyección)
+    api_client = APIClient(base_url="http://127.0.0.1:8000")
+    
+    # Inyectar en contexto
+    context_value = {"api_client": api_client}
+    
+    # Usar en hooks
+    api_client = use_app_context()["api_client"]
+    data = await api_client.get("/api/robots")
+"""
 import asyncio
+import warnings
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -9,8 +29,8 @@ from ..utils.exceptions import APIException, ValidationException
 from ..utils.validation import validate_robot_data
 
 
-# Un cliente simple para comunicarse con nuestra propia API de FastAPI
-class ApiClient:
+# Cliente HTTP centralizado para comunicación con FastAPI backend
+class APIClient:
     def __init__(self, base_url: str = "http://127.0.0.1:8000"):
         self.base_url = base_url
         self._client = None
@@ -41,6 +61,7 @@ class ApiClient:
         json_data: Optional[Dict] = None,
         retries: int = 3,
     ) -> Any:
+        """Método interno para realizar requests HTTP con reintentos."""
         client = self._get_client()
         for attempt in range(retries):
             try:
@@ -63,6 +84,73 @@ class ApiClient:
                 await asyncio.sleep(2**attempt)
             except APIException:
                 raise
+    
+    # ============================================================================
+    # MÉTODOS GENÉRICOS (según estándar)
+    # ============================================================================
+    
+    async def get(self, endpoint: str, params: Optional[Dict] = None) -> Any:
+        """
+        GET request con manejo de errores centralizado.
+        
+        Args:
+            endpoint: Ruta del endpoint (ej: "/api/robots")
+            params: Parámetros de query string
+        
+        Returns:
+            Respuesta JSON parseada
+        
+        Raises:
+            APIException: Si hay error en la petición
+        """
+        return await self._request("GET", endpoint, params=params)
+    
+    async def post(self, endpoint: str, data: Dict) -> Any:
+        """
+        POST request con manejo de errores.
+        
+        Args:
+            endpoint: Ruta del endpoint
+            data: Datos a enviar en el body (se serializan a JSON)
+        
+        Returns:
+            Respuesta JSON parseada
+        
+        Raises:
+            APIException: Si hay error en la petición
+        """
+        return await self._request("POST", endpoint, json_data=data)
+    
+    async def put(self, endpoint: str, data: Dict) -> Any:
+        """
+        PUT request con manejo de errores.
+        
+        Args:
+            endpoint: Ruta del endpoint
+            data: Datos a enviar en el body
+        
+        Returns:
+            Respuesta JSON parseada
+        
+        Raises:
+            APIException: Si hay error en la petición
+        """
+        return await self._request("PUT", endpoint, json_data=data)
+    
+    async def delete(self, endpoint: str) -> Any:
+        """
+        DELETE request con manejo de errores.
+        
+        Args:
+            endpoint: Ruta del endpoint
+        
+        Returns:
+            Respuesta JSON parseada
+        
+        Raises:
+            APIException: Si hay error en la petición
+        """
+        return await self._request("DELETE", endpoint)
 
     # MÉTODOS PARA ROBOTS
     async def get_robots(self, params: Optional[Dict] = None) -> Dict:
@@ -257,18 +345,42 @@ class ApiClient:
             self._client = None
 
 
+# ============================================================================
+# COMPATIBILIDAD TEMPORAL (DEPRECATED)
+# ============================================================================
+# Esta función se mantiene temporalmente para no romper código existente.
+# Se eliminará en una fase posterior cuando todos los hooks usen DI.
+
 _api_client_instance = None
 
 
-def get_api_client() -> ApiClient:
+def get_api_client() -> APIClient:
     """
-    Crea una NUEVA instancia de ApiClient.
-
-    IMPORTANTE: Ya no es un singleton. Cada llamada devuelve una instancia nueva.
-    Esto evita que diferentes hooks compartan el mismo cliente HTTP y causen
-    errores de "client has been closed".
+    ⚠️ DEPRECATED: Esta función usa patrón singleton y será eliminada.
+    
+    Usa inyección de dependencias a través del contexto en su lugar:
+    
+    # ❌ NO USAR (deprecated):
+    api_client = get_api_client()
+    
+    # ✅ USAR (recomendado):
+    from sam.web.frontend.state.app_context import use_app_context
+    api_client = use_app_context()["api_client"]
+    
+    Returns:
+        Instancia singleton de APIClient (temporal, para compatibilidad)
     """
     global _api_client_instance
+    warnings.warn(
+        "get_api_client() está deprecated. Usa inyección de dependencias "
+        "a través de use_app_context()['api_client'] en su lugar.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     if _api_client_instance is None:
-        _api_client_instance = ApiClient()
+        _api_client_instance = APIClient()
     return _api_client_instance
+
+
+# Alias para compatibilidad con código que importa ApiClient
+ApiClient = APIClient  # type: ignore
