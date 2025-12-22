@@ -1,0 +1,445 @@
+# sam/web/frontend/features/modals/schedule_create_modal.py
+"""
+Modal para crear una nueva programación.
+
+Este modal permite crear programaciones con todos los tipos disponibles,
+incluyendo el nuevo tipo RangoMensual con opciones de rangos de días.
+"""
+import asyncio
+from typing import Any, Callable, Dict, List, Optional
+
+from reactpy import component, event, html, use_context, use_effect, use_memo, use_state
+
+from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.common_components import ConfirmationModal
+
+from ...shared.notifications import NotificationContext
+
+try:
+    from .robots_modals import WeekdaySelector
+except ImportError:
+    WeekdaySelector = None
+    print("ADVERTENCIA: No se pudo importar WeekdaySelector desde robots_modals.py")
+
+
+@component
+def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_list: List[Dict]):
+    """
+    Formulario completo para crear una nueva programación.
+    """
+    tipo_actual = form_data.get("TipoProgramacion", "Diaria")
+    robot_search, set_robot_search = use_state("")
+    
+    # Filtrar robots según búsqueda
+    filtered_robots = use_memo(
+        lambda: [
+            r for r in robots_list
+            if not robot_search or robot_search.lower() in r.get("Robot", "").lower()
+        ],
+        dependencies=[robot_search, robots_list]
+    )
+
+    def handle_change(field, value):
+        """Manejador de cambios que limpia campos al cambiar el tipo."""
+        new_form_data = {**form_data, field: value}
+
+        if field == "TipoProgramacion":
+            # Limpiar campos específicos al cambiar tipo
+            new_form_data["DiasSemana"] = None
+            new_form_data["DiaDelMes"] = None
+            new_form_data["FechaEspecifica"] = None
+            new_form_data["DiaInicioMes"] = None
+            new_form_data["DiaFinMes"] = None
+            new_form_data["UltimosDiasMes"] = None
+            new_form_data["PrimerosDiasMes"] = None
+
+        on_change(new_form_data)
+
+    return html.div(
+        {"class_name": "schedule-create-form"},
+        # Fila 1: Robot (requerido) con buscador
+        html.div(
+            html.label("Robot *"),
+            html.input(
+                {
+                    "type": "text",
+                    "placeholder": "🔍 Buscar robot...",
+                    "value": robot_search,
+                    "on_change": lambda e: set_robot_search(e["target"]["value"]),
+                    "style": {
+                        "marginBottom": "0.5rem",
+                    },
+                }
+            ),
+            html.select(
+                {
+                    "value": str(form_data.get("RobotId", "")),
+                    "on_change": lambda e: handle_change("RobotId", int(e["target"]["value"]) if e["target"]["value"] else None),
+                    "required": True,
+                    "size": min(max(len(filtered_robots), 1), 8),  # Mostrar entre 1 y 8 opciones
+                    "style": {
+                        "minHeight": "120px",
+                        "maxHeight": "200px",
+                        "overflowY": "auto",
+                    },
+                },
+                html.option({"value": ""}, "Seleccionar robot..."),
+                *[html.option({"value": str(r["RobotId"])}, r["Robot"]) for r in filtered_robots],
+            ),
+            html.small(
+                {"style": {"color": "var(--pico-muted-color)", "fontSize": "0.85em"}},
+                f"{len(filtered_robots)} robot(s) disponible(s)" if robot_search else f"{len(robots_list)} robot(s) disponible(s)",
+            ),
+        ),
+        # Fila 2: Tipo de Programación
+        html.label(
+            "Tipo de Programación",
+            html.select(
+                {
+                    "value": tipo_actual,
+                    "on_change": lambda e: handle_change("TipoProgramacion", e["target"]["value"]),
+                },
+                html.option({"value": "Diaria"}, "Diaria"),
+                html.option({"value": "Semanal"}, "Semanal"),
+                html.option({"value": "Mensual"}, "Mensual"),
+                html.option({"value": "RangoMensual"}, "Rango Mensual"),
+                html.option({"value": "Especifica"}, "Específica"),
+            ),
+        ),
+        # Fila 3: Hora y Tolerancia (siempre visibles)
+        html.div(
+            {"class_name": "grid"},
+            html.label(
+                "Hora de Inicio (HH:MM) *",
+                html.input(
+                    {
+                        "type": "time",
+                        "value": form_data.get("HoraInicio") or "00:00",
+                        "on_change": lambda e: handle_change("HoraInicio", e["target"]["value"]),
+                        "required": True,
+                    }
+                ),
+            ),
+            html.label(
+                "Tolerancia (minutos) *",
+                html.input(
+                    {
+                        "type": "number",
+                        "value": form_data.get("Tolerancia") or 30,
+                        "min": 0,
+                        "max": 1440,
+                        "on_change": lambda e: handle_change("Tolerancia", int(e["target"]["value"] or 0)),
+                        "required": True,
+                    }
+                ),
+            ),
+        ),
+        # Campos Condicionales según Tipo
+        # Si es Semanal
+        html.label(
+            "Días de la Semana (ej. Lu,Ma,Mi,Ju,Vi)",
+            WeekdaySelector(
+                value=form_data.get("DiasSemana") or "",
+                on_change=lambda new_days_str: handle_change("DiasSemana", new_days_str),
+            )
+            if (tipo_actual == "Semanal" and WeekdaySelector)
+            else html.input(
+                {
+                    "type": "text",
+                    "value": form_data.get("DiasSemana") or "",
+                    "placeholder": "Lu,Ma,Mi,Ju,Vi",
+                    "on_change": lambda e: handle_change("DiasSemana", e["target"]["value"]),
+                }
+            ),
+        )
+        if tipo_actual == "Semanal"
+        else None,
+        # Si es Mensual
+        html.label(
+            "Día del Mes (1-31)",
+            html.input(
+                {
+                    "type": "number",
+                    "value": form_data.get("DiaDelMes") or 1,
+                    "min": 1,
+                    "max": 31,
+                    "on_change": lambda e: handle_change("DiaDelMes", int(e["target"]["value"] or 1)),
+                }
+            ),
+        )
+        if tipo_actual == "Mensual"
+        else None,
+        # Si es RangoMensual
+        html.div(
+            {"class_name": "rango-mensual-options"},
+            html.p({"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}}, "Seleccione una opción:"),
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "rango",
+                        "checked": form_data.get("DiaInicioMes") is not None and form_data.get("DiaFinMes") is not None,
+                        "on_change": lambda e: handle_change("rango_option", "rango"),
+                    }
+                ),
+                " Rango específico (ej: del 1 al 10)",
+            ),
+            html.div(
+                {"class_name": "grid", "style": {"display": "flex", "gap": "1rem"}},
+                html.label(
+                    "Día Inicio",
+                    html.input(
+                        {
+                            "type": "number",
+                            "value": form_data.get("DiaInicioMes") or "",
+                            "min": 1,
+                            "max": 31,
+                            "placeholder": "1",
+                            "on_change": lambda e: handle_change("DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                            "disabled": form_data.get("rango_option") != "rango" and form_data.get("DiaInicioMes") is None,
+                        }
+                    ),
+                ),
+                html.label(
+                    "Día Fin",
+                    html.input(
+                        {
+                            "type": "number",
+                            "value": form_data.get("DiaFinMes") or "",
+                            "min": 1,
+                            "max": 31,
+                            "placeholder": "10",
+                            "on_change": lambda e: handle_change("DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                        }
+                    ),
+                ),
+            )
+            if (form_data.get("rango_option") == "rango" or (form_data.get("DiaInicioMes") is not None and form_data.get("DiaFinMes") is not None))
+            else None,
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "primeros",
+                        "checked": form_data.get("PrimerosDiasMes") is not None,
+                        "on_change": lambda e: handle_change("rango_option", "primeros"),
+                    }
+                ),
+                " Primeros N días del mes",
+            ),
+            html.label(
+                "Cantidad de días",
+                html.input(
+                    {
+                        "type": "number",
+                        "value": form_data.get("PrimerosDiasMes") or "",
+                        "min": 1,
+                        "max": 31,
+                        "placeholder": "10",
+                        "on_change": lambda e: handle_change("PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                    }
+                ),
+            )
+            if (form_data.get("rango_option") == "primeros" or form_data.get("PrimerosDiasMes") is not None)
+            else None,
+            html.label(
+                html.input(
+                    {
+                        "type": "radio",
+                        "name": "rango-option",
+                        "value": "ultimos",
+                        "checked": form_data.get("UltimosDiasMes") is not None,
+                        "on_change": lambda e: handle_change("rango_option", "ultimos"),
+                    }
+                ),
+                " Últimos N días del mes",
+            ),
+            html.label(
+                "Cantidad de días",
+                html.input(
+                    {
+                        "type": "number",
+                        "value": form_data.get("UltimosDiasMes") or "",
+                        "min": 1,
+                        "max": 31,
+                        "placeholder": "5",
+                        "on_change": lambda e: handle_change("UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                    }
+                ),
+            )
+            if (form_data.get("rango_option") == "ultimos" or form_data.get("UltimosDiasMes") is not None)
+            else None,
+        )
+        if tipo_actual == "RangoMensual"
+        else None,
+        # Si es Específica
+        html.label(
+            "Fecha Específica",
+            html.input(
+                {
+                    "type": "date",
+                    "value": form_data.get("FechaEspecifica") or "",
+                    "on_change": lambda e: handle_change("FechaEspecifica", e["target"]["value"]),
+                }
+            ),
+        )
+        if tipo_actual == "Especifica"
+        else None,
+        # Equipos (requerido)
+        html.label(
+            "Equipos *",
+            html.p(
+                {"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}},
+                "Los equipos se asignarán después de crear la programación.",
+            ),
+        ),
+    )
+
+
+@component
+def ScheduleCreateModal(
+    is_open: bool,
+    on_close: Callable,
+    on_save: Callable,
+    robots_list: List[Dict],
+):
+    """
+    Modal para crear una nueva programación.
+    """
+    notification_context = use_context(NotificationContext)
+    show_notification = notification_context["show_notification"]
+
+    # Obtener api_client del contexto
+    try:
+        from ...state.app_context import use_app_context
+        app_context = use_app_context()
+        api_client = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_client = get_api_client()
+
+    form_data, set_form_data = use_state(
+        {
+            "RobotId": None,
+            "TipoProgramacion": "Diaria",
+            "HoraInicio": "00:00",
+            "Tolerancia": 30,
+            "Equipos": [],
+            "Activo": True,
+        }
+    )
+    is_loading, set_is_loading = use_state(False)
+    show_confirm, set_show_confirm = use_state(False)
+
+    @use_effect(dependencies=[is_open])
+    def reset_form():
+        """Resetea el formulario cuando se abre el modal."""
+        if is_open:
+            set_form_data(
+                {
+                    "RobotId": None,
+                    "TipoProgramacion": "Diaria",
+                    "HoraInicio": "00:00",
+                    "Tolerancia": 30,
+                    "Equipos": [],
+                    "Activo": True,
+                }
+            )
+
+    def handle_save_click(e):
+        """Muestra el diálogo de confirmación"""
+        set_show_confirm(True)
+
+    async def handle_confirm_save():
+        """Ejecuta el guardado tras confirmar"""
+        set_show_confirm(False)
+        set_is_loading(True)
+        try:
+            # Validaciones
+            if not form_data.get("RobotId"):
+                raise ValueError("Debe seleccionar un robot")
+            if not form_data.get("HoraInicio"):
+                raise ValueError("Debe especificar la hora de inicio")
+
+            tipo = form_data.get("TipoProgramacion")
+            if tipo == "Semanal" and not form_data.get("DiasSemana"):
+                raise ValueError("Para 'Semanal', los días de la semana son obligatorios.")
+            if tipo == "Mensual" and not form_data.get("DiaDelMes"):
+                raise ValueError("Para 'Mensual', el día del mes es obligatorio.")
+            if tipo == "Especifica" and not form_data.get("FechaEspecifica"):
+                raise ValueError("Para 'Específica', la fecha es obligatoria.")
+            if tipo == "RangoMensual":
+                has_rango = form_data.get("DiaInicioMes") and form_data.get("DiaFinMes")
+                has_primeros = form_data.get("PrimerosDiasMes")
+                has_ultimos = form_data.get("UltimosDiasMes")
+                if not (has_rango or has_primeros or has_ultimos):
+                    raise ValueError("Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días.")
+
+            await on_save(form_data)
+            show_notification("Programación creada con éxito.", "success")
+            on_close()
+        except Exception as ex:
+            show_notification(f"Error al crear: {ex}", "error")
+        finally:
+            set_is_loading(False)
+
+    if not is_open:
+        return html.dialog({"open": False, "style": {"display": "none"}})
+
+    return html._(
+        html.dialog(
+            {"open": True, "class_name": "modal-dialog"},
+            html.article(
+                html.header(
+                    html.a(
+                        {
+                            "href": "#",
+                            "aria-label": "Close",
+                            "class_name": "close",
+                            "on_click": event(lambda e: on_close(), prevent_default=True),
+                        }
+                    ),
+                    html.h3("Crear Nueva Programación"),
+                ),
+                html.form(
+                    {"id": "create-schedule-form", "on_submit": event(lambda e: handle_save_click(e), prevent_default=True)},
+                    ScheduleCreateForm(form_data, set_form_data, robots_list),
+                ),
+                html.footer(
+                    html.div(
+                        {"class_name": "grid"},
+                        html.button(
+                            {
+                                "type": "button",
+                                "class_name": "secondary",
+                                "on_click": event(lambda e: on_close(), prevent_default=True),
+                                "disabled": is_loading,
+                            },
+                            "Cancelar",
+                        ),
+                        html.button(
+                            {
+                                "type": "button",
+                                "on_click": event(handle_save_click, prevent_default=True),
+                                "form": "create-schedule-form",
+                                "aria-busy": str(is_loading).lower(),
+                                "disabled": is_loading,
+                            },
+                            "Crear Programación",
+                        ),
+                    )
+                ),
+            ),
+        ),
+        ConfirmationModal(
+            is_open=show_confirm,
+            title="Confirmar Creación",
+            message="¿Estás seguro de que deseas crear esta programación?",
+            on_confirm=handle_confirm_save,
+            on_cancel=lambda: set_show_confirm(False),
+        )
+        if show_confirm
+        else None,
+    )
+

@@ -100,7 +100,13 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
 @component
 def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_success: Callable):
     """Modal para asignar recursos (Robots y Equipos) a un pool."""
-    api_client = get_api_client()
+    # Obtener api_client del contexto
+    try:
+        from ...state.app_context import use_app_context
+        app_context = use_app_context()
+        api_client = app_context.get("api_client") or get_api_client()
+    except Exception:
+        api_client = get_api_client()
     notification_ctx = use_context(NotificationContext)
     is_loading, set_is_loading = use_state(True)
     active_tab, set_active_tab = use_state("robots")  # Nuevo estado para las solapas

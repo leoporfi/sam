@@ -1,11 +1,37 @@
-# src/web/frontend/features/equipos/equipos_components.py
+# sam/web/frontend/features/components/equipo_list.py
+"""
+Componentes para la gestión de equipos.
+
+Este módulo contiene los componentes para listar, mostrar y gestionar equipos,
+siguiendo el estándar de ReactPy de SAM.
+"""
+
 from typing import Callable, Dict, List
 
 from reactpy import component, event, html, use_state
 
 from sam.web.backend.schemas import Equipo
 
-from ...shared.common_components import LoadingSpinner, Pagination
+from ...shared.async_content import AsyncContent
+from ...shared.common_components import Pagination
+from ...shared.styles import (
+    BUTTON_PRIMARY,
+    CARDS_CONTAINER,
+    COLLAPSIBLE_PANEL,
+    COLLAPSIBLE_PANEL_EXPANDED,
+    DASHBOARD_CONTROLS,
+    MASTER_CONTROLS_GRID,
+    MOBILE_CONTROLS_TOGGLE,
+    ROBOT_CARD,
+    ROBOT_CARD_BODY,
+    ROBOT_CARD_HEADER,
+    SEARCH_INPUT,
+    STATUS_EJECUCION_DEMANDA,
+    STATUS_EJECUCION_PROGRAMADO,
+    TAG,
+    TAG_SECONDARY,
+    TABLE_CONTAINER,
+)
 
 
 @component
@@ -21,16 +47,16 @@ def EquiposControls(
 ):
     """Controles para el dashboard de Equipos (título, filtros)."""
     is_expanded, set_is_expanded = use_state(False)
-    collapsible_panel_class = f"collapsible-panel {'is-expanded' if is_expanded else ''}"
+    collapsible_panel_class = COLLAPSIBLE_PANEL_EXPANDED if is_expanded else COLLAPSIBLE_PANEL
 
     return html.div(
-        {"class_name": "dashboard-controls"},
+        {"class_name": DASHBOARD_CONTROLS},
         html.div(
             {"class_name": "controls-header"},
             html.h2("Gestión de Equipos"),
             html.button(
                 {
-                    "class_name": "mobile-controls-toggle outline secondary",
+                    "class_name": MOBILE_CONTROLS_TOGGLE,
                     "on_click": lambda e: set_is_expanded(not is_expanded),
                 },
                 html.i({"class_name": f"fa-solid fa-chevron-{'up' if is_expanded else 'down'}"}),
@@ -40,7 +66,7 @@ def EquiposControls(
         html.div(
             {"class_name": collapsible_panel_class},
             html.div(
-                {"class_name": "master-controls-grid", "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"}},
+                {"class_name": MASTER_CONTROLS_GRID, "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"}},
                 html.input(
                     {
                         "type": "search",
@@ -49,6 +75,7 @@ def EquiposControls(
                         "value": search,
                         "on_change": lambda event: on_search(event["target"]["value"]),
                         "aria-busy": str(is_searching).lower(),
+                        "class_name": SEARCH_INPUT,
                     }
                 ),
                 html.select(
@@ -72,7 +99,7 @@ def EquiposControls(
                     html.option({"value": "false"}, "No Permite Balanceo"),
                 ),
                 html.button(
-                    {"on_click": lambda e: on_create_equipo()},
+                    {"on_click": lambda e: on_create_equipo(), "type": "button", "class_name": BUTTON_PRIMARY},
                     html.i({"class_name": "fa-solid fa-plus"}),
                     " Equipo",
                 ),
@@ -84,11 +111,6 @@ def EquiposControls(
 @component
 def EquiposDashboard(equipos_state: Dict):
     """Componente principal que renderiza la tabla/tarjetas y la paginación de equipos."""
-    if equipos_state["error"]:
-        return html.article({"aria_invalid": "true"}, f"Error al cargar datos: {equipos_state['error']}")
-    if equipos_state["loading"] and not equipos_state["equipos"]:
-        return LoadingSpinner()
-
     pagination_component = (
         Pagination(
             current_page=equipos_state["current_page"],
@@ -101,23 +123,30 @@ def EquiposDashboard(equipos_state: Dict):
         else None
     )
 
-    return html._(
-        pagination_component,
-        html.div(
-            {"class_name": "cards-container"},
-            *[
-                EquipoCard(equipo=equipo, on_action=equipos_state["update_equipo_status"])
-                for equipo in equipos_state["equipos"]
-            ],
-        ),
-        html.div(
-            {"class_name": "table-container"},
-            EquiposTable(
-                equipos=equipos_state["equipos"],
-                on_action=equipos_state["update_equipo_status"],
-                sort_by=equipos_state["sort_by"],
-                sort_dir=equipos_state["sort_dir"],
-                on_sort=equipos_state["handle_sort"],
+    # Usar AsyncContent para manejar estados de carga/error/vacío
+    return AsyncContent(
+        loading=equipos_state["loading"] and not equipos_state["equipos"],
+        error=equipos_state["error"],
+        data=equipos_state["equipos"],
+        empty_message="No se encontraron equipos.",
+        children=html._(
+            pagination_component,
+            html.div(
+                {"class_name": CARDS_CONTAINER},
+                *[
+                    EquipoCard(equipo=equipo, on_action=equipos_state["update_equipo_status"])
+                    for equipo in equipos_state["equipos"]
+                ],
+            ),
+            html.div(
+                {"class_name": TABLE_CONTAINER},
+                EquiposTable(
+                    equipos=equipos_state["equipos"],
+                    on_action=equipos_state["update_equipo_status"],
+                    sort_by=equipos_state["sort_by"],
+                    sort_dir=equipos_state["sort_dir"],
+                    on_sort=equipos_state["handle_sort"],
+                ),
             ),
         ),
     )
@@ -224,14 +253,14 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
         ),
         html.td(
             html.span(
-                {"class_name": "tag secondary" if equipo.get("RobotAsignado") == "N/A" else "tag"},
+                {"class_name": TAG_SECONDARY if equipo.get("RobotAsignado") == "N/A" else TAG},
                 equipo.get("RobotAsignado", "N/A"),
             )
         ),
         # --- Opcional: Mostrar el estado de la asignación ---
         html.td(
             html.span(
-                {"class_name": f"tag {'tag-ejecucion-programado' if is_programado else 'tag-ejecucion-demanda'}"},
+                {"class_name": STATUS_EJECUCION_PROGRAMADO if is_programado else STATUS_EJECUCION_DEMANDA},
                 "Programado" if is_programado else "Dinámico",
             )
             if equipo.get("RobotAsignado") not in [None, "N/A"]
@@ -239,7 +268,7 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
         ),
         html.td(
             html.span(
-                {"class_name": "tag secondary" if equipo.get("Pool") == "N/A" else "tag"}, equipo.get("Pool", "N/A")
+                {"class_name": TAG_SECONDARY if equipo.get("Pool") == "N/A" else TAG}, equipo.get("Pool", "N/A")
             )
         ),
     )
@@ -268,15 +297,15 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
         await on_action(equipo["EquipoId"], "PermiteBalanceoDinamico", not equipo["PermiteBalanceoDinamico"])
 
     return html.article(
-        {"key": equipo["EquipoId"], "class_name": "robot-card"},
-        html.div({"class_name": "robot-card-header"}, html.h5(equipo["Equipo"])),
+        {"key": equipo["EquipoId"], "class_name": ROBOT_CARD},
+        html.div({"class_name": ROBOT_CARD_HEADER}, html.h5(equipo["Equipo"])),
         html.div(
-            {"class_name": "robot-card-body"},
+            {"class_name": ROBOT_CARD_BODY},
             html.p(f"Licencia: {equipo.get('Licencia', 'N/A')}"),
             html.p(
                 "Robot: ",
                 html.span(
-                    {"class_name": "tag secondary" if equipo.get("RobotAsignado") == "N/A" else "tag"},
+                    {"class_name": TAG_SECONDARY if equipo.get("RobotAsignado") == "N/A" else TAG},
                     equipo.get("RobotAsignado", "N/A"),
                 ),
             ),
@@ -285,7 +314,7 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
                 html.span(
                     {
                         "title": balanceo_title,
-                        "class_name": f"tag {'tag-ejecucion-programado' if is_programado else 'tag-ejecucion-demanda'}",
+                        "class_name": STATUS_EJECUCION_PROGRAMADO if is_programado else STATUS_EJECUCION_DEMANDA,
                     },
                     "Programado" if is_programado else "Dinámico",
                 )
@@ -295,7 +324,7 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
             html.p(
                 "Pool: ",
                 html.span(
-                    {"class_name": "tag secondary" if equipo.get("Pool") == "N/A" else "tag"}, equipo.get("Pool", "N/A")
+                    {"class_name": TAG_SECONDARY if equipo.get("Pool") == "N/A" else TAG}, equipo.get("Pool", "N/A")
                 ),
             ),
             html.div(
