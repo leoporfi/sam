@@ -807,13 +807,30 @@ def DeviceList(
         on_selection_change(current_ids)
 
     def get_estado(device: Dict) -> tuple[str, str]:
-        if device.get("EsProgramado"):
-            return ("Programado", "tag-programado")
-        if device.get("Reservado"):
-            return ("Reservado", "tag-reservado")
-        return ("Dinámico", "tag-dinamico")
+        """
+        Determina el estado del equipo para mostrar en la etiqueta.
+        - Programado: Tiene una asignación programada (EsProgramado = 1)
+        - Libre: No tiene ninguna asignación (completamente disponible)
+        - Reservado: Asignado manualmente (solo en lista de asignados)
+        - Dinámico: Asignado por el balanceador (solo en lista de asignados)
+        """
+        # Verificar si el dispositivo tiene información de estado
+        if "EsProgramado" in device:
+            if device.get("EsProgramado"):
+                return ("Programado", "tag-programado")
+        if "Reservado" in device:
+            if device.get("Reservado"):
+                return ("Reservado", "tag-reservado")
+        # Si no tiene EsProgramado ni Reservado, o no tiene información de estado, está libre
+        return ("Libre", "tag-libre")
 
-    has_status_column = devices and "EsProgramado" in devices[0]
+    # Verificar si hay información de estado disponible
+    # Siempre mostrar la columna de estado si:
+    # 1. Es la lista de "Equipos Disponibles" (siempre debe mostrar estado)
+    # 2. O si los dispositivos tienen información de estado (EsProgramado o Reservado)
+    is_available_list = title == "Equipos Disponibles"
+    has_status_data = devices and len(devices) > 0 and ("EsProgramado" in devices[0] or "Reservado" in devices[0])
+    has_status_column = is_available_list or has_status_data
 
     return html.div(
         {"class_name": "device-list-section"},
