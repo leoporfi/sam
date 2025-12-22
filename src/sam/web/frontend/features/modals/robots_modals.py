@@ -5,7 +5,8 @@ from typing import Any, Callable, Dict, List
 from reactpy import component, event, html, use_callback, use_context, use_effect, use_memo, use_state
 
 from ...api.api_client import ApiClient, get_api_client
-from ...shared.common_components import ConfirmationModal
+from ...shared.common_components import ConfirmationModal, LoadingOverlay
+from ...shared.formatters import format_equipos_list, format_schedule_details, format_time
 from ...shared.notifications import NotificationContext
 
 # --- Constantes y Estados por Defecto ---
@@ -494,8 +495,16 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
     return html.dialog(
         {"open": True},  # "style": {"width": "90vw", "maxWidth": "1000px"}},
         html.article(
+            {"style": {"position": "relative"}},
             html.header(
-                html.button({"aria-label": "Close", "rel": "prev", "on_click": event(on_close, prevent_default=True)}),
+                html.button(
+                    {
+                        "aria-label": "Close",
+                        "rel": "prev",
+                        "on_click": event(on_close, prevent_default=True),
+                        "disabled": is_loading,
+                    }
+                ),
                 html.h2("Asignación de Equipos"),
                 html.p(f"Robot: {robot.get('Robot', '')}"),
             ),
@@ -559,13 +568,17 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
                     on_search_change=set_search_assigned,
                 ),
             ),
+            LoadingOverlay(
+                is_loading=is_loading,
+                message="Aplicando cambios, esto puede tardar unos segundos..." if is_loading else None,
+            ),
             html.footer(
                 html.div(
                     {"class_name": "grid"},
                     html.button({"class_name": "secondary", "on_click": on_close, "disabled": is_loading}, "Cancelar"),
                     html.button(
                         {"aria-busy": str(is_loading).lower(), "on_click": handle_save, "disabled": is_loading},
-                        "Guardar",
+                        "Procesando..." if is_loading else "Guardar",
                     ),
                 ),
             ),
@@ -706,8 +719,16 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     return html.dialog(
         {"open": True},
         html.article(
+            {"style": {"position": "relative"}},
             html.header(
-                html.button({"aria-label": "Close", "rel": "prev", "on_click": event(on_close, prevent_default=True)}),
+                html.button(
+                    {
+                        "aria-label": "Close",
+                        "rel": "prev",
+                        "on_click": event(on_close, prevent_default=True),
+                        "disabled": is_loading,
+                    }
+                ),
                 html.h2("Programación de Robots"),
                 html.p(f"{robot.get('Robot', '')}"),
             ),
@@ -735,12 +756,19 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                     ),
                 ),
             ),
+            LoadingOverlay(
+                is_loading=is_loading,
+                message="Aplicando cambios, esto puede tardar unos segundos..." if is_loading else None,
+            ),
             html.footer(
                 html.button(
                     {"type": "button", "class_name": "secondary", "on_click": on_close, "disabled": is_loading},
                     "Cancelar",
                 ),
-                html.button({"type": "button", "on_click": lambda e: handle_new_click()}, "Nueva programación"),
+                html.button(
+                    {"type": "button", "on_click": lambda e: handle_new_click(), "disabled": is_loading},
+                    "Nueva programación",
+                ),
             )
             if view_mode == "list"
             else None,
@@ -863,58 +891,24 @@ def SchedulesList(
     show_notification = notification_ctx["show_notification"]
     schedule_to_delete, set_schedule_to_delete = use_state(None)
 
-    def _format_time(hora: str | None) -> str:
-        """Formatea la hora como HH:MM (sin segundos)."""
-        if not hora:
-            return ""
-        return str(hora)[:5]
-
-    def format_schedule_details(schedule):
+    def format_schedule_details_with_time(schedule):
+        """Formatea los detalles de programación incluyendo el tipo y la hora."""
         tipo = schedule.get("TipoProgramacion")
-        hora = _format_time(schedule.get("HoraInicio"))
+        hora = format_time(schedule.get("HoraInicio"))
         details = f"{tipo or 'N/A'} a las {hora}" if hora else (tipo or "N/A")
 
-        if tipo == "Semanal":
-            details += f" los días {schedule.get('DiasSemana', '')}"
-        elif tipo == "Mensual":
-            details += f" el día {schedule.get('DiaDelMes', '')} de cada mes"
-        elif tipo == "Especifica":
-            details += f" en la fecha {schedule.get('FechaEspecifica', '')}"
-        elif tipo == "RangoMensual":
-            dia_inicio = schedule.get("DiaInicioMes")
-            dia_fin = schedule.get("DiaFinMes")
-            ultimos = schedule.get("UltimosDiasMes")
-
-            if ultimos:
-                details += f" los últimos {ultimos} día(s) del mes"
-            elif dia_inicio and dia_fin:
-                if dia_inicio == 1:
-                    details += f" los primeros {dia_fin} día(s) del mes"
-                else:
-                    details += f" del {dia_inicio} al {dia_fin} de cada mes"
-
+        # Agregar detalles específicos según el tipo
+        schedule_details = format_schedule_details(schedule)
+        if schedule_details and schedule_details != "-":
+            if tipo == "Semanal":
+                details += f" los días {schedule_details}"
+            elif tipo == "Mensual":
+                details += f" el {schedule_details.lower()} de cada mes"
+            elif tipo == "Especifica":
+                details += f" en la fecha {schedule_details}"
+            elif tipo == "RangoMensual":
+                details += f" {schedule_details.lower()}"
         return details
-
-    def _format_equipos_cell(equipos: List[Dict]) -> Any:
-        """Muestra los equipos de forma compacta para no romper el layout del modal."""
-        if not equipos:
-            return "Ninguno"
-
-        nombres = sorted({d.get("Equipo", "") for d in equipos if d.get("Equipo")})
-        if not nombres:
-            return "Ninguno"
-
-        total = len(nombres)
-        max_visible = 6
-
-        if total <= max_visible:
-            texto = ", ".join(nombres)
-        else:
-            texto = ", ".join(nombres[:max_visible]) + f" (+{total - max_visible} más)"
-
-        # Usamos title para mostrar el detalle completo al pasar el mouse
-        full_text = ", ".join(nombres)
-        return html.span({"title": full_text}, texto)
 
     async def handle_confirm_delete():
         if not schedule_to_delete:
@@ -932,8 +926,8 @@ def SchedulesList(
         lambda: [
             html.tr(
                 {"key": s["ProgramacionId"]},
-                html.td(format_schedule_details(s)),
-                html.td(_format_equipos_cell(s.get("Equipos", []))),
+                html.td(format_schedule_details_with_time(s)),
+                html.td(format_equipos_list(s.get("Equipos", []), max_visible=6)),
                 html.td(
                     html.div(
                         {"class_name": "grid"},

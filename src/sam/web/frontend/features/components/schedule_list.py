@@ -15,6 +15,7 @@ from sam.web.backend.schemas import ScheduleData
 
 from ...shared.async_content import AsyncContent
 from ...shared.common_components import Pagination
+from ...shared.formatters import format_equipos_list, format_schedule_details, format_time
 from ...shared.styles import (
     CARDS_CONTAINER,
     COLLAPSIBLE_PANEL,
@@ -178,67 +179,6 @@ def SchedulesDashboard(
     )
 
 
-def _format_time(hora: Optional[str]) -> str:
-    """Formatea la hora como HH:MM (sin segundos)."""
-    if not hora:
-        return "-"
-    # Acepta formatos 'HH:MM' o 'HH:MM:SS' y se queda solo con los primeros 5 caracteres.
-    return str(hora)[:5]
-
-
-def _format_equipos_cell(equipos_str: Optional[str]) -> Any:
-    """
-    Muestra los equipos de forma compacta en la tabla principal de Programaciones.
-    - Hasta 10 equipos: se muestran todos.
-    - Más de 10: se muestran los primeros 10 + indicador "(+N más)".
-    - El tooltip (title) contiene siempre la lista completa.
-    """
-    if not equipos_str:
-        return "-"
-
-    nombres = sorted({name.strip() for name in equipos_str.split(",") if name.strip()})
-    if not nombres:
-        return "-"
-
-    total = len(nombres)
-    max_visible = 10
-
-    if total <= max_visible:
-        texto = ", ".join(nombres)
-    else:
-        texto = ", ".join(nombres[:max_visible]) + f" (+{total - max_visible} más)"
-
-    full_text = ", ".join(nombres)
-    return html.span({"title": full_text}, texto)
-
-
-def _format_schedule_details(s: ScheduleData) -> str:
-    """Helper para formatear los detalles de la programación (días/fecha)"""
-    t = s["TipoProgramacion"]
-    if t == "Semanal":
-        return s["DiasSemana"] or "-"
-    if t == "Mensual":
-        return f"Día {s['DiaDelMes']}" if s["DiaDelMes"] else "-"
-    if t == "RangoMensual":
-        dia_inicio = s.get("DiaInicioMes")
-        dia_fin = s.get("DiaFinMes")
-        ultimos = s.get("UltimosDiasMes")
-
-        # Últimos N días del mes
-        if ultimos:
-            return f"Últimos {ultimos} día(s) del mes"
-
-        # Rango específico
-        if dia_inicio and dia_fin:
-            # Caso común de "primeros N días" (se mapea a 1..N)
-            if dia_inicio == 1:
-                return f"Primeros {dia_fin} día(s) del mes"
-            return f"Del {dia_inicio} al {dia_fin} de cada mes"
-
-        return "-"
-    if t == "Especifica":
-        return s["FechaEspecifica"] or "-"
-    return "-"  # Diaria no tiene detalles específicos aparte de la hora
 
 
 @component
@@ -254,12 +194,12 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                         {"key": s["ProgramacionId"]},
                         html.td(s["RobotNombre"]),
                         html.td(html.span({"class_name": "tag"}, s["TipoProgramacion"])),
-                        html.td(html.strong(_format_time(s["HoraInicio"]))),
-                        html.td(_format_schedule_details(s)),
+                        html.td(html.strong(format_time(s["HoraInicio"]))),
+                        html.td(format_schedule_details(s)),
                         html.td(f"{s['Tolerancia']} min"),
                         html.td(
                             {"style": {"fontSize": "0.9em", "maxWidth": "250px", "whiteSpace": "normal"}},
-                            _format_equipos_cell(s.get("EquiposProgramados")),
+                            format_equipos_list(s.get("EquiposProgramados"), max_visible=10),
                         ),
                         html.td(
                             html.label(
@@ -344,7 +284,7 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                         "style": {"marginRight": "8px", "color": "var(--pico-muted-color)"},
                     }
                 ),
-                html.strong(_format_time(schedule["HoraInicio"])),
+                html.strong(format_time(schedule["HoraInicio"])),
             ),
             html.p(
                 html.i(
@@ -353,7 +293,7 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                         "style": {"marginRight": "8px", "color": "var(--pico-muted-color)"},
                     }
                 ),
-                f"{_format_schedule_details(schedule)}",
+                f"{format_schedule_details(schedule)}",
             ),
             html.p(
                 html.i(
