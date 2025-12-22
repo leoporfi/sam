@@ -5,6 +5,7 @@ Hook para gestionar el estado del dashboard de pools.
 Este hook maneja la carga, creación, actualización y eliminación de pools,
 siguiendo el principio de Inyección de Dependencias de la Guía General de SAM.
 """
+
 import asyncio
 from typing import Any, Callable, Dict, List, Optional
 
@@ -18,11 +19,11 @@ def use_pools_management(api_client: Optional[APIClient] = None) -> Dict[str, An
     """
     Hook completo para la gestión de pools (CRUD y refresh).
     Centraliza toda la lógica de estado y las llamadas a la API para los pools.
-    
+
     Args:
         api_client: Cliente API opcional para inyección de dependencias (para testing).
                    Si no se proporciona, se obtiene del contexto o se usa get_api_client().
-    
+
     Returns:
         Dict con las siguientes keys:
             - pools: List[Dict] - Lista de pools
