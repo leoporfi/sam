@@ -2,7 +2,7 @@
 import logging
 from typing import Callable, List, Optional
 
-from reactpy import component, html
+from reactpy import component, html, use_state
 from reactpy_router import link
 
 logger = logging.getLogger(__name__)
@@ -208,11 +208,22 @@ def ThemeSwitcher(is_dark: bool, on_toggle: Callable):
 @component
 def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Callable, on_cancel: Callable):
     """Un modal genérico para solicitar confirmación del usuario."""
+    # Hooks SIEMPRE deben llamarse, independientemente de is_open,
+    # para respetar las reglas de ReactPy.
+    is_processing, set_is_processing = use_state(False)
+
     if not is_open:
         return None
 
     async def handle_confirm(_event):  # ← async
-        await on_confirm()
+        if is_processing:
+            return
+        set_is_processing(True)
+        try:
+            await on_confirm()
+        finally:
+            # Si el modal sigue montado y visible, limpiamos el estado.
+            set_is_processing(False)
 
     return html.dialog(
         {"open": True},
@@ -225,7 +236,14 @@ def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Calla
             html.footer(
                 html.div(
                     {"class_name": "grid"},
-                    html.button({"class_name": "secondary", "on_click": lambda e: on_cancel()}, "Cancelar"),
+                    html.button(
+                        {
+                            "class_name": "secondary",
+                            "on_click": lambda e: on_cancel(),
+                            "disabled": is_processing,
+                        },
+                        "Cancelar",
+                    ),
                     html.button(
                         {
                             "style": {
@@ -233,8 +251,10 @@ def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Calla
                                 "borderColor": "var(--pico-color-pink-550)",
                             },
                             "on_click": handle_confirm,
+                            "disabled": is_processing,
+                            "aria-busy": str(is_processing).lower(),
                         },
-                        "Confirmar",
+                        "Procesando..." if is_processing else "Confirmar",
                     ),
                 ),
             ),
@@ -338,7 +358,10 @@ def ThemeSwitcher(is_dark: bool, on_toggle: Callable):
     """Un interruptor para cambiar entre tema claro y oscuro."""
 
     def handle_change(event):
-        on_toggle(not is_dark)
+        # Usamos directamente el valor del checkbox para evitar desincronización
+        # entre el estado visual del switch y el tema aplicado.
+        is_checked = bool(event["target"]["checked"])
+        on_toggle(is_checked)
 
     return html.label(
         {"htmlFor": "theme-switcher", "class_name": "theme-switcher"},
