@@ -73,7 +73,7 @@ def EquiposControls(
                         "name": "search-device",
                         "placeholder": "Buscar equipos por nombre...",
                         "value": search,
-                        "on_change": lambda event: on_search(event["target"]["value"]),
+                        "on_change": lambda event: on_search(event["target"]["value"].strip()),
                         "aria-busy": str(is_searching).lower(),
                         "class_name": SEARCH_INPUT,
                     }
