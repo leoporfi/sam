@@ -144,6 +144,13 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
 
 
     def handle_form_change(field_name, field_value):
+        # Aplicar trim automático a campos de texto (excepto números)
+        if field_name not in ["RobotId", "MinEquipos", "MaxEquipos", "PrioridadBalanceo", "TicketsPorEquipoAdicional"]:
+            if isinstance(field_value, str):
+                field_value = field_value.strip()
+            elif field_value is None:
+                field_value = ""
+        
         if field_name in ["RobotId", "MinEquipos", "MaxEquipos", "PrioridadBalanceo", "TicketsPorEquipoAdicional"]:
             try:
                 # Permitir que el campo quede vacío temporalmente durante la edición
@@ -951,7 +958,7 @@ def DeviceList(
                     "name": "search-equipos",
                     "placeholder": "Filtrar equipos...",
                     "value": search_term,
-                    "on_change": lambda e: on_search_change(e["target"]["value"]),
+                    "on_change": lambda e: on_search_change(e["target"]["value"].strip()),
                 }
             ),
         ),
@@ -1379,7 +1386,7 @@ def DeviceSelector(available_devices: List[Dict], selected_devices: List[int], o
                 "name": "search-equipos-schedule",
                 "placeholder": "Filtrar equipos...",
                 "value": search_term,
-                "on_change": lambda e: set_search_term(e["target"]["value"]),
+                "on_change": lambda e: set_search_term(e["target"]["value"].strip()),
                 "style": {"marginBottom": "0.75rem"},
             }
         ),

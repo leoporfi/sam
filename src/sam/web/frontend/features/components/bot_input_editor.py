@@ -206,6 +206,10 @@ def BotInputEditor(value: Optional[str], on_change: Callable):
         if var_name not in variables:
             return
 
+        # Aplicar trim automático a valores de texto
+        if isinstance(new_value, str):
+            new_value = new_value.strip()
+
         var_obj = variables[var_name].copy()
         var_type = var_obj.get("type", "STRING")
 
@@ -340,7 +344,7 @@ def BotInputEditor(value: Optional[str], on_change: Callable):
                             "name": "bot-input-var-name",
                             "placeholder": "Ej: in_NumRepeticion",
                             "value": new_var_name,
-                            "on_change": lambda e: (set_new_var_name(e["target"]["value"]), set_new_var_error(None)),
+                            "on_change": lambda e: (set_new_var_name(e["target"]["value"].strip()), set_new_var_error(None)),
                         }
                     ),
                 ),
@@ -363,7 +367,10 @@ def BotInputEditor(value: Optional[str], on_change: Callable):
                             "name": "bot-input-var-value",
                             "placeholder": "Valor..." if new_var_type != "BOOLEAN" else "true/false",
                             "value": new_var_value,
-                            "on_change": lambda e: (set_new_var_value(e["target"]["value"]), set_new_var_error(None)),
+                            "on_change": lambda e: (
+                                set_new_var_value(e["target"]["value"].strip() if isinstance(e["target"]["value"], str) else e["target"]["value"]),
+                                set_new_var_error(None),
+                            ),
                         }
                     ),
                 ),
