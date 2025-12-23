@@ -47,20 +47,23 @@ def use_schedules(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
             - handle_sort: Callable - Función para manejar ordenamiento
     """
     # Aplicar Inyección de Dependencias: permitir inyectar api_client para testing
-    # Si no se proporciona, intentar obtener del contexto de la aplicación
+    # IMPORTANTE: Todos los hooks deben llamarse incondicionalmente al inicio
+    # para cumplir con las reglas de ReactPy (hooks siempre en el mismo orden)
+    try:
+        app_context = use_app_context()
+    except Exception:
+        app_context = {}
+    
+    ctx = use_context(NotificationContext)
+    show: Callable = ctx["show_notification"]
+    
+    # Determinar qué api_client usar (después de llamar todos los hooks)
     if api_client is None:
-        try:
-            app_context = use_app_context()
-            api_client = app_context.get("api_client")
-            if api_client is None:
-                # Fallback a get_api_client() para compatibilidad temporal
-                api_client = get_api_client()  # type: ignore
-        except Exception:
+        api_client = app_context.get("api_client")
+        if api_client is None:
             # Fallback a get_api_client() para compatibilidad temporal
             api_client = get_api_client()  # type: ignore
     api = api_client
-    ctx = use_context(NotificationContext)
-    show: Callable = ctx["show_notification"]
 
     schedules, set_schedules = use_state([])
     loading, set_loading = use_state(True)
