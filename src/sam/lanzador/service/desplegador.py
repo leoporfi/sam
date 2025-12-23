@@ -1,5 +1,6 @@
 # sam/lanzador/service/desplegador.py
 import asyncio
+import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, List
@@ -71,15 +72,15 @@ class Desplegador:
             logger.info("No hay robots para ejecutar en este ciclo.")
             return
 
-        bot_input = {"in_NumRepeticion": {"type": "NUMBER", "number": self._cfg_lanzador.get("repeticiones", 1)}}
+        # Bot input por defecto (valor de configuración)
+        default_bot_input = {"in_NumRepeticion": {"type": "NUMBER", "number": str(self._cfg_lanzador.get("repeticiones", 1))}}
         max_workers = self._cfg_lanzador.get("max_workers_lanzador", 10)
         auth_headers = await self._preparar_cabeceras_callback()
 
         logger.info(f"{len(robots_a_ejecutar)} robots encontrados. Desplegando en paralelo (límite: {max_workers})...")
 
         tasks = [
-            asyncio.create_task(self._desplegar_y_registrar_robot(robot_info, bot_input, auth_headers))
-            for robot_info in robots_a_ejecutar
+            asyncio.create_task(self._desplegar_y_registrar_robot(robot_info, default_bot_input, auth_headers)) for robot_info in robots_a_ejecutar
         ]
 
         successful_deploys = 0
@@ -98,9 +99,33 @@ class Desplegador:
 
         return all_results
 
-    async def _desplegar_y_registrar_robot(
-        self, robot_info: dict, bot_input: dict, cabeceras_callback: dict
-    ) -> Dict[str, Any]:
+    def _obtener_bot_input_robot(self, robot_id: int, default_bot_input: dict) -> dict:
+        """
+        Obtiene los parámetros de bot_input configurados para un robot específico.
+        Si el robot tiene parámetros configurados en la BD, los usa; caso contrario usa el valor por defecto.
+        """
+        try:
+            query = "SELECT Parametros FROM dbo.Robots WHERE RobotId = ?"
+            result = self._db_connector.ejecutar_consulta(query, (robot_id,), es_select=True)
+
+            if result and result[0].get("Parametros"):
+                try:
+                    # Intentar parsear el JSON de Parametros
+                    parametros_json = json.loads(result[0]["Parametros"])
+                    if parametros_json and isinstance(parametros_json, dict):
+                        logger.debug(f"Robot {robot_id} tiene parámetros personalizados: {parametros_json}")
+                        return parametros_json
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.warning(f"Error al parsear Parametros del Robot {robot_id}: {e}. Usando valor por defecto.")
+
+            # Si no hay parámetros o hay error, usar el valor por defecto
+            logger.debug(f"Robot {robot_id} usando parámetros por defecto")
+            return default_bot_input
+        except Exception as e:
+            logger.error(f"Error al obtener parámetros del Robot {robot_id}: {e}. Usando valor por defecto.", exc_info=True)
+            return default_bot_input
+
+    async def _desplegar_y_registrar_robot(self, robot_info: dict, default_bot_input: dict, cabeceras_callback: dict) -> Dict[str, Any]:
         """
         Intenta desplegar un robot, manejando errores 412 con reintentos
         y errores 400 como permanentes + alerta.
@@ -109,6 +134,9 @@ class Desplegador:
         user_id = robot_info.get("UserId")
         equipo_id = robot_info.get("EquipoId")
         hora = robot_info.get("Hora")
+
+        # Obtener bot_input específico del robot o usar el valor por defecto
+        bot_input = self._obtener_bot_input_robot(robot_id, default_bot_input)
 
         detected_error_type = None
 
@@ -135,10 +163,7 @@ class Desplegador:
                 deployment_id = deployment_result["deploymentId"]
 
                 # 2. ÉXITO - Registrar en BD
-                logger.debug(
-                    f"Robot {robot_id} desplegado con ID: {deployment_id} "
-                    f"en Equipo {equipo_id} (Intento {intento}/{max_intentos})"
-                )
+                logger.debug(f"Robot {robot_id} desplegado con ID: {deployment_id} en Equipo {equipo_id} (Intento {intento}/{max_intentos})")
 
                 self._db_connector.insertar_registro_ejecucion(
                     id_despliegue=deployment_id,
@@ -153,30 +178,76 @@ class Desplegador:
 
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
-                response_text = e.response.text[:200]  # Limitar para logs
+                response_text_full = e.response.text  # Mensaje completo para análisis
+                response_text = response_text_full[:200]  # Limitar para logs
 
                 if status_code == 412:
                     detected_error_type = "412"
-                    # ERROR TEMPORAL (Device Offline)
-                    if intento < max_intentos:
-                        logger.warning(
-                            f"Error 412 (Device Offline) Robot {robot_id} Equipo {equipo_id}. "
-                            f"Reintentando ({intento + 1}/{max_intentos}) en {delay_seg}s..."
+                    
+                    # Verificar si es un error del robot (no compatible targets)
+                    # Este error indica un problema con el robot, no con el device
+                    is_robot_error = False
+                    error_message_lower = response_text_full.lower()
+                    
+                    # Buscar el mensaje de error en el texto (puede venir en JSON o texto plano)
+                    error_message_to_check = error_message_lower
+                    try:
+                        # Intentar parsear como JSON para extraer el mensaje
+                        error_json = json.loads(response_text_full)
+                        if isinstance(error_json, dict) and "message" in error_json:
+                            error_message_to_check = error_json["message"].lower()
+                    except (json.JSONDecodeError, TypeError):
+                        # Si no es JSON, usar el texto completo
+                        pass
+                    
+                    # Verificar si contiene el mensaje de error de targets no compatibles
+                    if "no compatible targets found in automation" in error_message_to_check:
+                        is_robot_error = True
+                        detected_error_type = "412_robot_error"  # Marcar como error del robot
+                        
+                        # Enviar email inmediatamente con el mensaje de error completo
+                        logger.error(
+                            f"Error 412 - Problema con Robot {robot_id} (no es problema del device). "
+                            f"Error: {response_text_full}"
                         )
-                        await asyncio.sleep(delay_seg)
-                        continue
-                    else:
-                        logger.warning(
-                            f"Error 412 persistente Robot {robot_id} Equipo {equipo_id} "
-                            f"después de {max_intentos} intentos. Dispositivo offline."
-                        )
+                        try:
+                            self._notificador.send_alert(
+                                subject=f"[SAM CRÍTICO] Error en Robot {robot_id} - No Compatible Targets",
+                                message=(
+                                    f"Error al desplegar robot (Error 412 - Problema con el robot, NO con el device):\n\n"
+                                    f"• RobotId: {robot_id}\n"
+                                    f"• EquipoId: {equipo_id}\n"
+                                    f"• UserId: {user_id}\n\n"
+                                    f"Mensaje de error completo:\n{response_text_full}\n\n"
+                                    f"Acción requerida: Revisar la configuración del robot en A360. "
+                                    f"El robot no tiene targets compatibles configurados."
+                                ),
+                            )
+                        except Exception as mail_e:
+                            logger.error(f"Fallo al enviar alerta de error de robot: {mail_e}")
+                        
+                        # No reintentar, es un error permanente del robot
                         break
+                    
+                    # Si no es error del robot, tratarlo como error temporal (Device Offline)
+                    if not is_robot_error:
+                        if intento < max_intentos:
+                            logger.warning(
+                                f"Error 412 (Device Offline) Robot {robot_id} Equipo {equipo_id}. "
+                                f"Reintentando ({intento + 1}/{max_intentos}) en {delay_seg}s..."
+                            )
+                            await asyncio.sleep(delay_seg)
+                            continue
+                        else:
+                            logger.warning(
+                                f"Error 412 persistente Robot {robot_id} Equipo {equipo_id} después de {max_intentos} intentos. Dispositivo offline."
+                            )
+                            break
                 elif status_code == 400:
                     detected_error_type = "400"
                     # ERROR PERMANENTE (Bad Request)
                     logger.warning(
-                        f"Error 400 PERMANENTE Robot {robot_id} Equipo {equipo_id} Usuario {user_id}. "
-                        f"Revise configuración. Error: {response_text}"
+                        f"Error 400 PERMANENTE Robot {robot_id} Equipo {equipo_id} Usuario {user_id}. Revise configuración. Error: {response_text}"
                     )
 
                     # Solo alertar la primera vez por equipo

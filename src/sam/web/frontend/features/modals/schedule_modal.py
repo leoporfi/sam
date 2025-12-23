@@ -444,6 +444,24 @@ def DeviceList(title, items, selected_ids_set, handle_selection, handle_select_a
 
     are_all_selected = len(filtered_items) > 0 and all(i["ID"] in selected_ids_set for i in filtered_items)
 
+    def get_estado(item: Dict) -> tuple[str, str]:
+        """
+        Determina el estado del equipo para mostrar en la etiqueta.
+        - Programado: Tiene una asignación programada (EsProgramado = 1)
+        - Libre: No tiene ninguna asignación (completamente disponible)
+        - Reservado: Asignado manualmente (solo en lista de asignados)
+        - Dinámico: Asignado por el balanceador (solo en lista de asignados)
+        """
+        if item.get("EsProgramado"):
+            return ("Programado", "tag-programado")
+        if item.get("Reservado"):
+            return ("Reservado", "tag-reservado")
+        # Si no tiene EsProgramado ni Reservado, está libre
+        return ("Libre", "tag-libre")
+
+    # Verificar si hay información de estado disponible
+    has_status_column = items and len(items) > 0 and ("EsProgramado" in items[0] or "Reservado" in items[0])
+
     return html.div(
         {"class_name": "device-list-section"},  # Clase CSS original de SAM
         html.div(
@@ -480,6 +498,7 @@ def DeviceList(title, items, selected_ids_set, handle_selection, handle_select_a
                             ),
                         ),
                         html.th({"scope": "col"}, "Nombre Equipo"),
+                        html.th({"scope": "col", "style": {"width": "120px"}}, "Estado") if has_status_column else None,
                     )
                 ),
                 html.tbody(
@@ -496,11 +515,19 @@ def DeviceList(title, items, selected_ids_set, handle_selection, handle_select_a
                                 )
                             ),
                             html.td(item["Nombre"]),
+                            html.td(html.span({"class_name": f"tag {get_estado(item)[1]}"}, get_estado(item)[0])) if has_status_column else None,
                         )
                         for item in filtered_items
                     ]
                     if filtered_items
-                    else [html.tr(html.td({"colSpan": 2, "style": {"text-align": "center"}}, "Sin resultados"))]
+                    else [
+                        html.tr(
+                            html.td(
+                                {"colSpan": 3 if has_status_column else 2, "style": {"text-align": "center"}},
+                                "Sin resultados",
+                            )
+                        )
+                    ]
                 ),
             ),
         ),

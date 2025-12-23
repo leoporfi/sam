@@ -128,13 +128,9 @@ def get_robots(
         # Programado = True  -> robots que tienen al menos una programación activa
         # Programado = False -> robots sin programaciones activas
         if programado:
-            conditions.append(
-                "EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)"
-            )
+            conditions.append("EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)")
         else:
-            conditions.append(
-                "NOT EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)"
-            )
+            conditions.append("NOT EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)")
 
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
 
@@ -147,7 +143,7 @@ def get_robots(
         SELECT
             r.RobotId, r.Robot, r.Descripcion, r.MinEquipos, r.MaxEquipos,
             r.EsOnline, r.Activo, r.PrioridadBalanceo,
-            r.TicketsPorEquipoAdicional,
+            r.TicketsPorEquipoAdicional, r.Parametros,
             ISNULL(ea.Equipos, 0) as CantidadEquiposAsignados,
             CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)
                  THEN 1 ELSE 0 END AS BIT) AS TieneProgramacion
@@ -185,7 +181,7 @@ def update_robot_details(db: DatabaseConnector, robot_id: int, robot_data: Robot
     query = """
         UPDATE dbo.Robots SET
             Robot = ?, Descripcion = ?, MinEquipos = ?, MaxEquipos = ?,
-            PrioridadBalanceo = ?, TicketsPorEquipoAdicional = ?
+            PrioridadBalanceo = ?, TicketsPorEquipoAdicional = ?, Parametros = ?
         WHERE RobotId = ?
     """
     params = (
@@ -195,6 +191,7 @@ def update_robot_details(db: DatabaseConnector, robot_id: int, robot_data: Robot
         robot_data.MaxEquipos,
         robot_data.PrioridadBalanceo,
         robot_data.TicketsPorEquipoAdicional,
+        robot_data.Parametros,
         robot_id,
     )
     return db.ejecutar_consulta(query, params, es_select=False)
@@ -236,9 +233,7 @@ def get_asignaciones_by_robot(db: DatabaseConnector, robot_id: int) -> List[Dict
     return db.ejecutar_consulta(query, (robot_id,), es_select=True)
 
 
-def update_asignaciones_robot(
-    db: DatabaseConnector, robot_id: int, assign_ids: List[int], unassign_ids: List[int]
-) -> Dict:
+def update_asignaciones_robot(db: DatabaseConnector, robot_id: int, assign_ids: List[int], unassign_ids: List[int]) -> Dict:
     robot_info = db.ejecutar_consulta("SELECT EsOnline FROM dbo.Robots WHERE RobotId = ?", (robot_id,), es_select=True)
     if not robot_info:
         raise ValueError("Robot no encontrado")
@@ -248,9 +243,7 @@ def update_asignaciones_robot(
             # 1. Desasignar equipos
             if unassign_ids:
                 unassign_placeholders = ",".join("?" for _ in unassign_ids)
-                unassign_query = (
-                    f"DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId IN ({unassign_placeholders})"
-                )
+                unassign_query = f"DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId IN ({unassign_placeholders})"
                 cursor.execute(unassign_query, robot_id, *unassign_ids)
 
             # 2. Asignar nuevos equipos
@@ -300,6 +293,7 @@ def get_available_devices_for_robot_inline(db: DatabaseConnector, robot_id: int)
     """
     Implementación inline como fallback o para desarrollo.
     Esta query es equivalente pero más legible que la versión con NOT EXISTS anidados.
+    Incluye información sobre si el equipo está programado en otro robot.
     """
     query = """
         WITH EquiposReservados AS (
@@ -314,16 +308,28 @@ def get_available_devices_for_robot_inline(db: DatabaseConnector, robot_id: int)
             SELECT DISTINCT EquipoId
             FROM dbo.Asignaciones
             WHERE RobotId = ?
+        ),
+        EquiposProgramadosEnOtrosRobots AS (
+            -- Equipos programados en otros robots (no en este)
+            SELECT DISTINCT EquipoId, CAST(1 AS BIT) AS EsProgramado
+            FROM dbo.Asignaciones
+            WHERE EsProgramado = 1
+              AND RobotId != ?
         )
-        SELECT E.EquipoId, E.Equipo
+        SELECT 
+            E.EquipoId, 
+            E.Equipo,
+            ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
+            CAST(0 AS BIT) AS Reservado
         FROM dbo.Equipos E
+        LEFT JOIN EquiposProgramadosEnOtrosRobots P ON E.EquipoId = P.EquipoId
         WHERE E.Activo_SAM = 1
           AND E.Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')
           AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservados)
           AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposYaAsignados)
         ORDER BY E.Equipo
     """
-    return db.ejecutar_consulta(query, (robot_id,), es_select=True)
+    return db.ejecutar_consulta(query, (robot_id, robot_id), es_select=True)
 
 
 def get_devices(
@@ -391,9 +397,7 @@ def delete_schedule(db: DatabaseConnector, programacion_id: int, robot_id: int):
 
 
 def create_schedule(db: DatabaseConnector, data: ScheduleData):
-    robot_nombre_result = db.ejecutar_consulta(
-        "SELECT Robot FROM dbo.Robots WHERE RobotId = ?", (data.RobotId,), es_select=True
-    )
+    robot_nombre_result = db.ejecutar_consulta("SELECT Robot FROM dbo.Robots WHERE RobotId = ?", (data.RobotId,), es_select=True)
     if not robot_nombre_result:
         raise ValueError(f"No se encontró un robot con el ID {data.RobotId}")
     robot_str = robot_nombre_result[0]["Robot"]
@@ -403,8 +407,7 @@ def create_schedule(db: DatabaseConnector, data: ScheduleData):
         placeholders = ",".join("?" for _ in data.Equipos)
         # Usamos NVARCHAR(MAX) para evitar el límite de 8000 bytes de STRING_AGG
         equipos_nombres_result = db.ejecutar_consulta(
-            f"SELECT STRING_AGG(CAST(Equipo AS NVARCHAR(MAX)), ',') AS Nombres "
-            f"FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
+            f"SELECT STRING_AGG(CAST(Equipo AS NVARCHAR(MAX)), ',') AS Nombres FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
             tuple(data.Equipos),
             es_select=True,
         )
@@ -452,8 +455,7 @@ def update_schedule(db: DatabaseConnector, schedule_id: int, data: ScheduleData)
         placeholders = ",".join("?" for _ in data.Equipos)
         # Usamos NVARCHAR(MAX) para evitar el límite de 8000 bytes de STRING_AGG
         equipos_nombres_result = db.ejecutar_consulta(
-            f"SELECT STRING_AGG(CAST(Equipo AS NVARCHAR(MAX)), ',') AS Nombres "
-            f"FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
+            f"SELECT STRING_AGG(CAST(Equipo AS NVARCHAR(MAX)), ',') AS Nombres FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
             tuple(data.Equipos),
             es_select=True,
         )
@@ -591,40 +593,88 @@ def toggle_schedule_active(db: DatabaseConnector, schedule_id: int, activo: bool
 def get_schedule_devices_data(db: DatabaseConnector, schedule_id: int) -> Dict[str, List[Dict]]:
     """
     Obtiene los equipos asignados a una programación específica y los disponibles.
+    Incluye información sobre si los equipos están programados en otras programaciones.
     """
     # 1. Obtener los asignados a ESTA programación
     query_assigned = """
-        SELECT e.EquipoId AS ID, e.Equipo AS Nombre, e.Licencia
+        SELECT e.EquipoId AS ID, e.Equipo AS Nombre, e.Licencia,
+               CAST(1 AS BIT) AS EsProgramado, CAST(0 AS BIT) AS Reservado
         FROM Equipos e
         INNER JOIN Asignaciones a ON e.EquipoId = a.EquipoId
         WHERE a.ProgramacionId = ?
     """
     assigned = db.ejecutar_consulta(query_assigned, (schedule_id,), es_select=True)
 
-    # 2. Obtener TODOS los disponibles (que estén activos en SAM)
-    # Excluimos los que ya están asignados a esta programación para no duplicar
+    # 2. Obtener equipos disponibles (que estén activos en SAM)
+    # Excluimos:
+    # - Los que ya están asignados a esta programación
+    # - Los que están reservados manualmente (Reservado = 1)
+    # - Los que están asignados dinámicamente (EsProgramado = 0 AND Reservado = 0)
+    # Incluimos información sobre si están programados en otras programaciones
     assigned_ids = [item["ID"] for item in assigned]
 
     # Si hay asignados, construimos los placeholders (?,?,?)
     if assigned_ids:
         placeholders = ",".join("?" * len(assigned_ids))
         query_available = f"""
-            SELECT EquipoId AS ID, Equipo AS Nombre, Licencia
-            FROM Equipos
-            WHERE Activo_SAM = 1
-              AND EquipoId NOT IN ({placeholders})
-            ORDER BY Equipo ASC
+            WITH EquiposReservadosODinamicos AS (
+                -- Equipos reservados manualmente o asignados dinámicamente
+                SELECT DISTINCT EquipoId
+                FROM dbo.Asignaciones
+                WHERE Reservado = 1
+                   OR (EsProgramado = 0 AND Reservado = 0)
+            ),
+            EquiposProgramadosEnOtrasProgramaciones AS (
+                -- Equipos programados en otras programaciones (no en esta)
+                SELECT DISTINCT EquipoId, CAST(1 AS BIT) AS EsProgramado
+                FROM dbo.Asignaciones
+                WHERE EsProgramado = 1
+                  AND ProgramacionId != ?
+            )
+            SELECT 
+                e.EquipoId AS ID, 
+                e.Equipo AS Nombre, 
+                e.Licencia,
+                ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
+                CAST(0 AS BIT) AS Reservado
+            FROM Equipos e
+            LEFT JOIN EquiposProgramadosEnOtrasProgramaciones P ON e.EquipoId = P.EquipoId
+            WHERE e.Activo_SAM = 1
+              AND e.EquipoId NOT IN ({placeholders})
+              AND e.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservadosODinamicos)
+            ORDER BY e.Equipo ASC
         """
-        params = tuple(assigned_ids)
+        params = tuple([schedule_id] + list(assigned_ids))
     else:
-        # Si no hay nadie asignado, traemos todos los activos
+        # Si no hay nadie asignado, traemos todos los activos (excluyendo reservados/dinámicos)
         query_available = """
-            SELECT EquipoId AS ID, Equipo AS Nombre, Licencia
-            FROM Equipos
-            WHERE Activo_SAM = 1
-            ORDER BY Equipo ASC
+            WITH EquiposReservadosODinamicos AS (
+                -- Equipos reservados manualmente o asignados dinámicamente
+                SELECT DISTINCT EquipoId
+                FROM dbo.Asignaciones
+                WHERE Reservado = 1
+                   OR (EsProgramado = 0 AND Reservado = 0)
+            ),
+            EquiposProgramadosEnOtrasProgramaciones AS (
+                -- Equipos programados en otras programaciones (no en esta)
+                SELECT DISTINCT EquipoId, CAST(1 AS BIT) AS EsProgramado
+                FROM dbo.Asignaciones
+                WHERE EsProgramado = 1
+                  AND ProgramacionId != ?
+            )
+            SELECT 
+                e.EquipoId AS ID, 
+                e.Equipo AS Nombre, 
+                e.Licencia,
+                ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
+                CAST(0 AS BIT) AS Reservado
+            FROM Equipos e
+            LEFT JOIN EquiposProgramadosEnOtrasProgramaciones P ON e.EquipoId = P.EquipoId
+            WHERE e.Activo_SAM = 1
+              AND e.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservadosODinamicos)
+            ORDER BY e.Equipo ASC
         """
-        params = ()
+        params = (schedule_id,)
 
     available = db.ejecutar_consulta(query_available, params, es_select=True)
 
@@ -819,9 +869,7 @@ def create_mapping(db: DatabaseConnector, data: dict):
         INSERT INTO dbo.MapeoRobots (Proveedor, NombreExterno, RobotId, Descripcion)
         VALUES (?, ?, ?, ?)
     """
-    db.ejecutar_consulta(
-        query, (data["Proveedor"], data["NombreExterno"], data["RobotId"], data.get("Descripcion")), es_select=False
-    )
+    db.ejecutar_consulta(query, (data["Proveedor"], data["NombreExterno"], data["RobotId"], data.get("Descripcion")), es_select=False)
 
 
 def delete_mapping(db: DatabaseConnector, mapeo_id: int):
