@@ -80,7 +80,7 @@ def SchedulesControls(
                         "name": "search-schedule",
                         "placeholder": "Buscar robots por nombre...",
                         "value": search,
-                        "on_change": lambda e: on_search(e["target"]["value"]),
+                        "on_change": lambda e: on_search(e["target"]["value"].strip()),
                         "aria-busy": str(is_searching).lower(),
                         "class_name": SEARCH_INPUT,
                     }
