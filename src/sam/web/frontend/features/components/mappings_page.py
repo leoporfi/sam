@@ -131,7 +131,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                                     "list": "providers-list",
                                     "value": new_proveedor,
                                     "placeholder": "Escribe o selecciona...",
-                                    "on_change": lambda e: set_new_proveedor(e["target"]["value"]),
+                                    "on_change": lambda e: set_new_proveedor(e["target"]["value"].strip()),
                                 }
                             ),
                             datalist({"id": "providers-list"}, [html.option({"value": p}) for p in known_providers]),
@@ -146,7 +146,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                                     "type": "text",
                                     "value": new_externo,
                                     "placeholder": "Ej: Bot_Cobranzas_V1",
-                                    "on_change": lambda e: set_new_externo(e["target"]["value"]),
+                                    "on_change": lambda e: set_new_externo(e["target"]["value"].strip()),
                                 }
                             ),
                         ),
