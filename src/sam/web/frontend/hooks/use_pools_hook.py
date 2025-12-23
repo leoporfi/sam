@@ -37,17 +37,20 @@ def use_pools_management(api_client: Optional[APIClient] = None) -> Dict[str, An
             - update_pool_assignments: Callable - Función para actualizar asignaciones
     """
     # Aplicar Inyección de Dependencias: permitir inyectar api_client para testing
-    # Si no se proporciona, intentar obtener del contexto de la aplicación
+    # IMPORTANTE: Todos los hooks deben llamarse incondicionalmente al inicio
+    # para cumplir con las reglas de ReactPy (hooks siempre en el mismo orden)
+    try:
+        app_context = use_app_context()
+    except Exception:
+        app_context = {}
+    
+    # Determinar qué api_client usar (después de llamar todos los hooks)
     if api_client is None:
-        try:
-            app_context = use_app_context()
-            api_client = app_context.get("api_client")
-            if api_client is None:
-                # Fallback a get_api_client() para compatibilidad temporal
-                api_client = get_api_client()  # type: ignore
-        except Exception:
+        api_client = app_context.get("api_client")
+        if api_client is None:
             # Fallback a get_api_client() para compatibilidad temporal
             api_client = get_api_client()  # type: ignore
+    
     pools, set_pools = use_state([])
     loading, set_loading = use_state(True)
     error, set_error = use_state(None)
