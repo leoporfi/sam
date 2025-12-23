@@ -29,6 +29,9 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
         return None
 
     def handle_change(field, value):
+        # Aplicar trim automático a campos de texto
+        if isinstance(value, str):
+            value = value.strip()
         set_form_data(lambda old: {**old, field: value})
 
     async def handle_submit(e):

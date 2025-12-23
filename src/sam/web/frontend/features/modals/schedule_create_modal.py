@@ -39,6 +39,9 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
 
     def handle_change(field, value):
         """Manejador de cambios que limpia campos al cambiar el tipo."""
+        # Aplicar trim automático a campos de texto
+        if isinstance(value, str) and field not in ["TipoProgramacion", "RobotId", "DiasSemana"]:
+            value = value.strip()
         new_form_data = {**form_data, field: value}
 
         if field == "TipoProgramacion":
@@ -63,7 +66,7 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
                     "type": "text",
                     "placeholder": "🔍 Buscar robot...",
                     "value": robot_search,
-                    "on_change": lambda e: set_robot_search(e["target"]["value"]),
+                    "on_change": lambda e: set_robot_search(e["target"]["value"].strip()),
                     "style": {
                         "marginBottom": "0.5rem",
                     },

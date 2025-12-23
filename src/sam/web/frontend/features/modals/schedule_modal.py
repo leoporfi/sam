@@ -32,6 +32,9 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
 
     def handle_change(field, value):
         """Manejador de cambios que limpia campos al cambiar el tipo."""
+        # Aplicar trim automático a campos de texto (excepto números y campos especiales)
+        if isinstance(value, str) and field not in ["TipoProgramacion", "DiasSemana", "HoraInicio"]:
+            value = value.strip()
         new_form_data = {**form_data, field: value}
 
         if field == "TipoProgramacion":
@@ -473,7 +476,7 @@ def DeviceList(title, items, selected_ids_set, handle_selection, handle_select_a
                     "name": "search-equipos",
                     "placeholder": "Filtrar equipos...",
                     "value": search_term,
-                    "on_change": lambda e: set_search_term(e["target"]["value"]),
+                    "on_change": lambda e: set_search_term(e["target"]["value"].strip()),
                 }
             ),
         ),
