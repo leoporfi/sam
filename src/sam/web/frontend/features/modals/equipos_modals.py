@@ -70,6 +70,14 @@ def EquipoEditModal(
     def handle_change(field: str, value: Any):
         """Actualiza el estado del formulario."""
         set_error("")  # Limpiar error al empezar a escribir
+        
+        # Aplicar trim automático a campos de texto (excepto números)
+        if field not in ["EquipoId", "UserId"]:
+            if isinstance(value, str):
+                value = value.strip()
+            elif value is None:
+                value = ""
+        
         # Convertir IDs a int si es posible, manejar vacío
         if field in ["EquipoId", "UserId"]:
             try:
