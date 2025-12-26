@@ -53,6 +53,13 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
             new_form_data["DiaFinMes"] = None
             new_form_data["UltimosDiasMes"] = None
             new_form_data["PrimerosDiasMes"] = None
+        
+        if field == "EsCiclico" and not value:
+            # Si se desactiva EsCiclico, limpiar campos relacionados
+            new_form_data["HoraFin"] = None
+            new_form_data["FechaInicioVentana"] = None
+            new_form_data["FechaFinVentana"] = None
+            new_form_data["IntervaloEntreEjecuciones"] = None
 
         on_change(new_form_data)
 
@@ -288,6 +295,83 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
         )
         if tipo_actual == "Especifica"
         else None,
+        # Sección de Robots Cíclicos
+        html.div(
+            {"class_name": "cyclic-robot-section", "style": {"marginTop": "1rem", "paddingTop": "1rem", "borderTop": "1px solid var(--pico-muted-border-color)"}},
+            html.label(
+                html.input(
+                    {
+                        "type": "checkbox",
+                        "role": "switch",
+                        "checked": form_data.get("EsCiclico", False),
+                        "on_change": lambda e: handle_change("EsCiclico", e["target"]["checked"]),
+                    }
+                ),
+                " Robot Cíclico (ejecución continua dentro de ventana)",
+            ),
+            html.div(
+                {
+                    "style": {
+                        "display": "block" if form_data.get("EsCiclico", False) else "none",
+                        "marginTop": "1rem",
+                    }
+                },
+                html.div(
+                    {"class_name": "grid"},
+                    html.label(
+                        "Hora de Fin (HH:MM) *",
+                        html.input(
+                            {
+                                "type": "time",
+                                "value": form_data.get("HoraFin") or "",
+                                "on_change": lambda e: handle_change("HoraFin", e["target"]["value"]),
+                                "required": form_data.get("EsCiclico", False),
+                            }
+                        ),
+                    ),
+                    html.label(
+                        "Intervalo entre Ejecuciones (minutos) *",
+                        html.input(
+                            {
+                                "type": "number",
+                                "value": form_data.get("IntervaloEntreEjecuciones") or "",
+                                "min": 1,
+                                "max": 1440,
+                                "placeholder": "30",
+                                "on_change": lambda e: handle_change("IntervaloEntreEjecuciones", int(e["target"]["value"]) if e["target"]["value"] else None),
+                            }
+                        ),
+                    ),
+                ),
+                html.div(
+                    {"class_name": "grid"},
+                    html.label(
+                        "Fecha Inicio Ventana",
+                        html.input(
+                            {
+                                "type": "date",
+                                "value": form_data.get("FechaInicioVentana") or "",
+                                "on_change": lambda e: handle_change("FechaInicioVentana", e["target"]["value"]),
+                            }
+                        ),
+                    ),
+                    html.label(
+                        "Fecha Fin Ventana",
+                        html.input(
+                            {
+                                "type": "date",
+                                "value": form_data.get("FechaFinVentana") or "",
+                                "on_change": lambda e: handle_change("FechaFinVentana", e["target"]["value"]),
+                            }
+                        ),
+                    ),
+                ),
+                html.small(
+                    {"style": {"color": "var(--pico-muted-color)", "fontSize": "0.85em"}},
+                    "💡 Los robots cíclicos se ejecutan continuamente dentro del rango horario y ventana de fechas especificados.",
+                ),
+            ),
+        ),
         # Equipos (requerido)
         html.label(
             "Equipos *",
@@ -329,6 +413,11 @@ def ScheduleCreateModal(
             "Tolerancia": 30,
             "Equipos": [],
             "Activo": True,
+            "EsCiclico": False,
+            "HoraFin": None,
+            "FechaInicioVentana": None,
+            "FechaFinVentana": None,
+            "IntervaloEntreEjecuciones": None,
         }
     )
     is_loading, set_is_loading = use_state(False)
@@ -346,6 +435,11 @@ def ScheduleCreateModal(
                     "Tolerancia": 30,
                     "Equipos": [],
                     "Activo": True,
+                    "EsCiclico": False,
+                    "HoraFin": None,
+                    "FechaInicioVentana": None,
+                    "FechaFinVentana": None,
+                    "IntervaloEntreEjecuciones": None,
                 }
             )
 
@@ -377,6 +471,25 @@ def ScheduleCreateModal(
                 has_ultimos = form_data.get("UltimosDiasMes")
                 if not (has_rango or has_primeros or has_ultimos):
                     raise ValueError("Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días.")
+            
+            # Validaciones para robots cíclicos
+            if form_data.get("EsCiclico"):
+                if not form_data.get("HoraFin"):
+                    raise ValueError("Para robots cíclicos, la hora de fin es obligatoria.")
+                
+                hora_inicio = form_data.get("HoraInicio", "00:00")
+                hora_fin = form_data.get("HoraFin")
+                if hora_fin <= hora_inicio:
+                    raise ValueError("La hora de fin debe ser mayor que la hora de inicio.")
+                
+                fecha_inicio = form_data.get("FechaInicioVentana")
+                fecha_fin = form_data.get("FechaFinVentana")
+                if fecha_inicio and fecha_fin and fecha_inicio > fecha_fin:
+                    raise ValueError("La fecha de inicio de ventana debe ser menor o igual a la fecha de fin.")
+                
+                intervalo = form_data.get("IntervaloEntreEjecuciones")
+                if intervalo and intervalo < 1:
+                    raise ValueError("El intervalo entre ejecuciones debe ser al menos 1 minuto si se especifica.")
 
             await on_save(form_data)
             show_notification("Programación creada con éxito.", "success")

@@ -421,7 +421,9 @@ def create_schedule(db: DatabaseConnector, data: ScheduleData):
         dia_inicio = 1
         dia_fin = data.PrimerosDiasMes
 
-    query = "EXEC dbo.CrearProgramacion @Robot=?, @Equipos=?, @TipoProgramacion=?, @HoraInicio=?, @Tolerancia=?, @DiasSemana=?, @DiaDelMes=?, @FechaEspecifica=?, @DiaInicioMes=?, @DiaFinMes=?, @UltimosDiasMes=?"
+    # Usar sintaxis EXEC con parámetros nombrados (más explícito y compatible)
+    # El orden de los parámetros debe coincidir exactamente con el SP
+    query = "EXEC dbo.CrearProgramacion @Robot=?, @Equipos=?, @TipoProgramacion=?, @HoraInicio=?, @Tolerancia=?, @DiasSemana=?, @DiaDelMes=?, @FechaEspecifica=?, @DiaInicioMes=?, @DiaFinMes=?, @UltimosDiasMes=?, @UsuarioCrea=?, @EsCiclico=?, @HoraFin=?, @FechaInicioVentana=?, @FechaFinVentana=?, @IntervaloEntreEjecuciones=?"
     params = (
         robot_str,
         equipos_str,
@@ -434,6 +436,12 @@ def create_schedule(db: DatabaseConnector, data: ScheduleData):
         dia_inicio,
         dia_fin,
         data.UltimosDiasMes,
+        "WebApp_Creation",  # @UsuarioCrea
+        data.EsCiclico if data.EsCiclico is not None else False,
+        data.HoraFin,
+        data.FechaInicioVentana,
+        data.FechaFinVentana,
+        data.IntervaloEntreEjecuciones,
     )
     db.ejecutar_consulta(query, params, es_select=False)
 
@@ -480,9 +488,15 @@ def update_schedule(db: DatabaseConnector, schedule_id: int, data: ScheduleData)
             @FechaEspecifica=?,
             @Tolerancia=?,
             @Equipos=?,
+            @UsuarioModifica=?,
             @DiaInicioMes=?,
             @DiaFinMes=?,
-            @UltimosDiasMes=?
+            @UltimosDiasMes=?,
+            @EsCiclico=?,
+            @HoraFin=?,
+            @FechaInicioVentana=?,
+            @FechaFinVentana=?,
+            @IntervaloEntreEjecuciones=?
     """
     params = (
         schedule_id,
@@ -494,9 +508,15 @@ def update_schedule(db: DatabaseConnector, schedule_id: int, data: ScheduleData)
         data.FechaEspecifica or None,
         data.Tolerancia,
         equipos_str,
+        "WebApp_Update",  # Usuario que modifica
         dia_inicio,
         dia_fin,
         data.UltimosDiasMes,
+        data.EsCiclico if data.EsCiclico is not None else None,
+        data.HoraFin,
+        data.FechaInicioVentana,
+        data.FechaFinVentana,
+        data.IntervaloEntreEjecuciones,
     )
     db.ejecutar_consulta(query, params, es_select=False)
 
@@ -533,20 +553,36 @@ def update_schedule_simple(db: DatabaseConnector, schedule_id: int, data: Schedu
             @Activo=?,
             @DiaInicioMes=?,
             @DiaFinMes=?,
-            @UltimosDiasMes=?
+            @UltimosDiasMes=?,
+            @EsCiclico=?,
+            @HoraFin=?,
+            @FechaInicioVentana=?,
+            @FechaFinVentana=?,
+            @IntervaloEntreEjecuciones=?
     """
+    # Convertir time/date a formato compatible con SQL Server
+    # pyodbc maneja automáticamente objetos time y date, pero para ser explícitos:
+    hora_fin_val = data.HoraFin if data.HoraFin else None
+    fecha_inicio_val = data.FechaInicioVentana if data.FechaInicioVentana else None
+    fecha_fin_val = data.FechaFinVentana if data.FechaFinVentana else None
+
     params = (
         schedule_id,
         data.TipoProgramacion,
-        data.HoraInicio,
+        data.HoraInicio,  # time object, pyodbc lo convierte automáticamente
         data.DiasSemana or None,
         data.DiaDelMes or None,
-        data.FechaEspecifica or None,
+        data.FechaEspecifica or None,  # date object, pyodbc lo convierte automáticamente
         data.Tolerancia,
         data.Activo,
         dia_inicio,
         dia_fin,
         data.UltimosDiasMes,
+        data.EsCiclico if data.EsCiclico is not None else None,
+        hora_fin_val,  # time object
+        fecha_inicio_val,  # date object
+        fecha_fin_val,  # date object
+        data.IntervaloEntreEjecuciones,
     )
     db.ejecutar_consulta(sql, params, es_select=False)
 
