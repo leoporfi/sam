@@ -405,6 +405,38 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
         task = asyncio.create_task(fetch_data())
         return lambda: task.cancel()
 
+    # --- LÓGICA 1.5: Cargar TODOS los robots activos para el modal de creación ---
+    all_robots_for_create, set_all_robots_for_create = use_state([])
+
+    @use_effect(dependencies=[])
+    def load_all_robots_for_create():
+        async def fetch_all_robots():
+            try:
+                # Cargar todos los robots activos para el modal de creación
+                data = await api_client.get_robots({"active": True, "page": 1, "size": 1000})
+                robots = data.get("robots", [])
+                formatted_robots = [
+                    {"RobotId": r["RobotId"], "Robot": r.get("Robot") or r.get("Nombre", "")}
+                    for r in robots
+                    if r.get("Activo", True) or r.get("ActivoSAM", True)
+                ]
+                set_all_robots_for_create(formatted_robots)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                print(f"Error cargando robots para creación: {e}")
+                # Fallback: usar robots_state si está disponible
+                if robots_state.get("robots"):
+                    formatted_robots = [
+                        {"RobotId": r["RobotId"], "Robot": r.get("Robot") or r.get("Nombre", "")}
+                        for r in robots_state["robots"]
+                        if r.get("Activo", True) or r.get("ActivoSAM", True)
+                    ]
+                    set_all_robots_for_create(formatted_robots)
+
+        task = asyncio.create_task(fetch_all_robots())
+        return lambda: task.cancel()
+
     # --- LÓGICA 2: Sincronizar UI -> Hook de Datos (Filtros) ---
 
     # A) Búsqueda (con Debounce)
@@ -542,11 +574,18 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
                 is_open=is_create_modal_open,
                 on_close=lambda: set_is_create_modal_open(False),
                 on_save=handle_create_schedule_save,
-                robots_list=[
-                    {"RobotId": r["RobotId"], "Robot": r["Robot"]}
-                    for r in robots_state["robots"]
-                    if r.get("ActivoSAM", True)  # Solo robots activos (sin filtrar por Online)
-                ],
+                robots_list=all_robots_for_create
+                if all_robots_for_create
+                # Fallback: usar robots_state si está disponible
+                else (
+                    [
+                        {"RobotId": r["RobotId"], "Robot": r.get("Robot") or r.get("Nombre", "")}
+                        for r in robots_state.get("robots", [])
+                        if r.get("Activo", True) or r.get("ActivoSAM", True)
+                    ]
+                    if robots_state.get("robots")
+                    else []
+                ),
             )
             if is_create_modal_open
             else None,

@@ -69,7 +69,7 @@ def build_bot_input_json(variables: Dict[str, Dict[str, Any]]) -> str:
         return ""
 
     try:
-        return json.dumps(variables, indent=2, ensure_ascii=False)
+        return json.dumps(variables, ensure_ascii=False)
     except (TypeError, ValueError):
         return ""
 
