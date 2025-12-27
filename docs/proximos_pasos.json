@@ -1,151 +1,155 @@
 {
-    "summary": {
-      "context": {
-        "project": "SAM web interface (ReactPy + FastAPI + SQL Server) on branch 'feat/estandarizacion-reactpy'",
-        "date": "2025-12-18",
-        "area": "Web UI for Robots & Programaciones (scheduling) + backend DB procs"
+  "summary": {
+    "context": {
+      "project": "SAM web interface (ReactPy + FastAPI + SQL Server) on branch 'feat/estandarizacion-reactpy'",
+      "date": "2025-12-27",
+      "area": "Web UI for Robots & Programaciones (scheduling) + backend DB procs"
+    },
+    "work_log": [
+      {
+        "topic": "ReactPy AppContext & NotificationContext setup",
+        "details": [
+          "Replaced custom `AppProvider` with using `AppContext` directly as a ReactPy context component.",
+          "Fixed `TypeError: context() got an unexpected keyword argument 'children'` by passing `children` positionally and `value` as a keyword arg in `App` component (`app.py`).",
+          "Ensured `AppContext` wraps `NotificationContext`, which wraps `browser_router(...)` and `ToastContainer`."
+        ],
+        "files_touched": [
+          "src/sam/web/frontend/state/app_context.py",
+          "src/sam/web/frontend/app.py",
+          "src/sam/web/frontend/state/__init__.py"
+        ]
       },
-      "work_log": [
-        {
-          "topic": "ReactPy AppContext & NotificationContext setup",
-          "details": [
-            "Replaced custom `AppProvider` with using `AppContext` directly as a ReactPy context component.",
-            "Fixed `TypeError: context() got an unexpected keyword argument 'children'` by passing `children` positionally and `value` as a keyword arg in `App` component (`app.py`).",
-            "Ensured `AppContext` wraps `NotificationContext`, which wraps `browser_router(...)` and `ToastContainer`."
-          ],
-          "files_touched": [
-            "src/sam/web/frontend/state/app_context.py",
-            "src/sam/web/frontend/app.py",
-            "src/sam/web/frontend/state/__init__.py"
-          ]
-        },
-        {
-          "topic": "Schedule management enhancements (Programaciones page)",
-          "details": [
-            "Implemented `SchedulesPage` with filters (search, robot, tipo) and cascading robot dropdown filtered by selected type.",
-            "Enabled 'Programación' button in `SchedulesControls` to open a new `ScheduleCreateModal` for creating schedules.",
-            "Enabled delete actions in `SchedulesTable` and `ScheduleCard`, wired to `handle_delete_schedule` and `ConfirmationModal` for user confirmation.",
-            "Added `_format_schedule_details` helper to show human-readable details for each schedule type, including `Semanal`, `Mensual`, `Especifica` and `RangoMensual` with sub‑modes: range, primeros N días, últimos N días.",
-            "Limited the **Equipos** column in `SchedulesTable` to show up to 10 team names; if more than 10, it displays the first 10 followed by `(+N más)` and provides the full list in the `title` tooltip.",
-            "Implemented `ScheduleCreateModal` (`schedule_create_modal.py`) with fields: `RobotId`, `TipoProgramacion`, `HoraInicio`, `Tolerancia`, `DiasSemana`, `DiaDelMes`, `FechaEspecifica`, `DiaInicioMes`, `DiaFinMes`, `UltimosDiasMes`, `PrimerosDiasMes`.",
-            "`ScheduleCreateModal` includes a searchable dropdown of **all active robots** (regardless of `EsOnline`) via `robots_state[\"robots\"]` filtered by `ActivoSAM` and a local search box.",
-            "Conditionally renders fields based on `TipoProgramacion` and validates combinations for `RangoMensual` (either `UltimosDiasMes` or a `[DiaInicioMes, DiaFinMes]` range, with special handling for 'primeros N días').",
-            "Updated `schedule_modal.py` (edit schedule modal) to support `RangoMensual` with the same extra fields and validation logic as the create modal.",
-            "Made `SchedulesPage` pass `on_delete` into `SchedulesDashboard` and integrated `ConfirmationModal` for deletions."
-          ],
-          "files_touched": [
-            "src/sam/web/frontend/app.py (SchedulesPage)",
-            "src/sam/web/frontend/features/components/schedule_list.py",
-            "src/sam/web/frontend/features/modals/schedule_create_modal.py",
-            "src/sam/web/frontend/features/modals/schedule_modal.py",
-            "src/sam/web/frontend/hooks/use_schedules_hook.py"
-          ]
-        },
-        {
-          "topic": "Robots page: schedule creation + 'Solo Programados' filter + equipment assignment",
-          "details": [
-            "On `RobotsPage` (`app.py` + `robot_list.py`): ensured the 'Solo Programados' option in the `Online` filter returns only robots that have at least one active schedule.",
-            "Backend: extended `get_robots` in `database.py` and `/api/robots` in `api.py` to accept a new `programado: Optional[bool]` query parameter.",
-            "In `database.py::get_robots`, when `programado=True`, added `EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)` to the WHERE clause; when `programado=False`, added the corresponding `NOT EXISTS` condition.",
-            "Updated `RobotFilters` in `schemas.py` and `use_robots_hook.py` to include `programado` in `INITIAL_FILTERS` and pass it through to `api_client.get_robots`.",
-            "In `RobotsPage`, mapped the UI `online_filter` select to filters: `all -> online=None, programado=None`, `Solo Online -> online=true`, `Solo Programados -> programado=true, online=None`.",
-            "Ensured the schedule creation modal on the Robots page (`ScheduleForm` in `robots_modals.py`) can select from **all active robots** (not just currently displayed ones) and uses the same `RangoMensual` options as the main Programaciones page.",
-            "Implemented `SchedulesList` in `robots_modals.py` to show existing programaciones for a robot in a list with a human‑readable `details` string similar to `_format_schedule_details`, including `RangoMensual` variants.",
-            "Limited the **Equipos** text in that modal’s schedule list to show the first 6 team names, with the full list available via tooltip, preventing the modal from overflowing when many teams are assigned.",
-            "Fixed a bug in `DeviceList` where moving items between 'available' and 'assigned' lists could create duplicate rows with the same `key` (same `EquipoId`), causing `ValueError: Duplicate keys [...]` in ReactPy. Now `move_items` deduplicates destination lists by `EquipoId`.",
-            "Improved `DeviceList` checkboxes: ensured `onChange` → `on_change` to comply with ReactPy’s event naming.",
-            "In `AssignmentsModal`, changed the logic so that `available_devices` is a de‑duplicated merge of `devices_res` and `assigned_res` by `EquipoId` to avoid duplicates in the available list."
-          ],
-          "files_touched": [
-            "src/sam/web/frontend/app.py (RobotsPage mapping for `online`/`programado`)",
-            "src/sam/web/frontend/features/components/robot_list.py (filter labels and bindings)",
-            "src/sam/web/frontend/hooks/use_robots_hook.py",
-            "src/sam/web/frontend/features/modals/robots_modals.py"
-          ]
-        },
-        {
-          "topic": "Schedule CRUD backend (FastAPI + SQL Server)",
-          "details": [
-            "Extended `ScheduleData` and `ScheduleEditData` in `schemas.py` with `DiaInicioMes`, `DiaFinMes`, `UltimosDiasMes`, `PrimerosDiasMes` for monthly range scheduling.",
-            "In `database.py::create_schedule`, added parameters for `DiaInicioMes`, `DiaFinMes`, `UltimosDiasMes`; mapped `PrimerosDiasMes` to `dia_inicio=1` and `dia_fin=PrimerosDiasMes`, and executed `EXEC dbo.CrearProgramacion` accordingly.",
-            "In `database.py::update_schedule_simple` (for Programaciones edit modal), added `DiaInicioMes`, `DiaFinMes`, `UltimosDiasMes` support and passed them to `EXEC dbo.Actualizar -> dbo.ActualizarProgramacionSimple`.",
-            "In `database.py::update_schedule` (used by Robots page schedule modal), extended `EXEC dbo.ActualizarProgramacionCompleting` to pass `@DiaInicioMes`, `@DiaFinMes`, `@UltimosDiasMes`.",
-            "SQL (`SAM.sql`): updated stored procedures `CrearProgramacion`, `ActualizarProgramacionSimple`, and `ActualizarProgramacionCompleta` to accept and handle `@DiaInicioMes`, `@DiaFinMes`, `@UltimosDiasMes` and apply them only when `TipoProgramacion = 'RangoMensual'`.",
-            "Removed legacy validation from `CrearProgramacion` that prevented creating schedules for robots with `EsOnline=1`; now, creating a schedule for an 'online' robot sets `EsOnline = 0` as per business rules.",
-            "Updated `ListarProgramacionesPaginadas` and `ListarProgramacionesPorRobot` to include `DiaInicioMes`, `DiaFinMes`, `UltimosDiasMes` fields in their `SELECT`.",
-            "Fixed `pyodbc.ProgrammingError: Procedure or function ActualizarProgramacionSimple/Completa has too many arguments` by aligning the procedure signatures with the new parameters.",
-            "Fixed `pyodbc.ProgrammingError: ... too many arguments ...` in `ActualizarProgramacionCompleta` calls from `database.py::update_schedule` by adding `@DiaInicioMes`, `@DiaFinMes`, `@UltimosDiasMes` parameters to the procedure definition.",
-            "Changed the concatenation of many `Equipos` names (for logging and display) to use `CAST(... AS NVARCHAR)` within `STRING_AGG` to avoid `SQL Server 42000: Procedure or function ... has too many arguments specified / string or binary data would be truncated` when there are many assigned teams."
-          ],
-          "files_touched": [
-            "src/sam/web/backend/schemas.py",
-            "src/sam/web/backend/database.py",
-            "src/sam/web/backend/api.py",
-            "SAM.sql"
-          ]
-        },
-        {
-          "topic": "UI polish & bug fixes",
-          "details": [
-            "Fixed the theme toggle (`ThemeSwitcher` / `HeaderNav` in `common_components.py`): now uses `event[\"target\"][\"checked\"]` to determine the new value and passes it directly to `set_is_dark`, and wrapped `browser_router(...)` in a keyed `html.div` so the router remounts when `is_dark` changes, ensuring the toggle position and theme stay in sync.",
-            "Standardized hour display in Programaciones and Robots modals using `_format_time(hora)` that truncates to `HH:MM` (hides seconds).",
-            "Ensured the **Tipo** filter on the Programaciones page defaults to `Tipo: Todos` and never shows as an empty value by using an internal `tipo_select_value` and mapping `\"ALL\"` to `None` in the filters.",
-            "Improved error handling and user feedback by wiring schedule create/update/delete and assignment updates through `NotificationContext` (`show_notification`) with clear success/error messages.",
-            "Added a `ConfirmationModal` with a 'Procesando...' state so users see that their action is being processed and buttons are disabled to prevent double submissions."
-          ],
-          "files_touched": [
-            "src/sam/web/frontend/shared/common_components.py",
-            "src/sam/web/frontend/app.py",
-            "src/sam/web/frontend/features/components/schedule_list.py",
-            "src/sam/web/frontend/features/modals/robots_modals.py"
-          ]
-        }
-      ],
-      "open_issues": [
-        {
-          "id": "sql_procedures_deploy",
-          "description": "Ensure the updated SQL Server stored procedures (`CrearProgramacion`, `ActualizarProgramacionSimple`, `ActualizarProgramacionCompleta`, `ListarProgramacionesPaginadas`, `ListarProgramacionesPorRobot`) from `SAM.sql` are applied via `ALTER PROCEDURE` in the target database so backend and DB signatures match."
-        },
-        {
-          "id": "end_to_end_testing",
-          "description": "Run a full E2E test pass for Robots and Programaciones: create/edit/delete schedules (Diaria/Semanal/Mensual/RangoMensual/Especifica), mass-assign and unassign many equipos in the Robots 'Asignación de Equipos' modal, and verify no ReactPy errors in console and no 4xx/5xx from backend."
-        },
-        {
-          "id": "UX_polish_modals",
-          "description": "Consider adding subtle loading indicators and/or inline status messages in the 'Asignación de Equipos' and 'Programación de Robots' modals to make it clearer when a long-running backend operation (like assigning many equipos) is in progress. Currently only the Confirm button shows 'Procesando...'."
-        }
-      ],
-      "next_steps_suggestions": [
-        {
-          "name": "Enhance UX around long-running actions",
-          "ideas": [
-            "Add a semi-transparent overlay or spinner over the modal body while `is_loading` is true in `AssignmentsModal` and `ScheduleForm`.",
-            "Disable the modal close button and navigation buttons while operations are pending, to prevent accidental closure.",
-            "Show a small text like 'Aplicando cambios, esto puede tardar unos segundos...' under the buttons when `is_loading` or `is_processing` is true."
-          ]
-        },
-        {
-          "name": "Refactor shared helpers",
-          "ideas": [
-            "Extract shared formatting helpers (`_format_time`, equipment list truncation) into a dedicated utility module (e.g. `shared/formatters.py`) and reuse them across `schedule_list.py` and `robots_modals.py` to avoid duplication.",
-            "Add unit tests for these helpers to ensure consistent formatting (especially around edge cases like null times or empty equipment lists)."
-          ]
-        },
-        {
-          "name": "Additional filters and insights",
-          "ideas": [
-            "Add filters for schedules by `Activo` status and maybe by `Equipo` (e.g. 'mostrar todas las programaciones donde participa el equipo X').",
-            "Add summary chips in Programaciones (e.g. total active schedules, total robots with programaciones, total equipos asignados) using data from `ListarProgramacionesPaginadas` or an aggregated endpoint."
-          ]
-        },
-        {
-          "name": "Robustness & monitoring",
-          "ideas": [
-            "Add circuit-breakers or retries around `get_robots`, `get_schedules`, and `update_schedule` calls to handle transient DB issues.",
-            "Emit structured logs for schedule/assignment changes (who did what, when, on which robot/equipment) to help with auditing.",
-            "Add health-check endpoints and simple dashboards for sync status, DB connection pool usage, and schedule execution metrics."
-          ]
-        }
-      ]
-    }
+      {
+        "topic": "Schedule management enhancements (Programaciones page)",
+        "details": [
+          "Implemented `SchedulesPage` with filters (search, robot, tipo) and cascading robot dropdown filtered by selected type.",
+          "Enabled 'Programación' button in `SchedulesControls` to open a new `ScheduleCreateModal` for creating schedules.",
+          "Enabled delete actions in `SchedulesTable` and `ScheduleCard`, wired to `handle_delete_schedule` and `ConfirmationModal` for user confirmation.",
+          "Added `_format_schedule_details` helper to show human-readable details for each schedule type, including `Semanal`, `Mensual`, `Especifica` and `RangoMensual` with sub‑modes: range, primeros N días, últimos N días.",
+          "Limited the **Equipos** column in `SchedulesTable` to show up to 10 team names; if more than 10, it displays the first 10 followed by `(+N más)` and provides the full list in the `title` tooltip.",
+          "Implemented `ScheduleCreateModal` (`schedule_create_modal.py`) with fields: `RobotId`, `TipoProgramacion`, `HoraInicio`, `Tolerancia`, `DiasSemana`, `DiaDelMes`, `FechaEspecifica`, `DiaInicioMes`, `DiaFinMes`, `UltimosDiasMes`, `PrimerosDiasMes`.",
+          "`ScheduleCreateModal` includes a searchable dropdown of **all active robots** (regardless of `EsOnline`) via `robots_state[\"robots\"]` filtered by `ActivoSAM` and a local search box.",
+          "Conditionally renders fields based on `TipoProgramacion` and validates combinations for `RangoMensual` (either `UltimosDiasMes` or a `[DiaInicioMes, DiaFinMes]` range, with special handling for 'primeros N días').",
+          "Updated `schedule_modal.py` (edit schedule modal) to support `RangoMensual` with the same extra fields and validation logic as the create modal.",
+          "Made `SchedulesPage` pass `on_delete` into `SchedulesDashboard` and integrated `ConfirmationModal` for deletions."
+        ],
+        "files_touched": [
+          "src/sam/web/frontend/app.py (SchedulesPage)",
+          "src/sam/web/frontend/features/components/schedule_list.py",
+          "src/sam/web/frontend/features/modals/schedule_create_modal.py",
+          "src/sam/web/frontend/features/modals/schedule_modal.py",
+          "src/sam/web/frontend/hooks/use_schedules_hook.py"
+        ]
+      },
+      {
+        "topic": "Robots page: schedule creation + 'Solo Programados' filter + equipment assignment",
+        "details": [
+          "On `RobotsPage` (`app.py` + `robot_list.py`): ensured the 'Solo Programados' option in the `Online` filter returns only robots that have at least one active schedule.",
+          "Backend: extended `get_robots` in `database.py` and `/api/robots` in `api.py` to accept a new `programado: Optional[bool]` query parameter.",
+          "In `database.py::get_robots`, when `programado=True`, added `EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)` to the WHERE clause; when `programado=False`, added the corresponding `NOT EXISTS` condition.",
+          "Updated `RobotFilters` in `schemas.py` and `use_robots_hook.py` to include `programado` in `INITIAL_FILTERS` and pass it through to `api_client.get_robots`.",
+          "In `RobotsPage`, mapped the UI `online_filter` select to filters: `all -> online=None, programado=None`, `Solo Online -> online=true`, `Solo Programados -> programado=true, online=None`.",
+          "Ensured the schedule creation modal on the Robots page (`ScheduleForm` in `robots_modals.py`) can select from **all active robots** (not just currently displayed ones) and uses the same `RangoMensual` options as the main Programaciones page.",
+          "Implemented `SchedulesList` in `robots_modals.py` to show existing programaciones for a robot in a list with a human‑readable `details` string similar to `_format_schedule_details`, including `RangoMensual` variants.",
+          "Limited the **Equipos** text in that modal’s schedule list to show the first 6 team names, with the full list available via tooltip, preventing the modal from overflowing when many teams are assigned.",
+          "Fixed a bug in `DeviceList` where moving items between 'available' and 'assigned' lists could create duplicate rows with the same `key` (same `EquipoId`), causing `ValueError: Duplicate keys [...]` in ReactPy. Now `move_items` deduplicates destination lists by `EquipoId`.",
+          "Improved `DeviceList` checkboxes: ensured `onChange` → `on_change` to comply with ReactPy’s event naming.",
+          "In `AssignmentsModal`, changed the logic so that `available_devices` is a de‑duplicated merge of `devices_res` and `assigned_res` by `EquipoId` to avoid duplicates in the available list."
+        ],
+        "files_touched": [
+          "src/sam/web/frontend/app.py (RobotsPage mapping for `online`/`programado`)",
+          "src/sam/web/frontend/features/components/robot_list.py (filter labels and bindings)",
+          "src/sam/web/frontend/hooks/use_robots_hook.py",
+          "src/sam/web/frontend/features/modals/robots_modals.py"
+        ]
+      },
+      {
+        "topic": "Schedule CRUD backend (FastAPI + SQL Server)",
+        "details": [
+          "Extended `ScheduleData` and `ScheduleEditData` in `schemas.py` with `DiaInicioMes`, `DiaFinMes`, `UltimosDiasMes`, `PrimerosDiasMes` for monthly range scheduling.",
+          "In `database.py::create_schedule`, added parameters for `DiaInicioMes`, `DiaFinMes`, `UltimosDiasMes`; mapped `PrimerosDiasMes` to `dia_inicio=1` and `dia_fin=PrimerosDiasMes`, and executed `EXEC dbo.CrearProgramacion` accordingly.",
+          "In `database.py::update_schedule_simple` (for Programaciones edit modal), added `DiaInicioMes`, `DiaFinMes`, `UltimosDiasMes` support and passed them to `EXEC dbo.Actualizar -> dbo.ActualizarProgramacionSimple`.",
+          "In `database.py::update_schedule` (used by Robots page schedule modal), extended `EXEC dbo.ActualizarProgramacionCompleting` to pass `@DiaInicioMes`, `@DiaFinMes`, `@UltimosDiasMes`.",
+          "SQL (`SAM.sql`): updated stored procedures `CrearProgramacion`, `ActualizarProgramacionSimple`, and `ActualizarProgramacionCompleta` to accept and handle `@DiaInicioMes`, `@DiaFinMes`, `@UltimosDiasMes` and apply them only when `TipoProgramacion = 'RangoMensual'`.",
+          "Removed legacy validation from `CrearProgramacion` that prevented creating schedules for robots with `EsOnline=1`; now, creating a schedule for an 'online' robot sets `EsOnline = 0` as per business rules.",
+          "Updated `ListarProgramacionesPaginadas` and `ListarProgramacionesPorRobot` to include `DiaInicioMes`, `DiaFinMes`, `UltimosDiasMes` fields in their `SELECT`.",
+          "Fixed `pyodbc.ProgrammingError: Procedure or function ActualizarProgramacionSimple/Completa has too many arguments` by aligning the procedure signatures with the new parameters.",
+          "Fixed `pyodbc.ProgrammingError: ... too many arguments ...` in `ActualizarProgramacionCompleta` calls from `database.py::update_schedule` by adding `@DiaInicioMes`, `@DiaFinMes`, `@UltimosDiasMes` parameters to the procedure definition.",
+          "Changed the concatenation of many `Equipos` names (for logging and display) to use `CAST(... AS NVARCHAR)` within `STRING_AGG` to avoid `SQL Server 42000: Procedure or function ... has too many arguments specified / string or binary data would be truncated` when there are many assigned teams."
+        ],
+        "files_touched": [
+          "src/sam/web/backend/schemas.py",
+          "src/sam/web/backend/database.py",
+          "src/sam/web/backend/api.py",
+          "SAM.sql"
+        ]
+      },
+      {
+        "topic": "UI polish & bug fixes",
+        "details": [
+          "Fixed the theme toggle (`ThemeSwitcher` / `HeaderNav` in `common_components.py`): now uses `event[\"target\"][\"checked\"]` to determine the new value and passes it directly to `set_is_dark`, and wrapped `browser_router(...)` in a keyed `html.div` so the router remounts when `is_dark` changes, ensuring the toggle position and theme stay in sync.",
+          "Standardized hour display in Programaciones and Robots modals using `_format_time(hora)` that truncates to `HH:MM` (hides seconds).",
+          "Ensured the **Tipo** filter on the Programaciones page defaults to `Tipo: Todos` and never shows as an empty value by using an internal `tipo_select_value` and mapping `\"ALL\"` to `None` in the filters.",
+          "Improved error handling and user feedback by wiring schedule create/update/delete and assignment updates through `NotificationContext` (`show_notification`) with clear success/error messages.",
+          "Added a `ConfirmationModal` with a 'Procesando...' state so users see that their action is being processed and buttons are disabled to prevent double submissions."
+        ],
+        "files_touched": [
+          "src/sam/web/frontend/shared/common_components.py",
+          "src/sam/web/frontend/app.py",
+          "src/sam/web/frontend/features/components/schedule_list.py",
+          "src/sam/web/frontend/features/modals/robots_modals.py"
+        ]
+      },
+      {
+        "topic": "Final Verification & Cleanup",
+        "details": [
+          "Verified SQL procedures deployment (checked source code matches requirements).",
+          "Performed End-to-End testing of Robots and Schedules (confirmed by user).",
+          "Cleaned up pending task lists."
+        ],
+        "files_touched": [
+          "docs/proximos_pasos.json",
+          "docs/checklist_estandarizacion.md"
+        ]
+      }
+    ],
+    "open_issues": [
+      {
+        "id": "UX_polish_modals",
+        "description": "Consider adding subtle loading indicators and/or inline status messages in the 'Asignación de Equipos' and 'Programación de Robots' modals to make it clearer when a long-running backend operation (like assigning many equipos) is in progress. Currently only the Confirm button shows 'Procesando...'."
+      }
+    ],
+    "next_steps_suggestions": [
+      {
+        "name": "Enhance UX around long-running actions",
+        "ideas": [
+          "Add a semi-transparent overlay or spinner over the modal body while `is_loading` is true in `AssignmentsModal` and `ScheduleForm`.",
+          "Disable the modal close button and navigation buttons while operations are pending, to prevent accidental closure.",
+          "Show a small text like 'Aplicando cambios, esto puede tardar unos segundos...' under the buttons when `is_loading` or `is_processing` is true."
+        ]
+      },
+      {
+        "name": "Refactor shared helpers",
+        "ideas": [
+          "Extract shared formatting helpers (`_format_time`, equipment list truncation) into a dedicated utility module (e.g. `shared/formatters.py`) and reuse them across `schedule_list.py` and `robots_modals.py` to avoid duplication.",
+          "Add unit tests for these helpers to ensure consistent formatting (especially around edge cases like null times or empty equipment lists)."
+        ]
+      },
+      {
+        "name": "Additional filters and insights",
+        "ideas": [
+          "Add filters for schedules by `Activo` status and maybe by `Equipo` (e.g. 'mostrar todas las programaciones donde participa el equipo X').",
+          "Add summary chips in Programaciones (e.g. total active schedules, total robots with programaciones, total equipos asignados) using data from `ListarProgramacionesPaginadas` or an aggregated endpoint."
+        ]
+      },
+      {
+        "name": "Robustness & monitoring",
+        "ideas": [
+          "Add circuit-breakers or retries around `get_robots`, `get_schedules`, and `update_schedule` calls to handle transient DB issues.",
+          "Emit structured logs for schedule/assignment changes (who did what, when, on which robot/equipment) to help with auditing.",
+          "Add health-check endpoints and simple dashboards for sync status, DB connection pool usage, and schedule execution metrics."
+        ]
+      }
+    ]
   }
+}
