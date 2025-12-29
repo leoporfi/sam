@@ -27,11 +27,27 @@ class EmailAlertClient:
         self.recipients = config["recipients"]
         self.use_tls = config["use_tls"]
         self.service_name = service_name
+
         # Validar configuración esencial para email
-        if not all([self.smtp_server, self.from_email, self.recipients]):
+        # Verificar que recipients no esté vacío y no contenga solo strings vacíos
+        valid_recipients = [r for r in (self.recipients or []) if r and r.strip()]
+
+        if not all([self.smtp_server, self.from_email, valid_recipients]):
+            missing_parts = []
+            if not self.smtp_server:
+                missing_parts.append("smtp_server")
+            if not self.from_email:
+                missing_parts.append("from_email")
+            if not valid_recipients:
+                missing_parts.append("recipients (vacío o no configurado)")
+
             logger.error(
-                "Configuración de email incompleta (falta smtp_server, from_email o recipients). Las alertas por email podrían no funcionar."
+                f"Configuración de email incompleta: faltan {', '.join(missing_parts)}. "
+                "Las alertas por email NO funcionarán. Configure las variables de entorno: "
+                "EMAIL_SMTP_SERVER, EMAIL_FROM, EMAIL_RECIPIENTS"
             )
+            # Actualizar recipients con la lista validada
+            self.recipients = valid_recipients
             # Podrías levantar un error aquí si el email es crítico
             # raise ValueError("Configuración de email incompleta.")
 
