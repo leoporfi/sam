@@ -29,6 +29,19 @@ from ...shared.styles import (
     TAG,
 )
 
+
+def _to_bool(value: Any) -> bool:
+    """Convierte un valor a booleano, manejando None, 0, 1, True, False, strings."""
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, str)):
+        if isinstance(value, str) and value.isdigit():
+            return bool(int(value))
+        return bool(value)
+    return bool(value)
+
 # Tipos de programación disponibles (se usan en varios lugares)
 SCHEDULE_TYPES = ["Diaria", "Semanal", "Mensual", "RangoMensual", "Especifica"]
 
@@ -184,8 +197,30 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                     html.tr(
                         {"key": s["ProgramacionId"]},
                         html.td(s["RobotNombre"]),
-                        html.td(html.span({"class_name": "tag"}, s["TipoProgramacion"])),
-                        html.td(html.strong(format_time(s["HoraInicio"]))),
+                        html.td(
+                            html.div(
+                                {"style": {"display": "flex", "gap": "0.5rem", "flexWrap": "wrap"}},
+                                html.span({"class_name": "tag"}, s["TipoProgramacion"]),
+                                html.span(
+                                    {
+                                        "class_name": "tag",
+                                        "style": {
+                                            "backgroundColor": "var(--pico-primary-background)",
+                                            "color": "var(--pico-primary-inverse)",
+                                        },
+                                    },
+                                    "Cíclico",
+                                )
+                                if _to_bool(s.get("EsCiclico"))
+                                else None,
+                            )
+                        ),
+                        html.td(
+                        html.strong(
+                            f"{format_time(s['HoraInicio'])}"
+                            + (f" - {format_time(s.get('HoraFin'))}" if _to_bool(s.get("EsCiclico")) and s.get("HoraFin") else "")
+                        )
+                        ),
                         html.td(format_schedule_details(s)),
                         html.td(f"{s['Tolerancia']} min"),
                         html.td(
@@ -260,7 +295,22 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
             html.div(
                 {"style": {"display": "flex", "justifyContent": "space-between", "alignItems": "center"}},
                 html.h5({"style": {"margin": 0}}, schedule["RobotNombre"]),
-                html.span({"class_name": TAG}, schedule["TipoProgramacion"]),
+                html.div(
+                    {"style": {"display": "flex", "gap": "0.5rem", "alignItems": "center"}},
+                    html.span({"class_name": TAG}, schedule["TipoProgramacion"]),
+                    html.span(
+                        {
+                            "class_name": TAG,
+                            "style": {
+                                "backgroundColor": "var(--pico-primary-background)",
+                                "color": "var(--pico-primary-inverse)",
+                            },
+                        },
+                        "Cíclico",
+                    )
+                    if _to_bool(schedule.get("EsCiclico"))
+                    else None,
+                ),
             )
         ),
         html.div(
@@ -271,7 +321,10 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                         "style": {"marginRight": "8px", "color": "var(--pico-muted-color)"},
                     }
                 ),
-                html.strong(format_time(schedule["HoraInicio"])),
+                html.strong(
+                    f"{format_time(schedule['HoraInicio'])}"
+                    + (f" - {format_time(schedule.get('HoraFin'))}" if _to_bool(schedule.get("EsCiclico")) and schedule.get("HoraFin") else "")
+                ),
             ),
             html.p(
                 html.i(

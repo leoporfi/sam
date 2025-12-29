@@ -30,6 +30,10 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
     # Obtenemos el tipo actual para la lógica condicional
     tipo_actual = form_data.get("TipoProgramacion", "Diaria")
 
+    # Estados para controlar la apertura de los acordeones
+    is_general_open, set_general_open = use_state(True)
+    is_cyclic_open, set_cyclic_open = use_state(form_data.get("EsCiclico", False))
+
     def handle_change(field, value):
         """Manejador de cambios que limpia campos al cambiar el tipo."""
         # Aplicar trim automático a campos de texto (excepto números y campos especiales)
@@ -48,231 +52,352 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
             new_form_data["UltimosDiasMes"] = None
             new_form_data["PrimerosDiasMes"] = None
 
+        if field == "EsCiclico" and not value:
+            # Si se desactiva EsCiclico, limpiar campos relacionados
+            new_form_data["HoraFin"] = None
+            new_form_data["FechaInicioVentana"] = None
+            new_form_data["FechaFinVentana"] = None
+            new_form_data["IntervaloEntreEjecuciones"] = None
+
         on_change(new_form_data)
 
     return html.div(
         {"class_name": "full-schedule-edit-form"},
-        # Fila 1: Tipo de Programación
-        html.label(
-            "Tipo de Programación",
-            html.select(
+        # 1. Configuración General
+        html.details(
+            {"open": is_general_open},
+            html.summary(
                 {
-                    "value": tipo_actual,
-                    "on_change": lambda e: handle_change("TipoProgramacion", e["target"]["value"]),
+                    "on_click": lambda e: set_general_open(not is_general_open),
+                    "style": {"fontWeight": "bold", "cursor": "pointer", "marginBottom": "0.5rem"},
                 },
-                html.option({"value": "Diaria"}, "Diaria"),
-                html.option({"value": "Semanal"}, "Semanal"),
-                html.option({"value": "Mensual"}, "Mensual"),
-                html.option({"value": "RangoMensual"}, "Rango Mensual"),
-                html.option({"value": "Especifica"}, "Específica"),
-            ),
-        ),
-        # Fila 2: Hora y Tolerancia (siempre visibles)
-        html.div(
-            {"class_name": "grid"},
-            html.label(
-                "Hora de Inicio (HH:MM)",
-                html.input(
-                    {
-                        "type": "time",
-                        "value": form_data.get("HoraInicio") or "00:00",
-                        "on_change": lambda e: handle_change("HoraInicio", e["target"]["value"]),
-                    }
-                ),
-            ),
-            html.label(
-                "Tolerancia (minutos)",
-                html.input(
-                    {
-                        "type": "number",
-                        "value": form_data.get("Tolerancia") or 30,
-                        "min": 0,
-                        "max": 1440,
-                        "on_change": lambda e: handle_change("Tolerancia", int(e["target"]["value"] or 0)),
-                    }
-                ),
-            ),
-        ),
-        # Fila 3: Campos Condicionales
-        # Si es Semanal
-        html.label(
-            "Días de la Semana (ej. Lu,Ma,Mi,Ju,Vi)",
-            WeekdaySelector(
-                # El valor es el string "Lu,Ma,Vi"
-                value=form_data.get("DiasSemana") or "",
-                # El on_change nos devuelve el nuevo string
-                on_change=lambda new_days_str: handle_change("DiasSemana", new_days_str),
-            ),
-        )
-        if (tipo_actual == "Semanal" and WeekdaySelector)  # Usar solo si se importó con éxito
-        # Fallback al input de texto si WeekdaySelector no se pudo importar
-        else html.label(
-            "Días de la Semana (ej. Lu,Ma,Mi,Ju,Vi)",
-            html.input(
-                {
-                    "type": "text",
-                    "value": form_data.get("DiasSemana") or "",
-                    "placeholder": "Lu,Ma,Mi,Ju,Vi",
-                    "on_change": lambda e: handle_change("DiasSemana", e["target"]["value"]),
-                }
-            ),
-        )
-        if (tipo_actual == "Semanal")
-        else None,
-        # Si es Mensual
-        html.label(
-            "Día del Mes",
-            html.input(
-                {
-                    "type": "number",
-                    "value": form_data.get("DiaDelMes") or 1,
-                    "min": 1,
-                    "max": 31,
-                    "on_change": lambda e: handle_change("DiaDelMes", int(e["target"]["value"] or 1)),
-                }
-            ),
-        )
-        if (tipo_actual == "Mensual")
-        else None,
-        # Si es RangoMensual
-        html.div(
-            {"class_name": "rango-mensual-options"},
-            html.p({"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}}, "Seleccione una opción:"),
-            html.label(
-                html.input(
-                    {
-                        "type": "radio",
-                        "name": "rango-option",
-                        "value": "rango",
-                        "checked": form_data.get("DiaInicioMes") is not None
-                        and form_data.get("DiaFinMes") is not None
-                        and not form_data.get("PrimerosDiasMes")
-                        and not form_data.get("UltimosDiasMes"),
-                        "on_change": lambda e: handle_change("rango_option", "rango"),
-                    }
-                ),
-                " Rango específico (ej: del 1 al 10)",
+                "Configuración General",
             ),
             html.div(
-                {"class_name": "grid", "style": {"display": "flex", "gap": "1rem"}},
+                {"style": {"padding": "1rem 0", "borderTop": "1px solid var(--pico-muted-border-color)"}},
+                # Fila 1: Tipo de Programación
                 html.label(
-                    "Día Inicio",
-                    html.input(
+                    "Tipo de Programación",
+                    html.select(
                         {
-                            "type": "number",
-                            "value": form_data.get("DiaInicioMes") or "",
-                            "min": 1,
-                            "max": 31,
-                            "placeholder": "1",
-                            "on_change": lambda e: handle_change("DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None),
-                        }
+                            "value": tipo_actual,
+                            "on_change": lambda e: handle_change("TipoProgramacion", e["target"]["value"]),
+                        },
+                        html.option({"value": "Diaria"}, "Diaria"),
+                        html.option({"value": "Semanal"}, "Semanal"),
+                        html.option({"value": "Mensual"}, "Mensual"),
+                        html.option({"value": "RangoMensual"}, "Rango Mensual"),
+                        html.option({"value": "Especifica"}, "Específica"),
                     ),
                 ),
-                html.label(
-                    "Día Fin",
-                    html.input(
-                        {
-                            "type": "number",
-                            "value": form_data.get("DiaFinMes") or "",
-                            "min": 1,
-                            "max": 31,
-                            "placeholder": "10",
-                            "on_change": lambda e: handle_change("DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None),
-                        }
+                # Fila 2: Hora y Tolerancia (siempre visibles)
+                html.div(
+                    {"class_name": "grid"},
+                    html.label(
+                        "Hora de Inicio (HH:MM)",
+                        html.input(
+                            {
+                                "type": "time",
+                                "value": form_data.get("HoraInicio") or "00:00",
+                                "on_change": lambda e: handle_change("HoraInicio", e["target"]["value"]),
+                            }
+                        ),
+                    ),
+                    html.label(
+                        "Tolerancia (minutos)",
+                        html.input(
+                            {
+                                "type": "number",
+                                "value": form_data.get("Tolerancia") or 30,
+                                "min": 0,
+                                "max": 1440,
+                                "on_change": lambda e: handle_change("Tolerancia", int(e["target"]["value"] or 0)),
+                            }
+                        ),
                     ),
                 ),
-            )
-            if (
-                form_data.get("rango_option") == "rango"
-                or (
-                    form_data.get("DiaInicioMes") is not None
-                    and form_data.get("DiaFinMes") is not None
-                    and not form_data.get("PrimerosDiasMes")
-                    and not form_data.get("UltimosDiasMes")
+                # Fila 3: Campos Condicionales
+                # Si es Semanal
+                html.label(
+                    "Días de la Semana (ej. Lu,Ma,Mi,Ju,Vi)",
+                    WeekdaySelector(
+                        # El valor es el string "Lu,Ma,Vi"
+                        value=form_data.get("DiasSemana") or "",
+                        # El on_change nos devuelve el nuevo string
+                        on_change=lambda new_days_str: handle_change("DiasSemana", new_days_str),
+                    ),
                 )
-            )
-            else None,
-            html.label(
-                html.input(
-                    {
-                        "type": "radio",
-                        "name": "rango-option",
-                        "value": "primeros",
-                        "checked": form_data.get("PrimerosDiasMes") is not None,
-                        "on_change": lambda e: handle_change("rango_option", "primeros"),
-                    }
+                if (tipo_actual == "Semanal" and WeekdaySelector)  # Usar solo si se importó con éxito
+                # Fallback al input de texto si WeekdaySelector no se pudo importar
+                else html.label(
+                    "Días de la Semana (ej. Lu,Ma,Mi,Ju,Vi)",
+                    html.input(
+                        {
+                            "type": "text",
+                            "value": form_data.get("DiasSemana") or "",
+                            "placeholder": "Lu,Ma,Mi,Ju,Vi",
+                            "on_change": lambda e: handle_change("DiasSemana", e["target"]["value"]),
+                        }
+                    ),
+                )
+                if (tipo_actual == "Semanal")
+                else None,
+                # Si es Mensual
+                html.label(
+                    "Día del Mes",
+                    html.input(
+                        {
+                            "type": "number",
+                            "value": form_data.get("DiaDelMes") or 1,
+                            "min": 1,
+                            "max": 31,
+                            "on_change": lambda e: handle_change("DiaDelMes", int(e["target"]["value"] or 1)),
+                        }
+                    ),
+                )
+                if (tipo_actual == "Mensual")
+                else None,
+                # Si es RangoMensual
+                html.div(
+                    {"class_name": "rango-mensual-options"},
+                    html.p(
+                        {"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}}, "Seleccione una opción:"
+                    ),
+                    html.label(
+                        html.input(
+                            {
+                                "type": "radio",
+                                "name": "rango-option",
+                                "value": "rango",
+                                "checked": form_data.get("DiaInicioMes") is not None
+                                and form_data.get("DiaFinMes") is not None
+                                and not form_data.get("PrimerosDiasMes")
+                                and not form_data.get("UltimosDiasMes"),
+                                "on_change": lambda e: handle_change("rango_option", "rango"),
+                            }
+                        ),
+                        " Rango específico (ej: del 1 al 10)",
+                    ),
+                    html.div(
+                        {"class_name": "grid", "style": {"display": "flex", "gap": "1rem"}},
+                        html.label(
+                            "Día Inicio",
+                            html.input(
+                                {
+                                    "type": "number",
+                                    "value": form_data.get("DiaInicioMes") or "",
+                                    "min": 1,
+                                    "max": 31,
+                                    "placeholder": "1",
+                                    "on_change": lambda e: handle_change(
+                                        "DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                    ),
+                                }
+                            ),
+                        ),
+                        html.label(
+                            "Día Fin",
+                            html.input(
+                                {
+                                    "type": "number",
+                                    "value": form_data.get("DiaFinMes") or "",
+                                    "min": 1,
+                                    "max": 31,
+                                    "placeholder": "10",
+                                    "on_change": lambda e: handle_change(
+                                        "DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                    ),
+                                }
+                            ),
+                        ),
+                    )
+                    if (
+                        form_data.get("rango_option") == "rango"
+                        or (
+                            form_data.get("DiaInicioMes") is not None
+                            and form_data.get("DiaFinMes") is not None
+                            and not form_data.get("PrimerosDiasMes")
+                            and not form_data.get("UltimosDiasMes")
+                        )
+                    )
+                    else None,
+                    html.label(
+                        html.input(
+                            {
+                                "type": "radio",
+                                "name": "rango-option",
+                                "value": "primeros",
+                                "checked": form_data.get("PrimerosDiasMes") is not None,
+                                "on_change": lambda e: handle_change("rango_option", "primeros"),
+                            }
+                        ),
+                        " Primeros N días del mes",
+                    ),
+                    html.label(
+                        "Cantidad de días",
+                        html.input(
+                            {
+                                "type": "number",
+                                "value": form_data.get("PrimerosDiasMes") or "",
+                                "min": 1,
+                                "max": 31,
+                                "placeholder": "10",
+                                "on_change": lambda e: handle_change(
+                                    "PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                ),
+                            }
+                        ),
+                    )
+                    if (form_data.get("rango_option") == "primeros" or form_data.get("PrimerosDiasMes") is not None)
+                    else None,
+                    html.label(
+                        html.input(
+                            {
+                                "type": "radio",
+                                "name": "rango-option",
+                                "value": "ultimos",
+                                "checked": form_data.get("UltimosDiasMes") is not None,
+                                "on_change": lambda e: handle_change("rango_option", "ultimos"),
+                            }
+                        ),
+                        " Últimos N días del mes",
+                    ),
+                    html.label(
+                        "Cantidad de días",
+                        html.input(
+                            {
+                                "type": "number",
+                                "value": form_data.get("UltimosDiasMes") or "",
+                                "min": 1,
+                                "max": 31,
+                                "placeholder": "5",
+                                "on_change": lambda e: handle_change(
+                                    "UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                ),
+                            }
+                        ),
+                    )
+                    if (form_data.get("rango_option") == "ultimos" or form_data.get("UltimosDiasMes") is not None)
+                    else None,
+                )
+                if tipo_actual == "RangoMensual"
+                else None,
+                # Si es Específica
+                html.label(
+                    "Fecha Específica",
+                    html.input(
+                        {
+                            "type": "date",
+                            "value": form_data.get("FechaEspecifica") or "",
+                            "on_change": lambda e: handle_change("FechaEspecifica", e["target"]["value"]),
+                        }
+                    ),
+                )
+                if (tipo_actual == "Especifica")
+                else None,
+                # Fila 4: Toggle de Activo (Mover dentro de Configuración General)
+                html.label(
+                    html.input(
+                        {
+                            "type": "checkbox",
+                            "role": "switch",
+                            "checked": form_data.get("Activo", True),
+                            "on_change": lambda e: handle_change("Activo", e["target"]["checked"]),
+                        }
+                    ),
+                    " Programación Activa",
                 ),
-                " Primeros N días del mes",
             ),
-            html.label(
-                "Cantidad de días",
-                html.input(
-                    {
-                        "type": "number",
-                        "value": form_data.get("PrimerosDiasMes") or "",
-                        "min": 1,
-                        "max": 31,
-                        "placeholder": "10",
-                        "on_change": lambda e: handle_change("PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
-                    }
-                ),
-            )
-            if (form_data.get("rango_option") == "primeros" or form_data.get("PrimerosDiasMes") is not None)
-            else None,
-            html.label(
-                html.input(
-                    {
-                        "type": "radio",
-                        "name": "rango-option",
-                        "value": "ultimos",
-                        "checked": form_data.get("UltimosDiasMes") is not None,
-                        "on_change": lambda e: handle_change("rango_option", "ultimos"),
-                    }
-                ),
-                " Últimos N días del mes",
-            ),
-            html.label(
-                "Cantidad de días",
-                html.input(
-                    {
-                        "type": "number",
-                        "value": form_data.get("UltimosDiasMes") or "",
-                        "min": 1,
-                        "max": 31,
-                        "placeholder": "5",
-                        "on_change": lambda e: handle_change("UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
-                    }
-                ),
-            )
-            if (form_data.get("rango_option") == "ultimos" or form_data.get("UltimosDiasMes") is not None)
-            else None,
-        )
-        if tipo_actual == "RangoMensual"
-        else None,
-        # Si es Específica
-        html.label(
-            "Fecha Específica",
-            html.input(
+        ),
+        # 2. Ejecución Cíclica
+        html.details(
+            {"open": is_cyclic_open},
+            html.summary(
                 {
-                    "type": "date",
-                    "value": form_data.get("FechaEspecifica") or "",
-                    "on_change": lambda e: handle_change("FechaEspecifica", e["target"]["value"]),
-                }
+                    "on_click": lambda e: set_cyclic_open(not is_cyclic_open),
+                    "style": {"fontWeight": "bold", "cursor": "pointer", "marginBottom": "0.5rem"},
+                },
+                "Ejecución Cíclica",
             ),
-        )
-        if (tipo_actual == "Especifica")
-        else None,
-        # Fila 4: Toggle de Activo
-        html.label(
-            html.input(
-                {
-                    "type": "checkbox",
-                    "role": "switch",
-                    "checked": form_data.get("Activo", True),
-                    "on_change": lambda e: handle_change("Activo", e["target"]["checked"]),
-                }
+            html.div(
+                {"style": {"padding": "1rem 0", "borderTop": "1px solid var(--pico-muted-border-color)"}},
+                html.label(
+                    html.input(
+                        {
+                            "type": "checkbox",
+                            "role": "switch",
+                            "checked": form_data.get("EsCiclico", False),
+                            "on_change": lambda e: handle_change("EsCiclico", e["target"]["checked"]),
+                        }
+                    ),
+                    " Robot Cíclico (ejecución continua dentro de ventana)",
+                ),
+                html.div(
+                    {
+                        "style": {
+                            "display": "block" if form_data.get("EsCiclico", False) else "none",
+                            "marginTop": "1rem",
+                        }
+                    },
+                    html.div(
+                        {"class_name": "grid"},
+                        html.label(
+                            "Hora de Fin (HH:MM) *",
+                            html.input(
+                                {
+                                    "type": "time",
+                                    "value": (form_data.get("HoraFin") or "")[:5] if form_data.get("HoraFin") else "",
+                                    "on_change": lambda e: handle_change("HoraFin", e["target"]["value"]),
+                                    "required": form_data.get("EsCiclico", False),
+                                }
+                            ),
+                        ),
+                        html.label(
+                            "Intervalo entre Ejecuciones (minutos) *",
+                            html.input(
+                                {
+                                    "type": "number",
+                                    "value": form_data.get("IntervaloEntreEjecuciones") or "",
+                                    "min": 1,
+                                    "max": 1440,
+                                    "placeholder": "30",
+                                    "on_change": lambda e: handle_change(
+                                        "IntervaloEntreEjecuciones",
+                                        int(e["target"]["value"]) if e["target"]["value"] else None,
+                                    ),
+                                }
+                            ),
+                        ),
+                    ),
+                    html.div(
+                        {"class_name": "grid"},
+                        html.label(
+                            "Fecha Inicio Ventana",
+                            html.input(
+                                {
+                                    "type": "date",
+                                    "value": form_data.get("FechaInicioVentana") or "",
+                                    "on_change": lambda e: handle_change("FechaInicioVentana", e["target"]["value"]),
+                                }
+                            ),
+                        ),
+                        html.label(
+                            "Fecha Fin Ventana",
+                            html.input(
+                                {
+                                    "type": "date",
+                                    "value": form_data.get("FechaFinVentana") or "",
+                                    "on_change": lambda e: handle_change("FechaFinVentana", e["target"]["value"]),
+                                }
+                            ),
+                        ),
+                    ),
+                    html.small(
+                        {"style": {"color": "var(--pico-muted-color)", "fontSize": "0.85em"}},
+                        "💡 Los robots cíclicos se ejecutan continuamente dentro del rango horario y ventana de fechas especificados.",
+                    ),
+                ),
             ),
-            " Programación Activa",
         ),
     )
 
@@ -302,7 +427,30 @@ def ScheduleEditModal(
     def sync_form_state():
         """Asegura que el formulario se resetee cada vez que 'schedule' (la prop) cambia."""
         if schedule:
-            set_form_data(schedule)
+            # Formatear HoraFin si viene como time object
+            formatted_schedule = {**schedule}
+            if formatted_schedule.get("HoraFin"):
+                hora_fin = formatted_schedule["HoraFin"]
+                if hasattr(hora_fin, "strftime"):
+                    # Es un objeto time, convertir a string
+                    formatted_schedule["HoraFin"] = hora_fin.strftime("%H:%M")
+                elif isinstance(hora_fin, str) and len(hora_fin) > 5:
+                    # Es un string con segundos, tomar solo HH:MM
+                    formatted_schedule["HoraFin"] = hora_fin[:5]
+
+            # Asegurar que EsCiclico sea un booleano (puede venir como None, 0, 1, True, False)
+            es_ciclico = formatted_schedule.get("EsCiclico")
+            if es_ciclico is None:
+                formatted_schedule["EsCiclico"] = False
+            elif isinstance(es_ciclico, (int, str)):
+                # Convertir 0/1 o "0"/"1" a booleano
+                formatted_schedule["EsCiclico"] = (
+                    bool(int(es_ciclico)) if str(es_ciclico).isdigit() else bool(es_ciclico)
+                )
+            else:
+                formatted_schedule["EsCiclico"] = bool(es_ciclico)
+
+            set_form_data(formatted_schedule)
 
     def handle_save_click(e):
         """Muestra el diálogo de confirmación"""
@@ -323,9 +471,30 @@ def ScheduleEditModal(
                 has_primeros = form_data.get("PrimerosDiasMes")
                 has_ultimos = form_data.get("UltimosDiasMes")
                 if not (has_rango or has_primeros or has_ultimos):
-                    raise ValueError("Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días.")
+                    raise ValueError(
+                        "Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días."
+                    )
             if tipo == "Especifica" and not form_data.get("FechaEspecifica"):
                 raise ValueError("Para 'Específica', la fecha es obligatoria.")
+
+            # Validaciones para robots cíclicos
+            if form_data.get("EsCiclico"):
+                if not form_data.get("HoraFin"):
+                    raise ValueError("Para robots cíclicos, la hora de fin es obligatoria.")
+
+                hora_inicio = form_data.get("HoraInicio", "00:00")
+                hora_fin = form_data.get("HoraFin")
+                if hora_fin <= hora_inicio:
+                    raise ValueError("La hora de fin debe ser mayor que la hora de inicio.")
+
+                fecha_inicio = form_data.get("FechaInicioVentana")
+                fecha_fin = form_data.get("FechaFinVentana")
+                if fecha_inicio and fecha_fin and fecha_inicio > fecha_fin:
+                    raise ValueError("La fecha de inicio de ventana debe ser menor o igual a la fecha de fin.")
+
+                intervalo = form_data.get("IntervaloEntreEjecuciones")
+                if intervalo and intervalo < 1:
+                    raise ValueError("El intervalo entre ejecuciones debe ser al menos 1 minuto si se especifica.")
 
             await on_save(form_data)
             show_notification("Programación actualizada con éxito.", "success")
@@ -350,9 +519,30 @@ def ScheduleEditModal(
                 has_primeros = form_data.get("PrimerosDiasMes")
                 has_ultimos = form_data.get("UltimosDiasMes")
                 if not (has_rango or has_primeros or has_ultimos):
-                    raise ValueError("Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días.")
+                    raise ValueError(
+                        "Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días."
+                    )
             if tipo == "Especifica" and not form_data.get("FechaEspecifica"):
                 raise ValueError("Para 'Específica', la fecha es obligatoria.")
+
+            # Validaciones para robots cíclicos
+            if form_data.get("EsCiclico"):
+                if not form_data.get("HoraFin"):
+                    raise ValueError("Para robots cíclicos, la hora de fin es obligatoria.")
+
+                hora_inicio = form_data.get("HoraInicio", "00:00")
+                hora_fin = form_data.get("HoraFin")
+                if hora_fin <= hora_inicio:
+                    raise ValueError("La hora de fin debe ser mayor que la hora de inicio.")
+
+                fecha_inicio = form_data.get("FechaInicioVentana")
+                fecha_fin = form_data.get("FechaFinVentana")
+                if fecha_inicio and fecha_fin and fecha_inicio > fecha_fin:
+                    raise ValueError("La fecha de inicio de ventana debe ser menor o igual a la fecha de fin.")
+
+                intervalo = form_data.get("IntervaloEntreEjecuciones")
+                if intervalo and intervalo < 1:
+                    raise ValueError("El intervalo entre ejecuciones debe ser al menos 1 minuto si se especifica.")
 
             # Llamamos a la función 'on_save' (que viene del hook)
             # await on_save(schedule_id, form_data)
@@ -380,7 +570,10 @@ def ScheduleEditModal(
                             "aria-label": "Close",
                             "class_name": "close",
                             "on_click": event(lambda e: on_close(), prevent_default=True),
-                            "style": {"pointerEvents": "none" if is_loading else "auto", "opacity": "0.5" if is_loading else "1"},
+                            "style": {
+                                "pointerEvents": "none" if is_loading else "auto",
+                                "opacity": "0.5" if is_loading else "1",
+                            },
                         }
                     ),
                     html.h3(f"Editar Programación: {schedule.get('RobotNombre', '')}"),
@@ -518,7 +711,9 @@ def DeviceList(title, items, selected_ids_set, handle_selection, handle_select_a
                                 )
                             ),
                             html.td(item["Nombre"]),
-                            html.td(html.span({"class_name": f"tag {get_estado(item)[1]}"}, get_estado(item)[0])) if has_status_column else None,
+                            html.td(html.span({"class_name": f"tag {get_estado(item)[1]}"}, get_estado(item)[0]))
+                            if has_status_column
+                            else None,
                         )
                         for item in filtered_items
                     ]
