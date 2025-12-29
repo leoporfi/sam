@@ -9,9 +9,10 @@ siguiendo el principio de Inyección de Dependencias de la Guía General de SAM.
 import asyncio
 from typing import Any, Callable, Dict, List, Optional
 
-from reactpy import use_callback, use_effect, use_ref, use_state
+from reactpy import use_callback, use_context, use_effect, use_ref, use_state
 
 from ..api.api_client import APIClient, get_api_client
+from ..shared.notifications import NotificationContext
 from ..state.app_context import use_app_context
 
 
@@ -44,12 +45,27 @@ def use_pools_management(api_client: Optional[APIClient] = None) -> Dict[str, An
     except Exception:
         app_context = {}
     
+    notification_ctx = use_context(NotificationContext)
+    show_notification = notification_ctx["show_notification"]
+    
+    # Rastrear si ya se mostró la alerta de fallback (para evitar spam)
+    fallback_alert_shown = use_ref(False)
+    
     # Determinar qué api_client usar (después de llamar todos los hooks)
     if api_client is None:
         api_client = app_context.get("api_client")
         if api_client is None:
             # Fallback a get_api_client() para compatibilidad temporal
             api_client = get_api_client()  # type: ignore
+            
+            # Mostrar alerta solo una vez cuando se detecta el uso del fallback
+            if not fallback_alert_shown.current:
+                fallback_alert_shown.current = True
+                show_notification(
+                    "⚠️ Advertencia: Se está usando fallback a singleton get_api_client(). "
+                    "El contexto de aplicación no está disponible. Esto debería resolverse pronto.",
+                    "warning"
+                )
     
     pools, set_pools = use_state([])
     loading, set_loading = use_state(True)
