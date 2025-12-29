@@ -41,6 +41,12 @@ DEFAULT_FORM_STATE = {
     "DiaFinMes": None,
     "UltimosDiasMes": None,
     "PrimerosDiasMes": None,
+    # Campos para robots cíclicos
+    "EsCiclico": False,
+    "HoraFin": None,
+    "FechaInicioVentana": None,
+    "FechaFinVentana": None,
+    "IntervaloEntreEjecuciones": None,
     "Equipos": [],
 }
 
@@ -142,7 +148,6 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
             # Modo creación: reseteamos explicitamente al estado por defecto
             set_form_data(DEFAULT_ROBOT_STATE)
 
-
     def handle_form_change(field_name, field_value):
         # Aplicar trim automático a campos de texto (excepto números)
         if field_name not in ["RobotId", "MinEquipos", "MaxEquipos", "PrioridadBalanceo", "TicketsPorEquipoAdicional"]:
@@ -150,7 +155,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                 field_value = field_value.strip()
             elif field_value is None:
                 field_value = ""
-        
+
         if field_name in ["RobotId", "MinEquipos", "MaxEquipos", "PrioridadBalanceo", "TicketsPorEquipoAdicional"]:
             try:
                 # Permitir que el campo quede vacío temporalmente durante la edición
@@ -162,6 +167,16 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     async def handle_save(event_data):
         set_is_loading(True)
         try:
+            # Validación Min/Max Equipos
+            min_equipos = form_data.get("MinEquipos")
+            max_equipos = form_data.get("MaxEquipos")
+            if min_equipos is not None and max_equipos is not None:
+                # Si MaxEquipos es -1, se considera ilimitado, por lo que no se valida el tope.
+                if max_equipos != -1 and min_equipos > max_equipos:
+                    show_notification("El valor de Min Equipos no puede ser mayor que Max Equipos.", "error")
+                    set_is_loading(False)
+                    return
+
             if is_edit_mode:
                 # El JSON de parámetros ya está validado por el BotInputEditor
                 parametros_json = form_data.get("Parametros")
@@ -198,6 +213,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     return html.dialog(
         {"open": True if robot is not None else False},
         html.article(
+            {"style": {"position": "relative"}},
             html.script(
                 """
                 (function() {
@@ -338,7 +354,9 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                             "min": "1",
                                             "max": "99",
                                             "value": form_data.get("MinEquipos", 0),
-                                            "on_change": lambda e: handle_form_change("MinEquipos", e["target"]["value"]),
+                                            "on_change": lambda e: handle_form_change(
+                                                "MinEquipos", e["target"]["value"]
+                                            ),
                                             "style": {"flexGrow": "1"},
                                         }
                                     ),
@@ -358,7 +376,9 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                             "min": "-1",
                                             "max": "100",
                                             "value": form_data.get("MaxEquipos", -1),
-                                            "on_change": lambda e: handle_form_change("MaxEquipos", e["target"]["value"]),
+                                            "on_change": lambda e: handle_form_change(
+                                                "MaxEquipos", e["target"]["value"]
+                                            ),
                                             "style": {"flexGrow": "1"},
                                         }
                                     ),
@@ -382,7 +402,9 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                             "max": "100",
                                             "step": "5",
                                             "value": form_data.get("PrioridadBalanceo", 100),
-                                            "on_change": lambda e: handle_form_change("PrioridadBalanceo", e["target"]["value"]),
+                                            "on_change": lambda e: handle_form_change(
+                                                "PrioridadBalanceo", e["target"]["value"]
+                                            ),
                                             "style": {"flexGrow": "1"},
                                         }
                                     ),
@@ -402,7 +424,9 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                             "min": "1",
                                             "max": "100",
                                             "value": form_data.get("TicketsPorEquipoAdicional", 10),
-                                            "on_change": lambda e: handle_form_change("TicketsPorEquipoAdicional", e["target"]["value"]),
+                                            "on_change": lambda e: handle_form_change(
+                                                "TicketsPorEquipoAdicional", e["target"]["value"]
+                                            ),
                                             "style": {"flexGrow": "1"},
                                         }
                                     ),
@@ -438,6 +462,10 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                         ),
                     ),
                 ),
+            ),
+            LoadingOverlay(
+                is_loading=is_loading,
+                message="Guardando cambios..." if is_loading else None,
             ),
             html.footer(
                 html.div(
@@ -550,11 +578,15 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
         return lambda: task.cancel()
 
     filtered_assigned = use_memo(
-        lambda: sort_devices([device for device in assigned_devices if search_assigned.lower() in device.get("Equipo", "").lower()]),
+        lambda: sort_devices(
+            [device for device in assigned_devices if search_assigned.lower() in device.get("Equipo", "").lower()]
+        ),
         [assigned_devices, search_assigned],
     )
     filtered_available = use_memo(
-        lambda: sort_devices([device for device in available_devices if search_available.lower() in device.get("Equipo", "").lower()]),
+        lambda: sort_devices(
+            [device for device in available_devices if search_available.lower() in device.get("Equipo", "").lower()]
+        ),
         [available_devices, search_available],
     )
 
@@ -775,10 +807,47 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
             show_notification("Debe seleccionar al menos un equipo.", "error")
             set_is_loading(False)
             return
+
+        # Validaciones para robots cíclicos
+        if form_data.get("EsCiclico"):
+            if not form_data.get("HoraFin"):
+                show_notification("Para robots cíclicos, la hora de fin es obligatoria.", "error")
+                set_is_loading(False)
+                return
+
+            hora_inicio = form_data.get("HoraInicio", "00:00")
+            hora_fin = form_data.get("HoraFin")
+            if hora_fin <= hora_inicio:
+                show_notification("La hora de fin debe ser mayor que la hora de inicio.", "error")
+                set_is_loading(False)
+                return
+
+            fecha_inicio = form_data.get("FechaInicioVentana")
+            fecha_fin = form_data.get("FechaFinVentana")
+            if fecha_inicio and fecha_fin and fecha_inicio > fecha_fin:
+                show_notification("La fecha de inicio de ventana debe ser menor o igual a la fecha de fin.", "error")
+                set_is_loading(False)
+                return
+
+            intervalo = form_data.get("IntervaloEntreEjecuciones")
+            if intervalo and intervalo < 1:
+                show_notification(
+                    "El intervalo entre ejecuciones debe ser al menos 1 minuto si se especifica.", "error"
+                )
+                set_is_loading(False)
+                return
+
+        # Preparar payload: copiar form_data completo y agregar RobotId
+        # Igual que ScheduleCreateModal que pasa form_data directamente
         payload = {**form_data, "RobotId": robot["RobotId"]}
+
+        # Eliminar ProgramacionId si es creación (no debe estar en el payload de creación)
+        if not payload.get("ProgramacionId"):
+            payload.pop("ProgramacionId", None)
+
         try:
-            if payload.get("ProgramacionId"):
-                await api_service.update_schedule(payload["ProgramacionId"], payload)
+            if form_data.get("ProgramacionId"):
+                await api_service.update_schedule(form_data["ProgramacionId"], payload)
                 message = "Programación actualizada con éxito."
             else:
                 await api_service.create_schedule(payload)
@@ -799,6 +868,23 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     def handle_edit_click(schedule_to_edit):
         assigned_device_names = {device["Equipo"] for device in schedule_to_edit.get("Equipos", [])}
         equipos_ids = [device["EquipoId"] for device in all_robot_devices if device["Equipo"] in assigned_device_names]
+        hora_fin = schedule_to_edit.get("HoraFin")
+        if hora_fin:
+            if hasattr(hora_fin, "strftime"):
+                hora_fin = hora_fin.strftime("%H:%M")
+            elif isinstance(hora_fin, str) and len(hora_fin) > 5:
+                hora_fin = hora_fin[:5]
+
+        # Asegurar que EsCiclico sea un booleano (puede venir como None, 0, 1, True, False)
+        es_ciclico = schedule_to_edit.get("EsCiclico")
+        if es_ciclico is None:
+            es_ciclico = False
+        elif isinstance(es_ciclico, (int, str)):
+            # Convertir 0/1 o "0"/"1" a booleano
+            es_ciclico = bool(int(es_ciclico)) if str(es_ciclico).isdigit() else bool(es_ciclico)
+        else:
+            es_ciclico = bool(es_ciclico)
+
         form_state = {
             "ProgramacionId": schedule_to_edit.get("ProgramacionId"),
             "TipoProgramacion": schedule_to_edit.get("TipoProgramacion", "Diaria"),
@@ -812,6 +898,12 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
             "DiaFinMes": schedule_to_edit.get("DiaFinMes"),
             "UltimosDiasMes": schedule_to_edit.get("UltimosDiasMes"),
             "PrimerosDiasMes": schedule_to_edit.get("PrimerosDiasMes"),
+            # Campos para robots cíclicos
+            "EsCiclico": es_ciclico,
+            "HoraFin": hora_fin,
+            "FechaInicioVentana": schedule_to_edit.get("FechaInicioVentana"),
+            "FechaFinVentana": schedule_to_edit.get("FechaFinVentana"),
+            "IntervaloEntreEjecuciones": schedule_to_edit.get("IntervaloEntreEjecuciones"),
             "Equipos": equipos_ids,
         }
         set_form_data(form_state)
@@ -820,7 +912,14 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
     def handle_form_change(field, value):
         if field == "Equipos":
             value = list(value) if value else []
-        set_form_data(lambda old: {**old, field: value})
+        new_data = {**form_data, field: value}
+        if field == "EsCiclico" and not value:
+            # Si se desactiva EsCiclico, limpiar campos relacionados
+            new_data["HoraFin"] = None
+            new_data["FechaInicioVentana"] = None
+            new_data["FechaFinVentana"] = None
+            new_data["IntervaloEntreEjecuciones"] = None
+        set_form_data(new_data)
 
     def handle_new_click():
         set_form_data(DEFAULT_FORM_STATE.copy())
@@ -970,7 +1069,9 @@ def DeviceList(
                     html.tr(
                         html.th(
                             {"scope": "col", "style": {"width": "40px"}},
-                            html.input({"type": "checkbox", "name": "checkbox-equipos", "on_change": handle_select_all}),
+                            html.input(
+                                {"type": "checkbox", "name": "checkbox-equipos", "on_change": handle_select_all}
+                            ),
                         ),
                         html.th({"scope": "col"}, "Nombre Equipo"),
                         html.th({"scope": "col", "style": {"width": "120px"}}, "Estado") if has_status_column else None,
@@ -985,12 +1086,16 @@ def DeviceList(
                                     {
                                         "type": "checkbox",
                                         "checked": device["EquipoId"] in selected_ids,
-                                        "on_change": lambda e, eid=device["EquipoId"]: handle_select_one(eid, e["target"]["checked"]),
+                                        "on_change": lambda e, eid=device["EquipoId"]: handle_select_one(
+                                            eid, e["target"]["checked"]
+                                        ),
                                     }
                                 )
                             ),
                             html.td(device["Equipo"]),
-                            html.td(html.span({"class_name": f"tag {get_estado(device)[1]}"}, get_estado(device)[0])) if has_status_column else None,
+                            html.td(html.span({"class_name": f"tag {get_estado(device)[1]}"}, get_estado(device)[0]))
+                            if has_status_column
+                            else None,
                         )
                         for device in devices
                     ]
@@ -1089,7 +1194,11 @@ def SchedulesList(
         html.table(
             {"class_name": "compact-schedule-table"},
             html.thead(html.tr(html.th("Detalles"), html.th("Equipos"), html.th("Acciones"))),
-            html.tbody(rows if rows else html.tr(html.td({"colSpan": 3, "style": {"text_align": "center"}}, "No hay programaciones."))),
+            html.tbody(
+                rows
+                if rows
+                else html.tr(html.td({"colSpan": 3, "style": {"text_align": "center"}}, "No hay programaciones."))
+            ),
         ),
         ConfirmationModal(
             is_open=bool(schedule_to_delete),
@@ -1112,9 +1221,17 @@ def ScheduleForm(
 ):
     tipo = form_data.get("TipoProgramacion")
     schedule_options = use_memo(
-        lambda: [html.option({"value": schedule_type, "key": schedule_type}, schedule_type) for schedule_type in SCHEDULE_TYPES],
+        lambda: [
+            html.option({"value": schedule_type, "key": schedule_type}, schedule_type)
+            for schedule_type in SCHEDULE_TYPES
+        ],
         [],
     )
+
+    # Estados para controlar la apertura de los acordeones
+    is_general_open, set_general_open = use_state(True)
+    is_cyclic_open, set_cyclic_open = use_state(form_data.get("EsCiclico", False))
+    is_equipos_open, set_equipos_open = use_state(False)
 
     def handle_form_change(field, value):
         on_change(field, value)
@@ -1122,46 +1239,172 @@ def ScheduleForm(
     def handle_device_change(devices):
         on_change("Equipos", list(devices) if devices else [])
 
+    selected_equipos_count = len(form_data.get("Equipos", []))
+
     return html._(
         html.form(
             {"id": "schedule-form", "onSubmit": event(on_submit, prevent_default=True)},
-            html.label(
-                "Tipo de Programación",
-                html.select(
+            # 1. Configuración General
+            html.details(
+                {"open": is_general_open},
+                html.summary(
                     {
-                        "value": tipo,
-                        "on_change": lambda e: handle_form_change("TipoProgramacion", e["target"]["value"]),
+                        "on_click": lambda e: set_general_open(not is_general_open),
+                        "style": {"fontWeight": "bold", "cursor": "pointer", "marginBottom": "0.5rem"},
                     },
-                    *schedule_options,
+                    "Configuración General",
                 ),
-            ),
-            html.div(
-                {"class_name": "grid"},
-                html.label(
-                    "Hora Inicio",
-                    html.input(
-                        {
-                            "type": "time",
-                            "value": form_data.get("HoraInicio"),
-                            "on_change": lambda e: handle_form_change("HoraInicio", e["target"]["value"]),
-                        }
+                html.div(
+                    {"style": {"padding": "1rem 0", "borderTop": "1px solid var(--pico-muted-border-color)"}},
+                    html.label(
+                        "Tipo de Programación",
+                        html.select(
+                            {
+                                "value": tipo,
+                                "on_change": lambda e: handle_form_change("TipoProgramacion", e["target"]["value"]),
+                            },
+                            *schedule_options,
+                        ),
+                    ),
+                    html.div(
+                        {"class_name": "grid"},
+                        html.label(
+                            "Hora Inicio",
+                            html.input(
+                                {
+                                    "type": "time",
+                                    "value": form_data.get("HoraInicio"),
+                                    "on_change": lambda e: handle_form_change("HoraInicio", e["target"]["value"]),
+                                }
+                            ),
+                        ),
+                        html.label(
+                            "Tolerancia (min)",
+                            html.input(
+                                {
+                                    "type": "number",
+                                    "min": "0",
+                                    "max": "60",
+                                    "value": form_data.get("Tolerancia"),
+                                    "on_change": lambda e: handle_form_change(
+                                        "Tolerancia", int(e["target"]["value"]) if e["target"]["value"] else 0
+                                    ),
+                                }
+                            ),
+                        ),
+                        ConditionalFields(tipo, form_data, handle_form_change),
                     ),
                 ),
-                html.label(
-                    "Tolerancia (min)",
-                    html.input(
+            ),
+            # 2. Ejecución Cíclica
+            html.details(
+                {"open": is_cyclic_open},
+                html.summary(
+                    {
+                        "on_click": lambda e: set_cyclic_open(not is_cyclic_open),
+                        "style": {"fontWeight": "bold", "cursor": "pointer", "marginBottom": "0.5rem"},
+                    },
+                    "Ejecución Cíclica",
+                ),
+                html.div(
+                    {"style": {"padding": "1rem 0", "borderTop": "1px solid var(--pico-muted-border-color)"}},
+                    html.label(
+                        html.input(
+                            {
+                                "type": "checkbox",
+                                "role": "switch",
+                                "checked": form_data.get("EsCiclico", False),
+                                "on_change": lambda e: handle_form_change("EsCiclico", e["target"]["checked"]),
+                            }
+                        ),
+                        " Robot Cíclico (ejecución continua dentro de ventana)",
+                    ),
+                    html.div(
                         {
-                            "type": "number",
-                            "min": "0",
-                            "max": "60",
-                            "value": form_data.get("Tolerancia"),
-                            "on_change": lambda e: handle_form_change("Tolerancia", int(e["target"]["value"]) if e["target"]["value"] else 0),
-                        }
+                            "style": {
+                                "display": "block" if form_data.get("EsCiclico", False) else "none",
+                                "marginTop": "1rem",
+                            }
+                        },
+                        html.div(
+                            {"class_name": "grid"},
+                            html.label(
+                                "Hora de Fin (HH:MM) *",
+                                html.input(
+                                    {
+                                        "type": "time",
+                                        "value": form_data.get("HoraFin") or "",
+                                        "on_change": lambda e: handle_form_change("HoraFin", e["target"]["value"]),
+                                        "required": form_data.get("EsCiclico", False),
+                                    }
+                                ),
+                            ),
+                            html.label(
+                                "Intervalo entre Ejecuciones (minutos) *",
+                                html.input(
+                                    {
+                                        "type": "number",
+                                        "value": form_data.get("IntervaloEntreEjecuciones") or "",
+                                        "min": 1,
+                                        "max": 1440,
+                                        "placeholder": "30",
+                                        "on_change": lambda e: handle_form_change(
+                                            "IntervaloEntreEjecuciones",
+                                            int(e["target"]["value"]) if e["target"]["value"] else None,
+                                        ),
+                                    }
+                                ),
+                            ),
+                        ),
+                        html.div(
+                            {"class_name": "grid"},
+                            html.label(
+                                "Fecha Inicio Ventana",
+                                html.input(
+                                    {
+                                        "type": "date",
+                                        "value": form_data.get("FechaInicioVentana") or "",
+                                        "on_change": lambda e: handle_form_change(
+                                            "FechaInicioVentana", e["target"]["value"]
+                                        ),
+                                    }
+                                ),
+                            ),
+                            html.label(
+                                "Fecha Fin Ventana",
+                                html.input(
+                                    {
+                                        "type": "date",
+                                        "value": form_data.get("FechaFinVentana") or "",
+                                        "on_change": lambda e: handle_form_change(
+                                            "FechaFinVentana", e["target"]["value"]
+                                        ),
+                                    }
+                                ),
+                            ),
+                        ),
+                        html.small(
+                            {"style": {"color": "var(--pico-muted-color)", "fontSize": "0.85em"}},
+                            "💡 Los robots cíclicos se ejecutan continuamente dentro del rango horario y ventana de fechas especificados.",
+                        ),
                     ),
                 ),
-                ConditionalFields(tipo, form_data, handle_form_change),
             ),
-            DeviceSelector(available_devices, form_data.get("Equipos", []), handle_device_change),
+            # 3. Selección de Equipos
+            html.details(
+                {"open": is_equipos_open},
+                html.summary(
+                    {
+                        "on_click": lambda e: set_equipos_open(not is_equipos_open),
+                        "style": {"fontWeight": "bold", "cursor": "pointer", "marginBottom": "0.5rem"},
+                    },
+                    f"Selección de Equipos ({selected_equipos_count})",
+                ),
+                html.div(
+                    {"style": {"padding": "1rem 0", "borderTop": "1px solid var(--pico-muted-border-color)"}},
+                    DeviceSelector(available_devices, form_data.get("Equipos", []), handle_device_change),
+                ),
+            ),
         ),
         html.footer(
             html.div(
@@ -1187,7 +1430,9 @@ def ScheduleForm(
 @component
 def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
     if tipo == "Semanal":
-        return WeekdaySelector(value=form_data.get("DiasSemana", ""), on_change=lambda new_string: on_change("DiasSemana", new_string))
+        return WeekdaySelector(
+            value=form_data.get("DiasSemana", ""), on_change=lambda new_string: on_change("DiasSemana", new_string)
+        )
     elif tipo == "Mensual":
         return html.label(
             "Día del Mes",
@@ -1197,7 +1442,9 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                     "min": 1,
                     "max": 31,
                     "value": form_data.get("DiaDelMes", 1),
-                    "on_change": lambda e: on_change("DiaDelMes", int(e["target"]["value"]) if e["target"]["value"] else 1),
+                    "on_change": lambda e: on_change(
+                        "DiaDelMes", int(e["target"]["value"]) if e["target"]["value"] else 1
+                    ),
                 }
             ),
         )
@@ -1260,7 +1507,9 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                             "max": 31,
                             "value": dia_inicio or "",
                             "placeholder": "1",
-                            "on_change": lambda e: on_change("DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                            "on_change": lambda e: on_change(
+                                "DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                            ),
                         }
                     ),
                 ),
@@ -1273,7 +1522,9 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                             "max": 31,
                             "value": dia_fin or "",
                             "placeholder": "10",
-                            "on_change": lambda e: on_change("DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                            "on_change": lambda e: on_change(
+                                "DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                            ),
                         }
                     ),
                 ),
@@ -1301,7 +1552,9 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                         "max": 31,
                         "value": primeros or (dia_fin if dia_inicio == 1 and dia_fin else ""),
                         "placeholder": "10",
-                        "on_change": lambda e: on_change("PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                        "on_change": lambda e: on_change(
+                            "PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                        ),
                     }
                 ),
             )
@@ -1328,7 +1581,9 @@ def ConditionalFields(tipo: str, form_data: Dict, on_change: Callable):
                         "max": 31,
                         "value": ultimos or "",
                         "placeholder": "5",
-                        "on_change": lambda e: on_change("UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                        "on_change": lambda e: on_change(
+                            "UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                        ),
                     }
                 ),
             )
@@ -1363,7 +1618,9 @@ def DeviceSelector(available_devices: List[Dict], selected_devices: List[int], o
     )
 
     all_filtered_ids = use_memo(lambda: [device["EquipoId"] for device in filtered_devices], [filtered_devices])
-    are_all_devices_selected = len(safe_selected_devices) > 0 and all(item in safe_selected_devices for item in all_filtered_ids)
+    are_all_devices_selected = len(safe_selected_devices) > 0 and all(
+        item in safe_selected_devices for item in all_filtered_ids
+    )
 
     def handle_select_all_devices(event):
         on_change(all_filtered_ids if event["target"]["checked"] else [])
@@ -1418,7 +1675,9 @@ def DeviceSelector(available_devices: List[Dict], selected_devices: List[int], o
                                     {
                                         "type": "checkbox",
                                         "checked": device["EquipoId"] in safe_selected_devices,
-                                        "on_change": lambda e, tid=device["EquipoId"]: handle_device_select(tid, e["target"]["checked"]),
+                                        "on_change": lambda e, tid=device["EquipoId"]: handle_device_select(
+                                            tid, e["target"]["checked"]
+                                        ),
                                     }
                                 )
                             ),
