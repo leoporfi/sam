@@ -272,9 +272,7 @@ def RobotRow(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
                         "checked": robot["EsOnline"],
                         "on_change": event(handle_toggle_online),
                         "disabled": is_programado,  # Deshabilitar si está programado
-                        "title": "No se puede marcar como Online si tiene programaciones"
-                        if is_programado
-                        else "Marcar como Online/Offline",
+                        "title": "No se puede marcar como Online si tiene programaciones" if is_programado else "Marcar como Online/Offline",
                         "aria-label": f"Marcar Online/Offline robot {robot['Robot']}",
                     }
                 )
