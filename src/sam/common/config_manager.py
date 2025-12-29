@@ -74,11 +74,18 @@ class ConfigManager:
     @classmethod
     def get_email_config(cls) -> Dict[str, Any]:
         """Obtiene la configuración de email para alertas."""
+        # Filtrar cadenas vacías de la lista de destinatarios
+        # Soportar tanto comas como punto y coma como delimitadores
+        recipients_raw = cls._get_env_with_warning("EMAIL_RECIPIENTS", "")
+        # Reemplazar punto y coma por coma para normalizar
+        recipients_normalized = recipients_raw.replace(";", ",")
+        recipients = [email.strip() for email in recipients_normalized.split(",") if email.strip()]
+
         return {
             "smtp_server": cls._get_env_with_warning("EMAIL_SMTP_SERVER"),
             "smtp_port": int(cls._get_env_with_warning("EMAIL_SMTP_PORT", 587)),
             "from_email": cls._get_env_with_warning("EMAIL_FROM"),
-            "recipients": [email.strip() for email in cls._get_env_with_warning("EMAIL_RECIPIENTS", "").split(",")],
+            "recipients": recipients,
             "use_tls": cls._get_env_with_warning("EMAIL_USE_TLS", "True").lower() == "true",
             "smtp_user": cls._get_env_with_warning("EMAIL_USER"),
             "smtp_password": cls._get_env_with_warning("EMAIL_PASSWORD"),
