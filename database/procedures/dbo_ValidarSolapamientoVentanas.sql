@@ -1,31 +1,42 @@
 SET ANSI_NULLS ON
+GO
 SET QUOTED_IDENTIFIER ON
+GO
+
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ValidarSolapamientoVentanas]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ValidarSolapamientoVentanas] AS' 
+    EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ValidarSolapamientoVentanas] AS' 
 END
+GO
 
 ALTER PROCEDURE [dbo].[ValidarSolapamientoVentanas]
     @EquipoId INT,
     @HoraInicio TIME,
-    @HoraFin TIME = NULL,
+    @HoraFin TIME = NULL,          -- Si viene NULL, se asume fin del día (Cuidado: esto bloquea todo el día)
     @FechaInicioVentana DATE = NULL,
     @FechaFinVentana DATE = NULL,
-    @DiasSemana NVARCHAR(20) = NULL,
-    @TipoProgramacion NVARCHAR(20),
+    @DiasSemana NVARCHAR(20) = NULL, -- Ej: 'Lu,Ma,Mi'
+    @TipoProgramacion NVARCHAR(20),  -- 'Diaria', 'Semanal', 'Mensual', 'Especifica', 'RangoMensual'
     @DiaDelMes INT = NULL,
     @DiaInicioMes INT = NULL,
     @DiaFinMes INT = NULL,
     @UltimosDiasMes INT = NULL,
-    @ProgramacionId INT = NULL  -- Para excluir en actualizaciones
+    @FechaEspecifica DATE = NULL,
+    @ProgramacionId INT = NULL       -- Para excluirse a sí mismo en caso de actualizaciones (Edit)
 AS
 BEGIN
     SET NOCOUNT ON;
-    
-    -- Si HoraFin es NULL, asumimos que es el final del día (23:59:59)
+
+    ---------------------------------------------------------------------------
+    -- 1. PREPARACIÓN DE DATOS
+    ---------------------------------------------------------------------------
+    -- NOTA: Si @HoraFin es NULL, se asume que el proceso ocupa hasta el final del día.
+    -- Para usar la "Tolerancia", el SP padre (CrearProgramacion) debe sumar 
+    -- la tolerancia a la HoraInicio y pasarla aquí en @HoraFin.
     DECLARE @HoraFinCalculada TIME = ISNULL(@HoraFin, '23:59:59');
-    
-    -- Buscar programaciones activas del mismo equipo que puedan solaparse
+
+    -- Tabla para devolver los conflictos encontrados
+    -- (El SP padre suele capturar esto con INSERT INTO #ConflictosDetectados EXEC...)
     SELECT 
         P.ProgramacionId,
         R.Robot AS RobotNombre,
@@ -44,74 +55,89 @@ BEGIN
             ELSE 'Una vez'
         END AS TipoEjecucion
     FROM dbo.Programaciones P
-    INNER JOIN dbo.Robots R ON P.RobotId = R.RobotId
     INNER JOIN dbo.Asignaciones A ON P.ProgramacionId = A.ProgramacionId
-    WHERE A.EquipoId = @EquipoId
-        AND P.Activo = 1
-        AND (@ProgramacionId IS NULL OR P.ProgramacionId <> @ProgramacionId)
-        -- Validar solapamiento de rango horario
+    INNER JOIN dbo.Robots R ON P.RobotId = R.RobotId
+    WHERE 
+        A.EquipoId = @EquipoId      -- Verificamos solapamiento en el MISMO EQUIPO
+        AND P.Activo = 1            -- Solo contra programaciones activas
+        AND (@ProgramacionId IS NULL OR P.ProgramacionId <> @ProgramacionId) -- Excluirse a sí mismo
+
+        -----------------------------------------------------------------------
+        -- 2. VALIDACIÓN DE FECHAS (VIGENCIA)
+        -----------------------------------------------------------------------
+        -- Verificamos si los rangos de fechas de vigencia se tocan.
+        -- Lógica: (StartA <= EndB) AND (EndA >= StartB)
+        -- Manejamos ISNULL para fechas infinitas (NULL = siempre activo)
         AND (
-            -- Caso 1: HoraInicio nueva está dentro del rango existente
-            (@HoraInicio >= P.HoraInicio AND @HoraInicio <= ISNULL(P.HoraFin, '23:59:59'))
-            OR
-            -- Caso 2: HoraFin nueva está dentro del rango existente
-            (@HoraFinCalculada >= P.HoraInicio AND @HoraFinCalculada <= ISNULL(P.HoraFin, '23:59:59'))
-            OR
-            -- Caso 3: El rango nuevo contiene completamente el rango existente
-            (@HoraInicio <= P.HoraInicio AND @HoraFinCalculada >= ISNULL(P.HoraFin, '23:59:59'))
+            (@FechaInicioVentana IS NULL OR P.FechaFinVentana IS NULL OR @FechaInicioVentana <= P.FechaFinVentana)
+            AND 
+            (@FechaFinVentana IS NULL OR P.FechaInicioVentana IS NULL OR @FechaFinVentana >= P.FechaInicioVentana)
         )
-        -- Validar solapamiento de fechas (si ambas tienen ventanas de fecha)
+
+        -----------------------------------------------------------------------
+        -- 3. VALIDACIÓN DE HORARIOS (TIEMPO)
+        -----------------------------------------------------------------------
+        -- Verificamos intersección de horas en el día.
+        -- Lógica: (StartA < EndB) AND (EndA > StartB)
         AND (
-            (@FechaInicioVentana IS NULL AND @FechaFinVentana IS NULL)
-            OR
-            (P.FechaInicioVentana IS NULL AND P.FechaFinVentana IS NULL)
-            OR
-            (@FechaInicioVentana IS NOT NULL AND @FechaFinVentana IS NOT NULL 
-             AND P.FechaInicioVentana IS NOT NULL AND P.FechaFinVentana IS NOT NULL
-             AND NOT (@FechaFinVentana < P.FechaInicioVentana OR @FechaInicioVentana > P.FechaFinVentana))
+            @HoraInicio < ISNULL(P.HoraFin, '23:59:59') 
+            AND 
+            @HoraFinCalculada > P.HoraInicio
         )
-        -- Validar solapamiento según tipo de programación
+
+        -----------------------------------------------------------------------
+        -- 4. VALIDACIÓN DE TIPOS Y PATRONES (LÓGICA CRUZADA MEJORADA)
+        -----------------------------------------------------------------------
         AND (
-            -- Diaria: siempre se solapa si el rango horario coincide
-            (@TipoProgramacion = 'Diaria' AND P.TipoProgramacion = 'Diaria')
+            -- CASO A: CRUCES DIRECTOS (Cualquier cosa 'Diaria' choca con todo)
+            (@TipoProgramacion = 'Diaria' OR P.TipoProgramacion = 'Diaria')
+            
             OR
-            -- Semanal: verificar días de la semana
+
+            -- CASO B: SEMANAL vs SEMANAL (Coincidencia de días)
             (@TipoProgramacion = 'Semanal' AND P.TipoProgramacion = 'Semanal'
-             AND (@DiasSemana IS NULL OR P.DiasSemana IS NULL 
-                  OR EXISTS (SELECT 1 FROM STRING_SPLIT(@DiasSemana, ',') s1
-                            CROSS JOIN STRING_SPLIT(P.DiasSemana, ',') s2
-                            WHERE LTRIM(RTRIM(s1.value)) = LTRIM(RTRIM(s2.value))))
+             AND EXISTS (
+                SELECT 1 
+                FROM STRING_SPLIT(@DiasSemana, ',') s1
+                JOIN STRING_SPLIT(P.DiasSemana, ',') s2 ON s1.value = s2.value
+             )
             )
+
             OR
-            -- Mensual: verificar día del mes
-            (@TipoProgramacion = 'Mensual' AND P.TipoProgramacion = 'Mensual'
-             AND (@DiaDelMes IS NULL OR P.DiaDelMes IS NULL OR @DiaDelMes = P.DiaDelMes))
+
+            -- CASO C: MENSUAL vs MENSUAL (Mismo día del mes)
+            (@TipoProgramacion = 'Mensual' AND P.TipoProgramacion = 'Mensual' 
+             AND @DiaDelMes = P.DiaDelMes)
+
             OR
-            -- RangoMensual: verificar rangos
+
+            -- CASO D: RANGO MENSUAL (Complejo: Solapamiento de rangos de días)
             (@TipoProgramacion = 'RangoMensual' AND P.TipoProgramacion = 'RangoMensual'
              AND (
-                 -- Solapamiento de rangos
+                 -- Solapamiento de días numéricos (ej. 1 al 15 vs 10 al 20)
                  (@DiaInicioMes IS NOT NULL AND @DiaFinMes IS NOT NULL
                   AND P.DiaInicioMes IS NOT NULL AND P.DiaFinMes IS NOT NULL
                   AND NOT (@DiaFinMes < P.DiaInicioMes OR @DiaInicioMes > P.DiaFinMes))
                  OR
-                 -- Solapamiento con últimos días
+                 -- Solapamiento con "Ultimos días" (simplificado: asume conflicto si ambos existen)
                  (@UltimosDiasMes IS NOT NULL AND P.UltimosDiasMes IS NOT NULL)
-                 OR
-                 -- Rango vs últimos días (simplificado: siempre conflicto potencial)
-                 ((@DiaInicioMes IS NOT NULL OR @DiaFinMes IS NOT NULL) 
-                  AND P.UltimosDiasMes IS NOT NULL)
-                 OR
-                 (@UltimosDiasMes IS NOT NULL 
-                  AND (P.DiaInicioMes IS NOT NULL OR P.DiaFinMes IS NOT NULL))
              )
             )
-            OR
-            -- Específica: verificar fecha específica
-            (@TipoProgramacion = 'Especifica' AND P.TipoProgramacion = 'Especifica'
-             AND P.FechaEspecifica IS NOT NULL
-             AND (@FechaInicioVentana IS NULL OR P.FechaEspecifica BETWEEN @FechaInicioVentana AND ISNULL(@FechaFinVentana, P.FechaEspecifica)))
-        )
-    ORDER BY R.Robot, P.HoraInicio;
-END
 
+            OR 
+
+            -- CASO E: ESPECÍFICA (Una sola fecha)
+            -- Si la nueva es específica, validamos si su fecha cae dentro de la ventana de la existente
+            (@TipoProgramacion = 'Especifica' AND P.TipoProgramacion = 'Especifica'
+             AND P.FechaEspecifica = @FechaEspecifica
+            )
+            
+            -- NOTA: Faltaría validar cruces híbridos complejos (ej. Semanal vs Especifica).
+            -- Actualmente, si tienes Semanal (Lunes) y una Especifica (un Lunes concreto),
+            -- este bloque NO lo detecta a menos que agregues lógica de calendario.
+            -- Por seguridad, se recomienda que 'Diaria' sea la única que bloquee transversalmente
+            -- o asumir que el usuario gestiona las excepciones manualmente.
+        );
+
+END
+GO
