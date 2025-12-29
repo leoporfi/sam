@@ -73,14 +73,17 @@ class Desplegador:
             return
 
         # Bot input por defecto (valor de configuración)
-        default_bot_input = {"in_NumRepeticion": {"type": "NUMBER", "number": str(self._cfg_lanzador.get("repeticiones", 1))}}
+        default_bot_input = {
+            "in_NumRepeticion": {"type": "NUMBER", "number": str(self._cfg_lanzador.get("repeticiones", 1))}
+        }
         max_workers = self._cfg_lanzador.get("max_workers_lanzador", 10)
         auth_headers = await self._preparar_cabeceras_callback()
 
         logger.info(f"{len(robots_a_ejecutar)} robots encontrados. Desplegando en paralelo (límite: {max_workers})...")
 
         tasks = [
-            asyncio.create_task(self._desplegar_y_registrar_robot(robot_info, default_bot_input, auth_headers)) for robot_info in robots_a_ejecutar
+            asyncio.create_task(self._desplegar_y_registrar_robot(robot_info, default_bot_input, auth_headers))
+            for robot_info in robots_a_ejecutar
         ]
 
         successful_deploys = 0
@@ -122,10 +125,14 @@ class Desplegador:
             logger.debug(f"Robot {robot_id} usando parámetros por defecto")
             return default_bot_input
         except Exception as e:
-            logger.error(f"Error al obtener parámetros del Robot {robot_id}: {e}. Usando valor por defecto.", exc_info=True)
+            logger.error(
+                f"Error al obtener parámetros del Robot {robot_id}: {e}. Usando valor por defecto.", exc_info=True
+            )
             return default_bot_input
 
-    async def _desplegar_y_registrar_robot(self, robot_info: dict, default_bot_input: dict, cabeceras_callback: dict) -> Dict[str, Any]:
+    async def _desplegar_y_registrar_robot(
+        self, robot_info: dict, default_bot_input: dict, cabeceras_callback: dict
+    ) -> Dict[str, Any]:
         """
         Intenta desplegar un robot, manejando errores 412 con reintentos
         y errores 400 como permanentes + alerta.
@@ -163,7 +170,9 @@ class Desplegador:
                 deployment_id = deployment_result["deploymentId"]
 
                 # 2. ÉXITO - Registrar en BD
-                logger.debug(f"Robot {robot_id} desplegado con ID: {deployment_id} en Equipo {equipo_id} (Intento {intento}/{max_intentos})")
+                logger.debug(
+                    f"Robot {robot_id} desplegado con ID: {deployment_id} en Equipo {equipo_id} (Intento {intento}/{max_intentos})"
+                )
 
                 self._db_connector.insertar_registro_ejecucion(
                     id_despliegue=deployment_id,
@@ -183,12 +192,12 @@ class Desplegador:
 
                 if status_code == 412:
                     detected_error_type = "412"
-                    
+
                     # Verificar si es un error del robot (no compatible targets)
                     # Este error indica un problema con el robot, no con el device
                     is_robot_error = False
                     error_message_lower = response_text_full.lower()
-                    
+
                     # Buscar el mensaje de error en el texto (puede venir en JSON o texto plano)
                     error_message_to_check = error_message_lower
                     try:
@@ -199,12 +208,12 @@ class Desplegador:
                     except (json.JSONDecodeError, TypeError):
                         # Si no es JSON, usar el texto completo
                         pass
-                    
+
                     # Verificar si contiene el mensaje de error de targets no compatibles
                     if "no compatible targets found in automation" in error_message_to_check:
                         is_robot_error = True
                         detected_error_type = "412_robot_error"  # Marcar como error del robot
-                        
+
                         # Enviar email inmediatamente con el mensaje de error completo
                         logger.error(
                             f"Error 412 - Problema con Robot {robot_id} (no es problema del device). "
@@ -225,10 +234,10 @@ class Desplegador:
                             )
                         except Exception as mail_e:
                             logger.error(f"Fallo al enviar alerta de error de robot: {mail_e}")
-                        
+
                         # No reintentar, es un error permanente del robot
                         break
-                    
+
                     # Si no es error del robot, tratarlo como error temporal (Device Offline)
                     if not is_robot_error:
                         if intento < max_intentos:
@@ -245,43 +254,83 @@ class Desplegador:
                             break
                 elif status_code == 400:
                     detected_error_type = "400"
-                    # ERROR PERMANENTE (Bad Request)
-                    logger.warning(
-                        f"Error 400 PERMANENTE Robot {robot_id} Equipo {equipo_id} Usuario {user_id}. Revise configuración. Error: {response_text}"
-                    )
 
-                    # Solo alertar la primera vez por equipo
-                    equipo_alertado_key = f"400_{equipo_id}"
-                    if equipo_alertado_key not in self._equipos_alertados_400:
-                        logger.debug(f"Intentando enviar alerta para error 400 en equipo {equipo_id}")
-                        try:
-                            self._notificador.send_alert(
-                                subject=f"[SAM CRÍTICO] Error 400 Equipo {equipo_id}",
-                                message=(
-                                    f"Error de Configuración (400 Bad Request) al desplegar:\n\n"
-                                    f"• RobotId: {robot_id}\n"
-                                    f"• EquipoId: {equipo_id}\n"
-                                    f"• UserId: {user_id}\n\n"
-                                    f"Causa: {response_text}\n\n"
-                                    f"Acción requerida: Verificar permisos, licencias o existencia del bot en A360."
-                                ),
+                    # Verificar si es un error temporal de dispositivo offline
+                    is_device_offline = False
+                    error_message_lower = response_text_full.lower()
+
+                    # Patrones que indican que el dispositivo está offline (error temporal)
+                    device_offline_patterns = [
+                        "are not active",
+                        "not connected",
+                        "device is offline",
+                        "device(s) are not active",
+                        "device(s) not connected",
+                    ]
+
+                    for pattern in device_offline_patterns:
+                        if pattern in error_message_lower:
+                            is_device_offline = True
+                            break
+
+                    if is_device_offline:
+                        # ERROR TEMPORAL - Dispositivo offline, reintentar
+                        detected_error_type = "400_device_offline"
+
+                        if intento < max_intentos:
+                            logger.warning(
+                                f"Error 400 (Device Offline) Robot {robot_id} Equipo {equipo_id}. "
+                                f"Reintentando ({intento + 1}/{max_intentos}) en {delay_seg}s... "
+                                f"Error: {response_text}"
                             )
-                            self._equipos_alertados_400.add(equipo_alertado_key)
-                        except Exception as mail_e:
-                            logger.error(f"Fallo al enviar alerta: {mail_e}")
-
-                    # Desactivar asignación problemática
-                    try:
-                        self._db_connector.ejecutar_consulta(
-                            "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ?",
-                            (robot_id, equipo_id),
-                            es_select=False,
+                            await asyncio.sleep(delay_seg)
+                            continue
+                        else:
+                            logger.warning(
+                                f"Error 400 persistente (Device Offline) Robot {robot_id} Equipo {equipo_id} "
+                                f"después de {max_intentos} intentos. Dispositivo no disponible."
+                            )
+                            # No desasignar, solo reportar el fallo
+                            break
+                    else:
+                        # ERROR PERMANENTE (Bad Request de configuración)
+                        logger.warning(
+                            f"Error 400 PERMANENTE Robot {robot_id} Equipo {equipo_id} Usuario {user_id}. "
+                            f"Revise configuración. Error: {response_text}"
                         )
-                        logger.debug(f"Asignación desactivada: Robot {robot_id} - Equipo {equipo_id}")
-                    except Exception as db_e:
-                        logger.error(f"Error al desactivar asignación: {db_e}")
 
-                    break
+                        # Solo alertar la primera vez por equipo
+                        equipo_alertado_key = f"400_{equipo_id}"
+                        if equipo_alertado_key not in self._equipos_alertados_400:
+                            logger.debug(f"Intentando enviar alerta para error 400 en equipo {equipo_id}")
+                            try:
+                                self._notificador.send_alert(
+                                    subject=f"[SAM CRÍTICO] Error 400 Equipo {equipo_id}",
+                                    message=(
+                                        f"Error de Configuración (400 Bad Request) al desplegar:\n\n"
+                                        f"• RobotId: {robot_id}\n"
+                                        f"• EquipoId: {equipo_id}\n"
+                                        f"• UserId: {user_id}\n\n"
+                                        f"Causa: {response_text}\n\n"
+                                        f"Acción requerida: Verificar permisos, licencias o existencia del bot en A360."
+                                    ),
+                                )
+                                self._equipos_alertados_400.add(equipo_alertado_key)
+                            except Exception as mail_e:
+                                logger.error(f"Fallo al enviar alerta: {mail_e}")
+
+                        # Desactivar asignación problemática
+                        try:
+                            self._db_connector.ejecutar_consulta(
+                                "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ?",
+                                (robot_id, equipo_id),
+                                es_select=False,
+                            )
+                            logger.debug(f"Asignación desactivada: Robot {robot_id} - Equipo {equipo_id}")
+                        except Exception as db_e:
+                            logger.error(f"Error al desactivar asignación: {db_e}")
+
+                        break
 
                 else:
                     # OTROS ERRORES HTTP
