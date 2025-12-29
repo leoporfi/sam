@@ -42,6 +42,7 @@ def _to_bool(value: Any) -> bool:
         return bool(value)
     return bool(value)
 
+
 # Tipos de programación disponibles (se usan en varios lugares)
 SCHEDULE_TYPES = ["Diaria", "Semanal", "Mensual", "RangoMensual", "Especifica"]
 
@@ -216,10 +217,10 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                             )
                         ),
                         html.td(
-                        html.strong(
-                            f"{format_time(s['HoraInicio'])}"
-                            + (f" - {format_time(s.get('HoraFin'))}" if _to_bool(s.get("EsCiclico")) and s.get("HoraFin") else "")
-                        )
+                            html.strong(
+                                f"{format_time(s['HoraInicio'])}"
+                                + (f" - {format_time(s.get('HoraFin'))}" if _to_bool(s.get("EsCiclico")) and s.get("HoraFin") else "")
+                            )
                         ),
                         html.td(format_schedule_details(s)),
                         html.td(f"{s['Tolerancia']} min"),

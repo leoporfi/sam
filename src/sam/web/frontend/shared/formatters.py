@@ -96,7 +96,7 @@ def format_schedule_details(schedule: Dict) -> str:
     """
     t = schedule.get("TipoProgramacion", "")
     detalles = []
-    
+
     # Información básica según tipo
     if t == "Semanal":
         detalles.append(schedule.get("DiasSemana") or "-")
@@ -124,7 +124,7 @@ def format_schedule_details(schedule: Dict) -> str:
         detalles.append(schedule.get("FechaEspecifica") or "-")
     else:
         detalles.append("-")  # Diaria no tiene detalles específicos aparte de la hora
-    
+
     # Información adicional para robots cíclicos
     # Asegurar que EsCiclico sea un booleano (puede venir como None, 0, 1, True, False)
     es_ciclico = schedule.get("EsCiclico")
@@ -134,7 +134,7 @@ def format_schedule_details(schedule: Dict) -> str:
         es_ciclico = bool(int(es_ciclico)) if str(es_ciclico).isdigit() else bool(es_ciclico)
     else:
         es_ciclico = bool(es_ciclico)
-    
+
     if es_ciclico:
         ciclico_info = []
         hora_fin = schedule.get("HoraFin")
@@ -142,11 +142,11 @@ def format_schedule_details(schedule: Dict) -> str:
             hora_fin_str = format_time(hora_fin)
             hora_inicio = format_time(schedule.get("HoraInicio"))
             ciclico_info.append(f"{hora_inicio}-{hora_fin_str}")
-        
+
         intervalo = schedule.get("IntervaloEntreEjecuciones")
         if intervalo:
             ciclico_info.append(f"Cada {intervalo} min")
-        
+
         fecha_inicio = schedule.get("FechaInicioVentana")
         fecha_fin = schedule.get("FechaFinVentana")
         if fecha_inicio and fecha_fin:
@@ -155,8 +155,8 @@ def format_schedule_details(schedule: Dict) -> str:
             ciclico_info.append(f"Desde {fecha_inicio}")
         elif fecha_fin:
             ciclico_info.append(f"Hasta {fecha_fin}")
-        
+
         if ciclico_info:
             detalles.append(f"[Cíclico: {', '.join(ciclico_info)}]")
-    
+
     return " | ".join(detalles) if detalles else "-"
