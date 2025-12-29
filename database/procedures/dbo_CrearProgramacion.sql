@@ -1,9 +1,12 @@
 SET ANSI_NULLS ON
+GO
 SET QUOTED_IDENTIFIER ON
+GO
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[CrearProgramacion]') AND type in (N'P', N'PC'))
 BEGIN
 EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CrearProgramacion] AS' 
 END
+GO
 
 ALTER PROCEDURE [dbo].[CrearProgramacion]
     @Robot NVARCHAR(100),
@@ -36,12 +39,28 @@ BEGIN
     DECLARE @ErrorState INT;
     DECLARE @EquipoIdActual INT;
     DECLARE @ConflictosCount INT = 0;
+    
+    -- Variables para cálculo de HoraFin (fuera del loop)
+    DECLARE @FechaBase DATETIME;
+    DECLARE @InicioFull DATETIME;
+    DECLARE @FinFull DATETIME;
+    DECLARE @HoraFinCalculada TIME;
 
     CREATE TABLE #EquiposAProgramar (EquipoId INT PRIMARY KEY);
     CREATE TABLE #ConflictosDetectados (
         EquipoId INT,
-        RobotNombre NVARCHAR(100),
         ProgramacionId INT,
+        RobotNombre NVARCHAR(100),
+        TipoProgramacion NVARCHAR(20),
+        HoraInicio TIME,
+        HoraFin TIME,
+        FechaInicioVentana DATE,
+        FechaFinVentana DATE,
+        DiasSemana NVARCHAR(20),
+        DiaDelMes INT,
+        DiaInicioMes INT,
+        DiaFinMes INT,
+        UltimosDiasMes INT,
         TipoEjecucion NVARCHAR(20)
     );
 
@@ -97,6 +116,33 @@ BEGIN
         JOIN dbo.Equipos E ON LTRIM(RTRIM(S.value)) = E.Equipo
         WHERE E.Activo_SAM = 1;
 
+        -------------------------------------------------------------------------
+        -- CÁLCULO DE @HoraFin UNA SOLA VEZ (ANTES DEL CURSOR)
+        -------------------------------------------------------------------------
+        -- Preservar el valor original de @HoraFin
+        SET @HoraFinCalculada = @HoraFin;
+        
+        -- Si no se especificó HoraFin, calcularla usando la Tolerancia
+        IF @HoraFinCalculada IS NULL AND @Tolerancia IS NOT NULL AND @Tolerancia > 0
+        BEGIN
+            -- Calculamos la fecha-hora completa temporalmente
+            SET @FechaBase = CAST(GETDATE() AS DATE); -- Solo referencia
+            SET @InicioFull = DATEADD(MINUTE, DATEDIFF(MINUTE, 0, @HoraInicio), @FechaBase);
+            SET @FinFull = DATEADD(MINUTE, @Tolerancia, @InicioFull);
+
+            -- Si al sumar minutos cambiamos de día, topeamos a medianoche
+            IF CAST(@FinFull AS DATE) > CAST(@InicioFull AS DATE)
+            BEGIN
+                SET @HoraFinCalculada = '23:59:59';
+            END
+            ELSE
+            BEGIN
+                -- Si sigue en el mismo día, tomamos la hora calculada
+                SET @HoraFinCalculada = CAST(@FinFull AS TIME);
+            END
+        END
+        -------------------------------------------------------------------------
+
         -- VALIDAR SOLAPAMIENTOS para cada equipo
         DECLARE equipo_cursor CURSOR FOR
         SELECT EquipoId FROM #EquiposAProgramar;
@@ -106,36 +152,12 @@ BEGIN
 
         WHILE @@FETCH_STATUS = 0
         BEGIN
-            -------------------------------------------------------------------------
-            -- LOGICA NUEVA: Usar Tolerancia como Duración Estimada si no hay HoraFin
-            -------------------------------------------------------------------------
-            -- Lógica de Tolerancia con "Tope" a medianoche
-            IF @HoraFin IS NULL AND @Tolerancia IS NOT NULL AND @Tolerancia > 0
-            BEGIN
-                -- Calculamos la fecha-hora completa temporalmente
-                DECLARE @FechaBase DATETIME = CAST(GETDATE() AS DATE); -- Solo referencia
-                DECLARE @InicioFull DATETIME = DATEADD(MINUTE, DATEDIFF(MINUTE, 0, @HoraInicio), @FechaBase);
-                DECLARE @FinFull DATETIME = DATEADD(MINUTE, @Tolerancia, @InicioFull);
-
-                -- Si al sumar minutos cambiamos de día...
-                IF CAST(@FinFull AS DATE) > CAST(@InicioFull AS DATE)
-                BEGIN
-                    -- ... topeamos a las 23:59:59.9999999
-                    SET @HoraFin = '23:59:59';
-                END
-                ELSE
-                BEGIN
-                    -- Si sigue en el mismo día, tomamos la hora calculada
-                    SET @HoraFin = CAST(@FinFull AS TIME);
-                END
-            END
-            -------------------------------------------------------------------------
             -- Verificar solapamientos usando el SP de validación
-            INSERT INTO #ConflictosDetectados (EquipoId, RobotNombre, ProgramacionId, TipoEjecucion)
+            INSERT INTO #ConflictosDetectados
             EXEC dbo.ValidarSolapamientoVentanas
                 @EquipoId = @EquipoIdActual,
                 @HoraInicio = @HoraInicio,
-                @HoraFin = @HoraFin,
+                @HoraFin = @HoraFinCalculada,
                 @FechaInicioVentana = @FechaInicioVentana,
                 @FechaFinVentana = @FechaFinVentana,
                 @DiasSemana = @DiasSemana,
@@ -167,7 +189,10 @@ BEGIN
                 '  - EquipoId: ' + CAST(EquipoId AS NVARCHAR(10)) + 
                 ', Robot: ' + RobotNombre + 
                 ', ProgramaciónId: ' + CAST(ProgramacionId AS NVARCHAR(10)) + 
-                ', Tipo: ' + TipoEjecucion + CHAR(13) + CHAR(10)
+                ', Tipo: ' + TipoEjecucion + 
+                ', Horario: ' + CONVERT(NVARCHAR(8), HoraInicio, 108) + ' - ' + CONVERT(NVARCHAR(8), HoraFin, 108) +
+                CASE WHEN DiasSemana IS NOT NULL THEN ', Días: ' + DiasSemana ELSE '' END +
+                CHAR(13) + CHAR(10)
             FROM #ConflictosDetectados;
             
             RAISERROR(@MensajeConflictos, 16, 1);
@@ -246,4 +271,3 @@ BEGIN
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END
-

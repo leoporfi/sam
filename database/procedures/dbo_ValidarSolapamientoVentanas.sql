@@ -12,17 +12,17 @@ GO
 ALTER PROCEDURE [dbo].[ValidarSolapamientoVentanas]
     @EquipoId INT,
     @HoraInicio TIME,
-    @HoraFin TIME = NULL,          -- Si viene NULL, se asume fin del día (Cuidado: esto bloquea todo el día)
+    @HoraFin TIME = NULL,
     @FechaInicioVentana DATE = NULL,
     @FechaFinVentana DATE = NULL,
-    @DiasSemana NVARCHAR(20) = NULL, -- Ej: 'Lu,Ma,Mi'
-    @TipoProgramacion NVARCHAR(20),  -- 'Diaria', 'Semanal', 'Mensual', 'Especifica', 'RangoMensual'
+    @DiasSemana NVARCHAR(20) = NULL,
+    @TipoProgramacion NVARCHAR(20),
     @DiaDelMes INT = NULL,
     @DiaInicioMes INT = NULL,
     @DiaFinMes INT = NULL,
     @UltimosDiasMes INT = NULL,
     @FechaEspecifica DATE = NULL,
-    @ProgramacionId INT = NULL       -- Para excluirse a sí mismo en caso de actualizaciones (Edit)
+    @ProgramacionId INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -31,13 +31,17 @@ BEGIN
     -- 1. PREPARACIÓN DE DATOS
     ---------------------------------------------------------------------------
     -- NOTA: Si @HoraFin es NULL, se asume que el proceso ocupa hasta el final del día.
-    -- Para usar la "Tolerancia", el SP padre (CrearProgramacion) debe sumar 
-    -- la tolerancia a la HoraInicio y pasarla aquí en @HoraFin.
+    -- El SP padre (CrearProgramacion) debe calcular @HoraFin usando la Tolerancia
+    -- antes de llamar a este procedimiento.
     DECLARE @HoraFinCalculada TIME = ISNULL(@HoraFin, '23:59:59');
 
-    -- Tabla para devolver los conflictos encontrados
-    -- (El SP padre suele capturar esto con INSERT INTO #ConflictosDetectados EXEC...)
+    ---------------------------------------------------------------------------
+    -- 2. BUSCAR CONFLICTOS
+    ---------------------------------------------------------------------------
+    -- Devuelve todas las programaciones existentes que causan conflicto
+    -- con la nueva programación que se está intentando crear.
     SELECT 
+        A.EquipoId,
         P.ProgramacionId,
         R.Robot AS RobotNombre,
         P.TipoProgramacion,
@@ -58,16 +62,17 @@ BEGIN
     INNER JOIN dbo.Asignaciones A ON P.ProgramacionId = A.ProgramacionId
     INNER JOIN dbo.Robots R ON P.RobotId = R.RobotId
     WHERE 
-        A.EquipoId = @EquipoId      -- Verificamos solapamiento en el MISMO EQUIPO
-        AND P.Activo = 1            -- Solo contra programaciones activas
-        AND (@ProgramacionId IS NULL OR P.ProgramacionId <> @ProgramacionId) -- Excluirse a sí mismo
+        -- Filtro básico: mismo equipo, programaciones activas
+        A.EquipoId = @EquipoId
+        AND P.Activo = 1
+        AND (@ProgramacionId IS NULL OR P.ProgramacionId <> @ProgramacionId)
 
         -----------------------------------------------------------------------
-        -- 2. VALIDACIÓN DE FECHAS (VIGENCIA)
+        -- 3. VALIDACIÓN DE FECHAS (VIGENCIA)
         -----------------------------------------------------------------------
-        -- Verificamos si los rangos de fechas de vigencia se tocan.
+        -- Verificamos si los rangos de fechas de vigencia se solapan.
         -- Lógica: (StartA <= EndB) AND (EndA >= StartB)
-        -- Manejamos ISNULL para fechas infinitas (NULL = siempre activo)
+        -- NULL = fecha infinita (siempre activa)
         AND (
             (@FechaInicioVentana IS NULL OR P.FechaFinVentana IS NULL OR @FechaInicioVentana <= P.FechaFinVentana)
             AND 
@@ -75,7 +80,7 @@ BEGIN
         )
 
         -----------------------------------------------------------------------
-        -- 3. VALIDACIÓN DE HORARIOS (TIEMPO)
+        -- 4. VALIDACIÓN DE HORARIOS (TIEMPO)
         -----------------------------------------------------------------------
         -- Verificamos intersección de horas en el día.
         -- Lógica: (StartA < EndB) AND (EndA > StartB)
@@ -86,57 +91,76 @@ BEGIN
         )
 
         -----------------------------------------------------------------------
-        -- 4. VALIDACIÓN DE TIPOS Y PATRONES (LÓGICA CRUZADA MEJORADA)
+        -- 5. VALIDACIÓN DE TIPOS Y PATRONES (LÓGICA CRUZADA)
         -----------------------------------------------------------------------
         AND (
-            -- CASO A: CRUCES DIRECTOS (Cualquier cosa 'Diaria' choca con todo)
+            -- CASO A: DIARIA choca con todo
+            -- Una programación Diaria ejecuta todos los días, por lo que colisiona
+            -- con cualquier otra programación que tenga solapamiento de horario.
             (@TipoProgramacion = 'Diaria' OR P.TipoProgramacion = 'Diaria')
             
             OR
 
-            -- CASO B: SEMANAL vs SEMANAL (Coincidencia de días)
+            -- CASO B: SEMANAL vs SEMANAL
+            -- Dos programaciones semanales chocan solo si tienen al menos un día en común.
+            -- Ejemplo: Lu,Ma,Mi choca con Mi,Ju,Vi (tienen Mi en común)
             (@TipoProgramacion = 'Semanal' AND P.TipoProgramacion = 'Semanal'
              AND EXISTS (
                 SELECT 1 
                 FROM STRING_SPLIT(@DiasSemana, ',') s1
-                JOIN STRING_SPLIT(P.DiasSemana, ',') s2 ON s1.value = s2.value
+                JOIN STRING_SPLIT(P.DiasSemana, ',') s2 ON LTRIM(RTRIM(s1.value)) = LTRIM(RTRIM(s2.value))
              )
             )
 
             OR
 
-            -- CASO C: MENSUAL vs MENSUAL (Mismo día del mes)
+            -- CASO C: MENSUAL vs MENSUAL
+            -- Dos programaciones mensuales chocan solo si ejecutan el mismo día del mes.
+            -- Ejemplo: día 5 choca con día 5, pero no con día 10
             (@TipoProgramacion = 'Mensual' AND P.TipoProgramacion = 'Mensual' 
              AND @DiaDelMes = P.DiaDelMes)
 
             OR
 
-            -- CASO D: RANGO MENSUAL (Complejo: Solapamiento de rangos de días)
+            -- CASO D: RANGO MENSUAL vs RANGO MENSUAL
+            -- Dos rangos mensuales chocan si sus intervalos de días se solapan.
             (@TipoProgramacion = 'RangoMensual' AND P.TipoProgramacion = 'RangoMensual'
              AND (
-                 -- Solapamiento de días numéricos (ej. 1 al 15 vs 10 al 20)
+                 -- Solapamiento de días numéricos (ej. 1-15 vs 10-20 → solapan del 10 al 15)
                  (@DiaInicioMes IS NOT NULL AND @DiaFinMes IS NOT NULL
                   AND P.DiaInicioMes IS NOT NULL AND P.DiaFinMes IS NOT NULL
                   AND NOT (@DiaFinMes < P.DiaInicioMes OR @DiaInicioMes > P.DiaFinMes))
                  OR
-                 -- Solapamiento con "Ultimos días" (simplificado: asume conflicto si ambos existen)
+                 -- Solapamiento con "Últimos días del mes"
+                 -- Si ambos usan "últimos X días", se asume conflicto potencial
                  (@UltimosDiasMes IS NOT NULL AND P.UltimosDiasMes IS NOT NULL)
              )
             )
 
             OR 
 
-            -- CASO E: ESPECÍFICA (Una sola fecha)
-            -- Si la nueva es específica, validamos si su fecha cae dentro de la ventana de la existente
+            -- CASO E: ESPECÍFICA vs ESPECÍFICA
+            -- Dos programaciones específicas chocan solo si son para la misma fecha exacta.
             (@TipoProgramacion = 'Especifica' AND P.TipoProgramacion = 'Especifica'
              AND P.FechaEspecifica = @FechaEspecifica
             )
             
-            -- NOTA: Faltaría validar cruces híbridos complejos (ej. Semanal vs Especifica).
-            -- Actualmente, si tienes Semanal (Lunes) y una Especifica (un Lunes concreto),
-            -- este bloque NO lo detecta a menos que agregues lógica de calendario.
-            -- Por seguridad, se recomienda que 'Diaria' sea la única que bloquee transversalmente
-            -- o asumir que el usuario gestiona las excepciones manualmente.
+            -----------------------------------------------------------------------
+            -- NOTA SOBRE LIMITACIONES:
+            -----------------------------------------------------------------------
+            -- Actualmente NO se validan cruces híbridos complejos como:
+            -- - Semanal (Lunes) vs Específica (5/Enero/2026 que cae Lunes)
+            -- - Mensual (día 15) vs Específica (15/Marzo/2026)
+            -- - RangoMensual (1-15) vs Semanal (Lunes-Viernes)
+            --
+            -- Para implementar estos cruces se requeriría:
+            -- 1. Lógica de calendario para determinar qué día de la semana cae una fecha
+            -- 2. Validación de si una fecha específica cae dentro de un rango mensual
+            -- 3. Mayor complejidad computacional
+            --
+            -- Por ahora, 'Diaria' es el único tipo que valida transversalmente contra
+            -- todos los demás tipos. El resto de validaciones híbridas se gestionan
+            -- manualmente o mediante políticas de uso.
         );
 
 END
