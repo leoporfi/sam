@@ -6,7 +6,7 @@ Este módulo contiene los componentes para listar, mostrar y gestionar robots,
 siguiendo el estándar de ReactPy de SAM.
 """
 
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from reactpy import component, event, html, use_state
 
@@ -36,18 +36,18 @@ from ...shared.styles import (
 @component
 def RobotsControls(
     is_syncing: bool,
-    on_sync: Callable,
-    on_create_robot: Callable,
+    on_sync: Callable[[], Any],
+    on_create_robot: Callable[[], Any],
     search_term: str,
-    on_search_change: Callable,
+    on_search_change: Callable[[str], Any],
     active_filter: str,
-    on_active_change: Callable,
+    on_active_change: Callable[[str], Any],
     online_filter: str,
-    on_online_change: Callable,
+    on_online_change: Callable[[str], Any],
     is_searching: bool,
     # Nuevos parámetros para sincronización de equipos
     is_syncing_equipos: bool = False,
-    on_sync_equipos: Callable = None,
+    on_sync_equipos: Optional[Callable[[], Any]] = None,
 ):
     """Controles para el dashboard de Robots (título, botones, filtros)."""
     is_expanded, set_is_expanded = use_state(False)
@@ -114,7 +114,12 @@ def RobotsControls(
 
 
 @component
-def RobotsDashboard(robots: List[Robot], on_action: Callable, robots_state: Dict, set_current_page: Callable):
+def RobotsDashboard(
+    robots: List[Robot],
+    on_action: Callable[[str, Dict[str, Any]], Any],
+    robots_state: Dict[str, Any],
+    set_current_page: Callable[[int], Any],
+):
     """Componente principal que renderiza la tabla/tarjetas y la paginación."""
     loading = robots_state["loading"]
     error = robots_state["error"]
@@ -162,7 +167,13 @@ def RobotsDashboard(robots: List[Robot], on_action: Callable, robots_state: Dict
 
 
 @component
-def RobotTable(robots: List[Robot], on_action: Callable, sort_by: str, sort_dir: str, on_sort: Callable):
+def RobotTable(
+    robots: List[Robot],
+    on_action: Callable[[str, Dict[str, Any]], Any],
+    sort_by: str,
+    sort_dir: str,
+    on_sort: Callable[[str], Any],
+):
     table_headers = [
         {"key": "Robot", "label": "Robot"},
         {"key": "CantidadEquiposAsignados", "label": "Equipos"},
@@ -211,7 +222,7 @@ def RobotTable(robots: List[Robot], on_action: Callable, sort_by: str, sort_dir:
 
 
 @component
-def RobotRow(robot: Robot, on_action: Callable):
+def RobotRow(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
     async def handle_toggle_active(event):
         await on_action("toggle_active", robot)
 
@@ -309,7 +320,7 @@ def RobotRow(robot: Robot, on_action: Callable):
 
 
 @component
-def RobotCard(robot: Robot, on_action: Callable):
+def RobotCard(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
     async def handle_toggle_active(event):
         await on_action("toggle_active", robot)
 
