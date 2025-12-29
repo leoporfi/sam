@@ -40,6 +40,12 @@ class ScheduleData(BaseModel):
     DiaFinMes: Optional[int] = None  # Día final del rango (1-31)
     UltimosDiasMes: Optional[int] = None  # Últimos N días del mes (1-31)
     PrimerosDiasMes: Optional[int] = None  # Primeros N días del mes (1-31) - se mapea a DiaInicioMes=1, DiaFinMes=N
+    # Campos para robots cíclicos con ventanas
+    EsCiclico: Optional[bool] = False  # Indica si el robot se ejecuta cíclicamente
+    HoraFin: Optional[str] = None  # Hora de fin del rango horario (formato "HH:MM:SS")
+    FechaInicioVentana: Optional[str] = None  # Fecha inicio de la ventana (formato "YYYY-MM-DD")
+    FechaFinVentana: Optional[str] = None  # Fecha fin de la ventana (formato "YYYY-MM-DD")
+    IntervaloEntreEjecuciones: Optional[int] = None  # Minutos entre ejecuciones cíclicas
 
 
 class ScheduleEditData(BaseModel):
@@ -60,6 +66,12 @@ class ScheduleEditData(BaseModel):
     DiaFinMes: Optional[int] = None
     UltimosDiasMes: Optional[int] = None
     PrimerosDiasMes: Optional[int] = None  # Se mapea a DiaInicioMes=1, DiaFinMes=N
+    # Campos para robots cíclicos con ventanas
+    EsCiclico: Optional[bool] = False
+    HoraFin: Optional[time] = None
+    FechaInicioVentana: Optional[date] = None
+    FechaFinVentana: Optional[date] = None
+    IntervaloEntreEjecuciones: Optional[int] = None
     # (Nota: No incluimos 'Equipos' a propósito)
 
 
