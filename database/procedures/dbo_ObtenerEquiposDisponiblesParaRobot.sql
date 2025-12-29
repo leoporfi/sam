@@ -1,11 +1,11 @@
--- Script para actualizar el stored procedure ObtenerEquiposDisponiblesParaRobot
--- para incluir los campos EsProgramado y Reservado
+SET ANSI_NULLS ON
+SET QUOTED_IDENTIFIER ON
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerEquiposDisponiblesParaRobot]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerEquiposDisponiblesParaRobot] AS' 
+END
 
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerEquiposDisponiblesParaRobot]') AND type in (N'P', N'PC'))
-    DROP PROCEDURE [dbo].[ObtenerEquiposDisponiblesParaRobot]
-GO
-
-CREATE PROCEDURE [dbo].[ObtenerEquiposDisponiblesParaRobot]
+ALTER PROCEDURE [dbo].[ObtenerEquiposDisponiblesParaRobot]
     @RobotId INT  -- Mantenemos el parámetro aunque ya no se use en la lógica,
                   -- para no tener que modificar el código de Python.
 AS
@@ -55,5 +55,4 @@ BEGIN
       AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposYaAsignados)
     ORDER BY E.Equipo;
 END
-GO
 
