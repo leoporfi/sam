@@ -1,9 +1,12 @@
 SET ANSI_NULLS ON
+GO
 SET QUOTED_IDENTIFIER ON
+GO
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ActualizarProgramacionCompleta]') AND type in (N'P', N'PC'))
 BEGIN
 EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ActualizarProgramacionCompleta] AS' 
 END
+GO
 
 ALTER PROCEDURE [dbo].[ActualizarProgramacionCompleta]
     @ProgramacionId INT,
@@ -36,13 +39,29 @@ BEGIN
     DECLARE @Robot NVARCHAR(100);
     DECLARE @EquipoIdActual INT;
     DECLARE @ConflictosCount INT = 0;
+    
+    -- Variables para cálculo de HoraFin (fuera del loop)
+    DECLARE @FechaBase DATETIME;
+    DECLARE @InicioFull DATETIME;
+    DECLARE @FinFull DATETIME;
+    DECLARE @HoraFinCalculada TIME;
 
     CREATE TABLE #NuevosEquiposProgramados (EquipoId INT PRIMARY KEY);
     CREATE TABLE #EquiposDesprogramados (EquipoId INT PRIMARY KEY);
     CREATE TABLE #ConflictosDetectados (
         EquipoId INT,
-        RobotNombre NVARCHAR(100),
         ProgramacionId INT,
+        RobotNombre NVARCHAR(100),
+        TipoProgramacion NVARCHAR(20),
+        HoraInicio TIME,
+        HoraFin TIME,
+        FechaInicioVentana DATE,
+        FechaFinVentana DATE,
+        DiasSemana NVARCHAR(20),
+        DiaDelMes INT,
+        DiaInicioMes INT,
+        DiaFinMes INT,
+        UltimosDiasMes INT,
         TipoEjecucion NVARCHAR(20)
     );
 
@@ -63,13 +82,40 @@ BEGIN
                 RAISERROR('IntervaloEntreEjecuciones debe ser mayor que 0.', 16, 1);
         END
 
+        -------------------------------------------------------------------------
+        -- CÁLCULO DE @HoraFin UNA SOLA VEZ (ANTES DEL CURSOR)
+        -------------------------------------------------------------------------
+        -- Preservar el valor original de @HoraFin
+        SET @HoraFinCalculada = @HoraFin;
+        
+        -- Si no se especificó HoraFin, calcularla usando la Tolerancia
+        IF @HoraFinCalculada IS NULL AND @Tolerancia IS NOT NULL AND @Tolerancia > 0
+        BEGIN
+            -- Calculamos la fecha-hora completa temporalmente
+            SET @FechaBase = CAST(GETDATE() AS DATE);
+            SET @InicioFull = DATEADD(MINUTE, DATEDIFF(MINUTE, 0, @HoraInicio), @FechaBase);
+            SET @FinFull = DATEADD(MINUTE, @Tolerancia, @InicioFull);
+
+            -- Si al sumar minutos cambiamos de día, topeamos a medianoche
+            IF CAST(@FinFull AS DATE) > CAST(@InicioFull AS DATE)
+            BEGIN
+                SET @HoraFinCalculada = '23:59:59';
+            END
+            ELSE
+            BEGIN
+                -- Si sigue en el mismo día, tomamos la hora calculada
+                SET @HoraFinCalculada = CAST(@FinFull AS TIME);
+            END
+        END
+        -------------------------------------------------------------------------
+
         BEGIN TRANSACTION;
 
         -- 1. Actualizar datos de la programación
         UPDATE dbo.Programaciones
         SET TipoProgramacion = @TipoProgramacion,
             HoraInicio = @HoraInicio,
-            HoraFin = @HoraFin,
+            HoraFin = ISNULL(@HoraFinCalculada, @HoraFin),  -- ✅ Usar la calculada
             DiasSemana = CASE WHEN @TipoProgramacion = 'Semanal' THEN @DiaSemana ELSE NULL END,
             DiaDelMes = CASE WHEN @TipoProgramacion = 'Mensual' THEN @DiaDelMes ELSE NULL END,
             FechaEspecifica = CASE WHEN @TipoProgramacion = 'Especifica' THEN @FechaEspecifica ELSE NULL END,
@@ -77,7 +123,7 @@ BEGIN
             DiaInicioMes = CASE WHEN @TipoProgramacion = 'RangoMensual' THEN @DiaInicioMes ELSE NULL END,
             DiaFinMes = CASE WHEN @TipoProgramacion = 'RangoMensual' THEN @DiaFinMes ELSE NULL END,
             UltimosDiasMes = CASE WHEN @TipoProgramacion = 'RangoMensual' THEN @UltimosDiasMes ELSE NULL END,
-            EsCiclico = ISNULL(@EsCiclico, EsCiclico),  -- Solo actualizar si se proporciona
+            EsCiclico = ISNULL(@EsCiclico, EsCiclico),
             FechaInicioVentana = @FechaInicioVentana,
             FechaFinVentana = @FechaFinVentana,
             IntervaloEntreEjecuciones = @IntervaloEntreEjecuciones,
@@ -102,11 +148,11 @@ BEGIN
 
         WHILE @@FETCH_STATUS = 0
         BEGIN
-            INSERT INTO #ConflictosDetectados (EquipoId, RobotNombre, ProgramacionId, TipoEjecucion)
+            INSERT INTO #ConflictosDetectados
             EXEC dbo.ValidarSolapamientoVentanas
                 @EquipoId = @EquipoIdActual,
                 @HoraInicio = @HoraInicio,
-                @HoraFin = @HoraFin,
+                @HoraFin = @HoraFinCalculada,  -- ✅ Usar la calculada
                 @FechaInicioVentana = @FechaInicioVentana,
                 @FechaFinVentana = @FechaFinVentana,
                 @DiasSemana = @DiaSemana,
@@ -115,7 +161,8 @@ BEGIN
                 @DiaInicioMes = @DiaInicioMes,
                 @DiaFinMes = @DiaFinMes,
                 @UltimosDiasMes = @UltimosDiasMes,
-                @ProgramacionId = @ProgramacionId;  -- Excluir la programación actual
+                @FechaEspecifica = @FechaEspecifica,
+                @ProgramacionId = @ProgramacionId;  -- ✅ Excluir la programación actual
 
             FETCH NEXT FROM equipo_cursor INTO @EquipoIdActual;
         END
@@ -137,7 +184,10 @@ BEGIN
                 '  - EquipoId: ' + CAST(EquipoId AS NVARCHAR(10)) + 
                 ', Robot: ' + RobotNombre + 
                 ', ProgramaciónId: ' + CAST(ProgramacionId AS NVARCHAR(10)) + 
-                ', Tipo: ' + TipoEjecucion + CHAR(13) + CHAR(10)
+                ', Tipo: ' + TipoEjecucion + 
+                ', Horario: ' + CONVERT(NVARCHAR(8), HoraInicio, 108) + ' - ' + CONVERT(NVARCHAR(8), HoraFin, 108) +
+                CASE WHEN DiasSemana IS NOT NULL THEN ', Días: ' + DiasSemana ELSE '' END +
+                CHAR(13) + CHAR(10)
             FROM #ConflictosDetectados;
             
             RAISERROR(@MensajeConflictos, 16, 1);
@@ -192,6 +242,7 @@ BEGIN
           );
 
         COMMIT TRANSACTION;
+        PRINT 'Programación actualizada exitosamente.';
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
@@ -218,4 +269,4 @@ BEGIN
     IF OBJECT_ID('tempdb..#ConflictosDetectados') IS NOT NULL
         DROP TABLE #ConflictosDetectados;
 END
-
+GO
