@@ -1228,143 +1228,183 @@ def ScheduleForm(
         [],
     )
 
+    # Estados para controlar la apertura de los acordeones
+    is_general_open, set_general_open = use_state(True)
+    is_cyclic_open, set_cyclic_open = use_state(form_data.get("EsCiclico", False))
+    is_equipos_open, set_equipos_open = use_state(False)
+
     def handle_form_change(field, value):
         on_change(field, value)
 
     def handle_device_change(devices):
         on_change("Equipos", list(devices) if devices else [])
 
+    selected_equipos_count = len(form_data.get("Equipos", []))
+
     return html._(
         html.form(
             {"id": "schedule-form", "onSubmit": event(on_submit, prevent_default=True)},
-            html.label(
-                "Tipo de Programación",
-                html.select(
+            # 1. Configuración General
+            html.details(
+                {"open": is_general_open},
+                html.summary(
                     {
-                        "value": tipo,
-                        "on_change": lambda e: handle_form_change("TipoProgramacion", e["target"]["value"]),
+                        "on_click": lambda e: set_general_open(not is_general_open),
+                        "style": {"fontWeight": "bold", "cursor": "pointer", "marginBottom": "0.5rem"},
                     },
-                    *schedule_options,
-                ),
-            ),
-            html.div(
-                {"class_name": "grid"},
-                html.label(
-                    "Hora Inicio",
-                    html.input(
-                        {
-                            "type": "time",
-                            "value": form_data.get("HoraInicio"),
-                            "on_change": lambda e: handle_form_change("HoraInicio", e["target"]["value"]),
-                        }
-                    ),
-                ),
-                html.label(
-                    "Tolerancia (min)",
-                    html.input(
-                        {
-                            "type": "number",
-                            "min": "0",
-                            "max": "60",
-                            "value": form_data.get("Tolerancia"),
-                            "on_change": lambda e: handle_form_change(
-                                "Tolerancia", int(e["target"]["value"]) if e["target"]["value"] else 0
-                            ),
-                        }
-                    ),
-                ),
-                ConditionalFields(tipo, form_data, handle_form_change),
-            ),
-            # Sección de Robots Cíclicos
-            html.div(
-                {
-                    "class_name": "cyclic-robot-section",
-                    "style": {
-                        "marginTop": "1rem",
-                        "paddingTop": "1rem",
-                        "borderTop": "1px solid var(--pico-muted-border-color)",
-                    },
-                },
-                html.label(
-                    html.input(
-                        {
-                            "type": "checkbox",
-                            "role": "switch",
-                            "checked": form_data.get("EsCiclico", False),
-                            "on_change": lambda e: handle_form_change("EsCiclico", e["target"]["checked"]),
-                        }
-                    ),
-                    " Robot Cíclico (ejecución continua dentro de ventana)",
+                    "Configuración General",
                 ),
                 html.div(
-                    {
-                        "style": {
-                            "display": "block" if form_data.get("EsCiclico", False) else "none",
-                            "marginTop": "1rem",
-                        }
-                    },
+                    {"style": {"padding": "1rem 0", "borderTop": "1px solid var(--pico-muted-border-color)"}},
+                    html.label(
+                        "Tipo de Programación",
+                        html.select(
+                            {
+                                "value": tipo,
+                                "on_change": lambda e: handle_form_change("TipoProgramacion", e["target"]["value"]),
+                            },
+                            *schedule_options,
+                        ),
+                    ),
                     html.div(
                         {"class_name": "grid"},
                         html.label(
-                            "Hora de Fin (HH:MM) *",
+                            "Hora Inicio",
                             html.input(
                                 {
                                     "type": "time",
-                                    "value": form_data.get("HoraFin") or "",
-                                    "on_change": lambda e: handle_form_change("HoraFin", e["target"]["value"]),
-                                    "required": form_data.get("EsCiclico", False),
+                                    "value": form_data.get("HoraInicio"),
+                                    "on_change": lambda e: handle_form_change("HoraInicio", e["target"]["value"]),
                                 }
                             ),
                         ),
                         html.label(
-                            "Intervalo entre Ejecuciones (minutos) *",
+                            "Tolerancia (min)",
                             html.input(
                                 {
                                     "type": "number",
-                                    "value": form_data.get("IntervaloEntreEjecuciones") or "",
-                                    "min": 1,
-                                    "max": 1440,
-                                    "placeholder": "30",
+                                    "min": "0",
+                                    "max": "60",
+                                    "value": form_data.get("Tolerancia"),
                                     "on_change": lambda e: handle_form_change(
-                                        "IntervaloEntreEjecuciones",
-                                        int(e["target"]["value"]) if e["target"]["value"] else None,
+                                        "Tolerancia", int(e["target"]["value"]) if e["target"]["value"] else 0
                                     ),
                                 }
                             ),
                         ),
-                    ),
-                    html.div(
-                        {"class_name": "grid"},
-                        html.label(
-                            "Fecha Inicio Ventana",
-                            html.input(
-                                {
-                                    "type": "date",
-                                    "value": form_data.get("FechaInicioVentana") or "",
-                                    "on_change": lambda e: handle_form_change(
-                                        "FechaInicioVentana", e["target"]["value"]
-                                    ),
-                                }
-                            ),
-                        ),
-                        html.label(
-                            "Fecha Fin Ventana",
-                            html.input(
-                                {
-                                    "type": "date",
-                                    "value": form_data.get("FechaFinVentana") or "",
-                                    "on_change": lambda e: handle_form_change("FechaFinVentana", e["target"]["value"]),
-                                }
-                            ),
-                        ),
-                    ),
-                    html.small(
-                        {"style": {"color": "var(--pico-muted-color)", "fontSize": "0.85em"}},
-                        "💡 Los robots cíclicos se ejecutan continuamente dentro del rango horario y ventana de fechas especificados.",
+                        ConditionalFields(tipo, form_data, handle_form_change),
                     ),
                 ),
             ),
-            DeviceSelector(available_devices, form_data.get("Equipos", []), handle_device_change),
+            # 2. Ejecución Cíclica
+            html.details(
+                {"open": is_cyclic_open},
+                html.summary(
+                    {
+                        "on_click": lambda e: set_cyclic_open(not is_cyclic_open),
+                        "style": {"fontWeight": "bold", "cursor": "pointer", "marginBottom": "0.5rem"},
+                    },
+                    "Ejecución Cíclica",
+                ),
+                html.div(
+                    {"style": {"padding": "1rem 0", "borderTop": "1px solid var(--pico-muted-border-color)"}},
+                    html.label(
+                        html.input(
+                            {
+                                "type": "checkbox",
+                                "role": "switch",
+                                "checked": form_data.get("EsCiclico", False),
+                                "on_change": lambda e: handle_form_change("EsCiclico", e["target"]["checked"]),
+                            }
+                        ),
+                        " Robot Cíclico (ejecución continua dentro de ventana)",
+                    ),
+                    html.div(
+                        {
+                            "style": {
+                                "display": "block" if form_data.get("EsCiclico", False) else "none",
+                                "marginTop": "1rem",
+                            }
+                        },
+                        html.div(
+                            {"class_name": "grid"},
+                            html.label(
+                                "Hora de Fin (HH:MM) *",
+                                html.input(
+                                    {
+                                        "type": "time",
+                                        "value": form_data.get("HoraFin") or "",
+                                        "on_change": lambda e: handle_form_change("HoraFin", e["target"]["value"]),
+                                        "required": form_data.get("EsCiclico", False),
+                                    }
+                                ),
+                            ),
+                            html.label(
+                                "Intervalo entre Ejecuciones (minutos) *",
+                                html.input(
+                                    {
+                                        "type": "number",
+                                        "value": form_data.get("IntervaloEntreEjecuciones") or "",
+                                        "min": 1,
+                                        "max": 1440,
+                                        "placeholder": "30",
+                                        "on_change": lambda e: handle_form_change(
+                                            "IntervaloEntreEjecuciones",
+                                            int(e["target"]["value"]) if e["target"]["value"] else None,
+                                        ),
+                                    }
+                                ),
+                            ),
+                        ),
+                        html.div(
+                            {"class_name": "grid"},
+                            html.label(
+                                "Fecha Inicio Ventana",
+                                html.input(
+                                    {
+                                        "type": "date",
+                                        "value": form_data.get("FechaInicioVentana") or "",
+                                        "on_change": lambda e: handle_form_change(
+                                            "FechaInicioVentana", e["target"]["value"]
+                                        ),
+                                    }
+                                ),
+                            ),
+                            html.label(
+                                "Fecha Fin Ventana",
+                                html.input(
+                                    {
+                                        "type": "date",
+                                        "value": form_data.get("FechaFinVentana") or "",
+                                        "on_change": lambda e: handle_form_change(
+                                            "FechaFinVentana", e["target"]["value"]
+                                        ),
+                                    }
+                                ),
+                            ),
+                        ),
+                        html.small(
+                            {"style": {"color": "var(--pico-muted-color)", "fontSize": "0.85em"}},
+                            "💡 Los robots cíclicos se ejecutan continuamente dentro del rango horario y ventana de fechas especificados.",
+                        ),
+                    ),
+                ),
+            ),
+            # 3. Selección de Equipos
+            html.details(
+                {"open": is_equipos_open},
+                html.summary(
+                    {
+                        "on_click": lambda e: set_equipos_open(not is_equipos_open),
+                        "style": {"fontWeight": "bold", "cursor": "pointer", "marginBottom": "0.5rem"},
+                    },
+                    f"Selección de Equipos ({selected_equipos_count})",
+                ),
+                html.div(
+                    {"style": {"padding": "1rem 0", "borderTop": "1px solid var(--pico-muted-border-color)"}},
+                    DeviceSelector(available_devices, form_data.get("Equipos", []), handle_device_change),
+                ),
+            ),
         ),
         html.footer(
             html.div(
