@@ -106,6 +106,30 @@ BEGIN
 
         WHILE @@FETCH_STATUS = 0
         BEGIN
+            -------------------------------------------------------------------------
+            -- LOGICA NUEVA: Usar Tolerancia como Duración Estimada si no hay HoraFin
+            -------------------------------------------------------------------------
+            -- Lógica de Tolerancia con "Tope" a medianoche
+            IF @HoraFin IS NULL AND @Tolerancia IS NOT NULL AND @Tolerancia > 0
+            BEGIN
+                -- Calculamos la fecha-hora completa temporalmente
+                DECLARE @FechaBase DATETIME = CAST(GETDATE() AS DATE); -- Solo referencia
+                DECLARE @InicioFull DATETIME = DATEADD(MINUTE, DATEDIFF(MINUTE, 0, @HoraInicio), @FechaBase);
+                DECLARE @FinFull DATETIME = DATEADD(MINUTE, @Tolerancia, @InicioFull);
+
+                -- Si al sumar minutos cambiamos de día...
+                IF CAST(@FinFull AS DATE) > CAST(@InicioFull AS DATE)
+                BEGIN
+                    -- ... topeamos a las 23:59:59.9999999
+                    SET @HoraFin = '23:59:59';
+                END
+                ELSE
+                BEGIN
+                    -- Si sigue en el mismo día, tomamos la hora calculada
+                    SET @HoraFin = CAST(@FinFull AS TIME);
+                END
+            END
+            -------------------------------------------------------------------------
             -- Verificar solapamientos usando el SP de validación
             INSERT INTO #ConflictosDetectados (EquipoId, RobotNombre, ProgramacionId, TipoEjecucion)
             EXEC dbo.ValidarSolapamientoVentanas
@@ -120,6 +144,7 @@ BEGIN
                 @DiaInicioMes = @DiaInicioMes,
                 @DiaFinMes = @DiaFinMes,
                 @UltimosDiasMes = @UltimosDiasMes,
+                @FechaEspecifica = @FechaEspecifica,
                 @ProgramacionId = NULL;
 
             FETCH NEXT FROM equipo_cursor INTO @EquipoIdActual;
