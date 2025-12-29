@@ -86,6 +86,7 @@ def DataTable(
             on_sort=on_sort,
             row_key=row_key,
             row_class_name=row_class_name,
+            empty_message=empty_message,
         ),
     )
 
@@ -100,6 +101,7 @@ def _render_table(
     on_sort: Optional[Callable] = None,
     row_key: Optional[Callable] = None,
     row_class_name: Optional[Callable] = None,
+    empty_message: str = "No hay datos disponibles",
 ) -> html.article:
     """Renderiza la tabla con los datos."""
 
@@ -136,7 +138,9 @@ def _render_table(
             html.a(
                 {
                     "href": "#",
-                    "on_click": event(lambda e, key=column_key: on_sort(key) if on_sort else None, prevent_default=True),
+                    "on_click": event(
+                        lambda e, key=column_key: on_sort(key) if on_sort else None, prevent_default=True
+                    ),
                 },
                 column.get("label", ""),
                 sort_indicator,

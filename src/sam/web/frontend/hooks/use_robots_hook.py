@@ -82,7 +82,7 @@ def use_robots(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
                 show_notification(
                     "⚠️ Advertencia: Se está usando fallback a singleton get_api_client(). "
                     "El contexto de aplicación no está disponible. Esto debería resolverse pronto.",
-                    "warning"
+                    "warning",
                 )
 
     # --- Estados del hook ---
