@@ -208,7 +208,33 @@ El servicio corre 3 bucles infinitos con intervalos configurables:
 | **Conciliador** | Cada 5-15 min | Revisa estados de robots corriendo. |
 | **Sync** | Cada 1 hora | Actualiza nombres de robots y equipos nuevos. |
 
-## **7\. Variables de Entorno Requeridas (.env)**
+## **7\. Captura de Latencia y Análisis de Tiempos**
+
+SAM implementa un mecanismo para medir la latencia real entre el momento en que se ordena la ejecución y el momento en que A360 efectivamente inicia el robot.
+
+### **7.1. Captura de Datos**
+*   **FechaInicio (SAM):** Momento en que el Desplegador envía la solicitud a la API.
+*   **FechaInicioReal (A360):** Momento exacto (`startDateTime`) reportado por A360 cuando el robot comienza a ejecutarse en el dispositivo.
+*   **FechaFin (A360):** Momento exacto (`endDateTime`) reportado por A360 al finalizar.
+
+El servicio **Conciliador** se encarga de obtener estos datos de la API de A360 y actualizar la base de datos de SAM.
+
+### **7.2. Análisis de Latencia (Stored Procedure)**
+Se dispone de un procedimiento almacenado para consultar métricas de latencia a demanda:
+
+```sql
+EXEC dbo.usp_AnalizarLatenciaEjecuciones 
+    @Scope = 'TODAS',           -- 'ACTUALES', 'HISTORICAS', 'TODAS'
+    @FechaDesde = '2025-01-01', -- Opcional
+    @FechaHasta = NULL          -- Opcional (Default: GETDATE())
+```
+
+**Métricas Retornadas:**
+*   **LatenciaInicioSegundos:** Diferencia entre `FechaInicio` (SAM) y `FechaInicioReal` (A360). Mide el overhead de la plataforma + red + disponibilidad del dispositivo.
+*   **DuracionEjecucionSegundos:** Tiempo real de ejecución del robot (`FechaFin` - `FechaInicioReal`).
+*   **DuracionTotalSegundos:** Tiempo total desde la orden de SAM hasta el fin (`FechaFin` - `FechaInicio`).
+
+## **8\. Variables de Entorno Requeridas (.env)**
 
 Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 
@@ -240,7 +266,7 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 * LANZADOR\_UMBRAL\_ALERTAS\_412: Fallos consecutivos 412 antes de alertar (por defecto 20).
 * LANZADOR\_DIAS\_TOLERANCIA\_UNKNOWN: Días antes de marcar UNKNOWN definitivo (por defecto 30).
 
-## **8\. Diagnóstico de Fallos (Troubleshooting)**
+## **9\. Diagnóstico de Fallos (Troubleshooting)**
 
 * **Log:** lanzador.log  
 
