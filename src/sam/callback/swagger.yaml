@@ -118,4 +118,3 @@ components:
       in: header
       name: X-Authorization
       description: "Clave de API (API Key) para validar que la llamada es legítima."
-

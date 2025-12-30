@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerDashboardCallbacks]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerDashboardCallbacks] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerDashboardCallbacks] AS'
 END
 -- =============================================
 -- Stored Procedure: ObtenerDashboardCallbacks
@@ -25,7 +25,7 @@ BEGIN
     -- Establecer fechas por defecto si no se proporcionan
     IF @FechaInicio IS NULL
         SET @FechaInicio = DATEADD(DAY, -7, GETDATE()); -- Últimos 7 días por defecto
-    
+
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
 
@@ -35,38 +35,38 @@ BEGIN
         -- =============================================
         SELECT
             'METRICAS_GENERALES' AS TipoResultado,
-            
+
             -- Totales por mecanismo de finalización
             COUNT(*) AS TotalEjecuciones,
             SUM(EsCallbackExitoso) AS CallbacksExitosos,
             SUM(EsConciliadorExitoso) AS ConciliadorExitosos,
             SUM(EsConciliadorAgotado) AS ConciliadorAgotados,
             COUNT(CASE WHEN MecanismoFinalizacion = 'ACTIVA' THEN 1 END) AS EjecucionesActivas,
-            
+
             -- Porcentajes de efectividad
             CAST(SUM(EsCallbackExitoso) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeCallbackExitoso,
             CAST(SUM(EsConciliadorExitoso) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeConciliadorExitoso,
             CAST(SUM(EsConciliadorAgotado) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeConciliadorAgotado,
-            
+
             -- Métricas de rendimiento
             AVG(CAST(LatenciaActualizacionMinutos AS FLOAT)) AS LatenciaPromedioMinutos,
             MAX(LatenciaActualizacionMinutos) AS LatenciaMaximaMinutos,
             MIN(LatenciaActualizacionMinutos) AS LatenciaMinimaMinutos,
-            
+
             -- Indicadores de problemas
             SUM(CallbackFallidoIndicador) AS CallbacksFallidos,
             SUM(ConciliadorProblemaIndicador) AS ProblemasConciliador,
             CAST(SUM(CallbackFallidoIndicador) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeCallbacksFallidos,
-            
+
             -- Métricas de duración de ejecuciones
             AVG(CAST(DuracionEjecucionMinutos AS FLOAT)) AS DuracionPromedioMinutos,
             MAX(DuracionEjecucionMinutos) AS DuracionMaximaMinutos,
-            
+
             -- Salud del sistema
             SUM(EjecucionExitosa) AS EjecucionesExitosas,
             SUM(EjecucionFallida) AS EjecucionesFallidas,
             CAST(SUM(EjecucionExitosa) * 100.0 / NULLIF(SUM(EjecucionExitosa) + SUM(EjecucionFallida), 0) AS DECIMAL(5,2)) AS PorcentajeExito
-            
+
         FROM dbo.AnalisisRendimientoCallbacks
         WHERE FechaInicio BETWEEN @FechaInicio AND @FechaFin
             AND (@RobotId IS NULL OR RobotId = @RobotId);
@@ -85,7 +85,7 @@ BEGIN
             AND (@RobotId IS NULL OR RobotId = @RobotId)
             AND ClasificacionRendimiento != 'NO_APLICABLE'
         GROUP BY ClasificacionRendimiento
-        ORDER BY 
+        ORDER BY
             CASE ClasificacionRendimiento
                 WHEN 'EXCELENTE' THEN 1
                 WHEN 'BUENO' THEN 2
@@ -175,12 +175,12 @@ BEGIN
             LatenciaActualizacionMinutos,
             IntentosConciliadorFallidos,
             ClasificacionRendimiento,
-            CASE 
-                WHEN CallbackFallidoIndicador = 1 AND ConciliadorProblemaIndicador = 1 
+            CASE
+                WHEN CallbackFallidoIndicador = 1 AND ConciliadorProblemaIndicador = 1
                 THEN 'CALLBACK_Y_CONCILIADOR_PROBLEMA'
-                WHEN CallbackFallidoIndicador = 1 
+                WHEN CallbackFallidoIndicador = 1
                 THEN 'CALLBACK_FALLIDO'
-                WHEN ConciliadorProblemaIndicador = 1 
+                WHEN ConciliadorProblemaIndicador = 1
                 THEN 'CONCILIADOR_PROBLEMA'
                 WHEN MecanismoFinalizacion = 'CONCILIADOR_AGOTADO'
                 THEN 'CONCILIADOR_AGOTADO'
@@ -191,8 +191,8 @@ BEGIN
         LEFT JOIN dbo.Equipos E ON A.EquipoId = E.EquipoId
         WHERE A.FechaInicio BETWEEN @FechaInicio AND @FechaFin
             AND (@RobotId IS NULL OR A.RobotId = @RobotId)
-            AND (A.CallbackFallidoIndicador = 1 
-                 OR A.ConciliadorProblemaIndicador = 1 
+            AND (A.CallbackFallidoIndicador = 1
+                 OR A.ConciliadorProblemaIndicador = 1
                  OR A.MecanismoFinalizacion = 'CONCILIADOR_AGOTADO'
                  OR A.ClasificacionRendimiento = 'DEFICIENTE')
         ORDER BY A.FechaInicio DESC;

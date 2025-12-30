@@ -20,7 +20,6 @@ setup_logging(service_name=SERVICE_NAME)
 
 from sam.common.config_manager import ConfigManager
 from sam.common.database import DatabaseConnector
-from sam.web.backend.schemas import ScheduleData
 
 
 def debug_create_schedule():
@@ -35,7 +34,10 @@ def debug_create_schedule():
     try:
         config = ConfigManager.get_sql_server_config("SQL_SAM")
         db = DatabaseConnector(
-            servidor=config["servidor"], base_datos=config["base_datos"], usuario=config["usuario"], contrasena=config["contrasena"]
+            servidor=config["servidor"],
+            base_datos=config["base_datos"],
+            usuario=config["usuario"],
+            contrasena=config["contrasena"],
         )
     except Exception as e:
         print(f"[ERROR] No se pudo conectar: {e}")
@@ -52,7 +54,9 @@ def debug_create_schedule():
         robot_id = robot["RobotId"]
         robot_nombre = robot["Robot"]
 
-        equipos = db.ejecutar_consulta("SELECT TOP 1 EquipoId, Equipo FROM dbo.Equipos WHERE Activo_SAM = 1", es_select=True)
+        equipos = db.ejecutar_consulta(
+            "SELECT TOP 1 EquipoId, Equipo FROM dbo.Equipos WHERE Activo_SAM = 1", es_select=True
+        )
         if not equipos:
             print("[ERROR] No hay equipos")
             return
@@ -67,7 +71,9 @@ def debug_create_schedule():
 
         # Simular lo que hace create_schedule
         print("1. Obteniendo nombre del robot...")
-        robot_nombre_result = db.ejecutar_consulta("SELECT Robot FROM dbo.Robots WHERE RobotId = ?", (robot_id,), es_select=True)
+        robot_nombre_result = db.ejecutar_consulta(
+            "SELECT Robot FROM dbo.Robots WHERE RobotId = ?", (robot_id,), es_select=True
+        )
         robot_str = robot_nombre_result[0]["Robot"]
         print(f"   robot_str = '{robot_str}'")
         print()
@@ -125,7 +131,9 @@ def debug_create_schedule():
         print()
 
         if param_count_query != param_count_params:
-            print(f"[ERROR] Desajuste: query tiene {param_count_query} parámetros, pero tuple tiene {param_count_params}")
+            print(
+                f"[ERROR] Desajuste: query tiene {param_count_query} parámetros, pero tuple tiene {param_count_params}"
+            )
         else:
             print("[OK] Número de parámetros coincide")
         print()
@@ -162,7 +170,7 @@ def debug_create_schedule():
             db.ejecutar_consulta(query, params, es_select=False)
             print("[OK] SP ejecutado exitosamente")
         except Exception as e:
-            print(f"[ERROR] Error al ejecutar SP:")
+            print("[ERROR] Error al ejecutar SP:")
             print(f"   Tipo: {type(e).__name__}")
             print(f"   Mensaje: {str(e)}")
             if hasattr(e, "args") and len(e.args) > 0:

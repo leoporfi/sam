@@ -165,7 +165,7 @@ Programación 2 (existente): Robot B, Equipo001, 10:00-13:00
 
 ```sql
 -- Detectar programaciones que podrían tener problemas
-SELECT 
+SELECT
     A1.EquipoId,
     E.Equipo,
     R1.Robot AS Robot1,
@@ -216,4 +216,3 @@ Si hay problemas, puedes revertir los SPs:
 1. Ejecutar en ambiente de prueba primero
 2. Monitorear los primeros días
 3. Tener plan de rollback listo
-

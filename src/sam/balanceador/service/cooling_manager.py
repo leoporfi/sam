@@ -41,7 +41,10 @@ class CoolingManager:
                 last_time, _, _ = self._ultima_ampliacion[robot_id]
                 time_elapsed = time.time() - last_time
                 if time_elapsed < self.cooling_period:
-                    return False, f"En período de enfriamiento tras asignación reciente ({int(time_elapsed)}s < {self.cooling_period}s)"
+                    return (
+                        False,
+                        f"En período de enfriamiento tras asignación reciente ({int(time_elapsed)}s < {self.cooling_period}s)",
+                    )
             return True, "Fuera de período de enfriamiento"
 
     def puede_reducir(self, robot_id: int, tickets_actuales: int) -> Tuple[bool, str]:
@@ -58,9 +61,15 @@ class CoolingManager:
                     if tickets_anteriores > 0:
                         cambio_porcentual = (tickets_anteriores - tickets_actuales) / tickets_anteriores
                         if cambio_porcentual >= self.umbral_de_reduccion:
-                            return True, f"Enfriamiento ignorado por caída drástica de tickets ({cambio_porcentual:.0%})"
+                            return (
+                                True,
+                                f"Enfriamiento ignorado por caída drástica de tickets ({cambio_porcentual:.0%})",
+                            )
 
-                    return False, f"En período de enfriamiento tras desasignación reciente ({int(time_elapsed)}s < {self.cooling_period}s)"
+                    return (
+                        False,
+                        f"En período de enfriamiento tras desasignación reciente ({int(time_elapsed)}s < {self.cooling_period}s)",
+                    )
 
             return True, "Fuera de período de enfriamiento"
 
@@ -74,7 +83,9 @@ class CoolingManager:
         """
         with self._lock:
             self._ultima_ampliacion[robot_id] = (time.time(), "ASIGNAR", tickets)
-            logger.debug(f"Registrada operación de ampliación para RobotId {robot_id}: {tickets} tickets, {equipos_asignados} equipos")
+            logger.debug(
+                f"Registrada operación de ampliación para RobotId {robot_id}: {tickets} tickets, {equipos_asignados} equipos"
+            )
 
     def registrar_reduccion(self, robot_id: int, tickets: int, equipos_desasignados: int) -> None:
         """
@@ -86,4 +97,6 @@ class CoolingManager:
         """
         with self._lock:
             self._ultima_reduccion[robot_id] = (time.time(), "DESASIGNAR", tickets)
-            logger.debug(f"Registrada operación de reducción para RobotId {robot_id}: {tickets} tickets, {equipos_desasignados} equipos")
+            logger.debug(
+                f"Registrada operación de reducción para RobotId {robot_id}: {tickets} tickets, {equipos_desasignados} equipos"
+            )

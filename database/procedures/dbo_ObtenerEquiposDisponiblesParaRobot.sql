@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerEquiposDisponiblesParaRobot]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerEquiposDisponiblesParaRobot] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerEquiposDisponiblesParaRobot] AS'
 END
 
 ALTER PROCEDURE [dbo].[ObtenerEquiposDisponiblesParaRobot]
@@ -18,7 +18,7 @@ BEGIN
     -- 2. Tiene la licencia correcta ('ATTENDEDRUNTIME' o 'RUNTIME')
     -- 3. NO está 'Reservado = 1' manualmente
     -- 4. NO está asignado dinámicamente (EsProgramado = 0 AND Reservado = 0)
-    -- 
+    --
     -- NOTA: Se elimina la restricción que impedía asignarlo si ya
     -- estaba programado (EsProgramado = 1) para este mismo robot.
 
@@ -26,7 +26,7 @@ BEGIN
         -- Equipos reservados manualmente o asignados dinámicamente por CUALQUIER robot
         SELECT DISTINCT EquipoId
         FROM dbo.Asignaciones
-        WHERE Reservado = 1 
+        WHERE Reservado = 1
            OR (EsProgramado = 0 AND Reservado = 0)
     ),
     EquiposYaAsignados AS (
@@ -42,8 +42,8 @@ BEGIN
         WHERE EsProgramado = 1
           AND RobotId != @RobotId
     )
-    SELECT 
-        E.EquipoId, 
+    SELECT
+        E.EquipoId,
         E.Equipo,
         ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
         CAST(0 AS BIT) AS Reservado
@@ -55,4 +55,3 @@ BEGIN
       AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposYaAsignados)
     ORDER BY E.Equipo;
 END
-

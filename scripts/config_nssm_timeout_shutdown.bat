@@ -25,7 +25,7 @@ REM Timeout para Ctrl+C (Console) - 30 segundos
 nssm set %SERVICE_NAME% AppStopMethodConsole 30000
 echo [OK] Timeout Console (Ctrl+C): 30 segundos
 
-REM Timeout para mensaje WM_CLOSE (Window) - 30 segundos  
+REM Timeout para mensaje WM_CLOSE (Window) - 30 segundos
 nssm set %SERVICE_NAME% AppStopMethodWindow 30000
 echo [OK] Timeout Window (WM_CLOSE): 30 segundos
 

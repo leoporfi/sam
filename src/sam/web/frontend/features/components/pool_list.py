@@ -84,7 +84,9 @@ def PoolsControls(
 
 
 @component
-def PoolsDashboard(pools: List[Dict], on_edit: Callable, on_assign: Callable, on_delete: Callable, loading: bool, error: str):
+def PoolsDashboard(
+    pools: List[Dict], on_edit: Callable, on_assign: Callable, on_delete: Callable, loading: bool, error: str
+):
     """Componente principal que renderiza la tabla/tarjetas."""
     pools_data = pools.get("pools", []) if isinstance(pools, dict) else pools
 
@@ -275,7 +277,11 @@ def BalanceadorStrategyPanel():
             return ""
         val = pending_change["value"]
         if pending_change["type"] == "preemption":
-            return "activar el Modo Prioridad Estricta. Esto podría detener robots en ejecución." if val else "desactivar la Prioridad Estricta."
+            return (
+                "activar el Modo Prioridad Estricta. Esto podría detener robots en ejecución."
+                if val
+                else "desactivar la Prioridad Estricta."
+            )
         else:
             return (
                 "activar el Aislamiento Estricto. Los robots NO podrán usar equipos de otros pools."

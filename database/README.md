@@ -65,4 +65,3 @@ Los scripts están listos para ejecutar en orden:
 - **Solo estructura**: Este export NO incluye datos, solo el esquema
 - **Backup de datos**: Usar `BACKUP DATABASE` para datos
 - **Versionado**: Los archivos están versionados en Git para seguimiento de cambios
-

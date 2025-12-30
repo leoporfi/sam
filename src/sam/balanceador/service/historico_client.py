@@ -66,7 +66,7 @@ class HistoricoBalanceoClient:
         """
         try:
             query = """
-            SELECT TOP (?) HistoricoId, FechaBalanceo, TicketsPendientes, 
+            SELECT TOP (?) HistoricoId, FechaBalanceo, TicketsPendientes,
                    EquiposAsignadosAntes, EquiposAsignadosDespues, AccionTomada, Justificacion
             FROM dbo.HistoricoBalanceo
             WHERE RobotId = ?

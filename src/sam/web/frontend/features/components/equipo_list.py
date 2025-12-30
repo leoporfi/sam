@@ -133,7 +133,10 @@ def EquiposDashboard(equipos_state: Dict):
             pagination_component,
             html.div(
                 {"class_name": CARDS_CONTAINER},
-                *[EquipoCard(equipo=equipo, on_action=equipos_state["update_equipo_status"]) for equipo in equipos_state["equipos"]],
+                *[
+                    EquipoCard(equipo=equipo, on_action=equipos_state["update_equipo_status"])
+                    for equipo in equipos_state["equipos"]
+                ],
             ),
             html.div(
                 {"class_name": TABLE_CONTAINER},
@@ -181,7 +184,11 @@ def EquiposTable(equipos: List[Equipo], on_action: Callable, sort_by: str, sort_
                 *[EquipoRow(equipo=equipo, on_action=on_action) for equipo in equipos]
                 if len(equipos)
                 else [
-                    html.tr(html.td({"colSpan": len(headers), "style": {"text_align": "center"}}, "No se encontraron equipos.")),
+                    html.tr(
+                        html.td(
+                            {"colSpan": len(headers), "style": {"text_align": "center"}}, "No se encontraron equipos."
+                        )
+                    ),
                 ]
             ),
         )
@@ -197,7 +204,11 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
     # Desactivar el switch de balanceo SOLO si el equipo tiene una asignación PROGRAMADA
     is_programado = equipo.get("EsProgramado", False)
     balanceo_disabled = is_programado
-    balanceo_title = "No se puede balancear un equipo con asignación programada." if is_programado else "Activar/Desactivar Balanceo Dinámico"
+    balanceo_title = (
+        "No se puede balancear un equipo con asignación programada."
+        if is_programado
+        else "Activar/Desactivar Balanceo Dinámico"
+    )
 
     async def handle_toggle_activo(event):
         await on_action(equipo["EquipoId"], "Activo_SAM", not equipo["Activo_SAM"])
@@ -255,7 +266,9 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
             if equipo.get("RobotAsignado") not in [None, "N/A"]
             else "N/A"
         ),
-        html.td(html.span({"class_name": TAG_SECONDARY if equipo.get("Pool") == "N/A" else TAG}, equipo.get("Pool", "N/A"))),
+        html.td(
+            html.span({"class_name": TAG_SECONDARY if equipo.get("Pool") == "N/A" else TAG}, equipo.get("Pool", "N/A"))
+        ),
     )
 
 
@@ -267,7 +280,11 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
     """
     is_programado = equipo.get("EsProgramado", False)  # Nuevo campo del SP
     balanceo_disabled = is_programado
-    balanceo_title = "No se puede balancear un equipo con asignación programada." if is_programado else "Activar/Desactivar Balanceo Dinámico"
+    balanceo_title = (
+        "No se puede balancear un equipo con asignación programada."
+        if is_programado
+        else "Activar/Desactivar Balanceo Dinámico"
+    )
 
     async def handle_toggle_activo(event):
         await on_action(equipo["EquipoId"], "Activo_SAM", not equipo["Activo_SAM"])
@@ -304,7 +321,9 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
             ),
             html.p(
                 "Pool: ",
-                html.span({"class_name": TAG_SECONDARY if equipo.get("Pool") == "N/A" else TAG}, equipo.get("Pool", "N/A")),
+                html.span(
+                    {"class_name": TAG_SECONDARY if equipo.get("Pool") == "N/A" else TAG}, equipo.get("Pool", "N/A")
+                ),
             ),
             html.div(
                 {"class_name": "grid"},

@@ -121,20 +121,20 @@ form_state = {
 if form_data.get("EsCiclico"):
     if not form_data.get("HoraFin"):
         raise ValueError("Para robots cíclicos, la hora de fin es obligatoria.")
-    
+
     hora_inicio = form_data.get("HoraInicio", "00:00")
     hora_fin = form_data.get("HoraFin")
     if hora_fin <= hora_inicio:
         raise ValueError("La hora de fin debe ser mayor que la hora de inicio.")
-    
+
     fecha_inicio = form_data.get("FechaInicioVentana")
     fecha_fin = form_data.get("FechaFinVentana")
     if fecha_inicio and fecha_fin and fecha_inicio > fecha_fin:
         raise ValueError("La fecha de inicio de ventana debe ser menor o igual a la fecha de fin.")
-    
+
     if not form_data.get("IntervaloEntreEjecuciones"):
         raise ValueError("Para robots cíclicos, el intervalo entre ejecuciones es obligatorio.")
-    
+
     intervalo = form_data.get("IntervaloEntreEjecuciones")
     if intervalo and intervalo < 1:
         raise ValueError("El intervalo entre ejecuciones debe ser al menos 1 minuto.")
@@ -251,4 +251,3 @@ html.div(
 - [ ] Pruebas manuales completadas
 - [ ] Retrocompatibilidad verificada
 - [ ] Documentación actualizada
-

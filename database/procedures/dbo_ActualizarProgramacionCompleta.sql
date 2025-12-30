@@ -4,7 +4,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ActualizarProgramacionCompleta]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ActualizarProgramacionCompleta] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ActualizarProgramacionCompleta] AS'
 END
 GO
 
@@ -39,7 +39,7 @@ BEGIN
     DECLARE @Robot NVARCHAR(100);
     DECLARE @EquipoIdActual INT;
     DECLARE @ConflictosCount INT = 0;
-    
+
     -- Variables para cálculo de HoraFin (fuera del loop)
     DECLARE @FechaBase DATETIME;
     DECLARE @InicioFull DATETIME;
@@ -67,17 +67,17 @@ BEGIN
 
     BEGIN TRY
         SELECT @Robot = Robot FROM dbo.Robots WHERE RobotId = @RobotId;
-        
+
         -- Validaciones para robots cíclicos
         IF @EsCiclico = 1
         BEGIN
             IF @HoraFin IS NOT NULL AND @HoraInicio >= @HoraFin
                 RAISERROR('HoraFin debe ser mayor que HoraInicio para robots cíclicos.', 16, 1);
-            
+
             IF @FechaInicioVentana IS NOT NULL AND @FechaFinVentana IS NOT NULL
                 AND @FechaInicioVentana > @FechaFinVentana
                 RAISERROR('FechaInicioVentana no puede ser mayor que FechaFinVentana.', 16, 1);
-            
+
             IF @IntervaloEntreEjecuciones IS NOT NULL AND @IntervaloEntreEjecuciones < 1
                 RAISERROR('IntervaloEntreEjecuciones debe ser mayor que 0.', 16, 1);
         END
@@ -87,7 +87,7 @@ BEGIN
         -------------------------------------------------------------------------
         -- Preservar el valor original de @HoraFin
         SET @HoraFinCalculada = @HoraFin;
-        
+
         -- Si no se especificó HoraFin, calcularla usando la Tolerancia
         IF @HoraFinCalculada IS NULL AND @Tolerancia IS NOT NULL AND @Tolerancia > 0
         BEGIN
@@ -176,20 +176,20 @@ BEGIN
         IF @ConflictosCount > 0
         BEGIN
             ROLLBACK TRANSACTION;
-            DECLARE @MensajeConflictos NVARCHAR(MAX) = 
-                'Se detectaron ' + CAST(@ConflictosCount AS NVARCHAR(10)) + 
+            DECLARE @MensajeConflictos NVARCHAR(MAX) =
+                'Se detectaron ' + CAST(@ConflictosCount AS NVARCHAR(10)) +
                 ' solapamiento(s) de ventanas temporales:' + CHAR(13) + CHAR(10);
-            
-            SELECT @MensajeConflictos = @MensajeConflictos + 
-                '  - EquipoId: ' + CAST(EquipoId AS NVARCHAR(10)) + 
-                ', Robot: ' + RobotNombre + 
-                ', ProgramaciónId: ' + CAST(ProgramacionId AS NVARCHAR(10)) + 
-                ', Tipo: ' + TipoEjecucion + 
+
+            SELECT @MensajeConflictos = @MensajeConflictos +
+                '  - EquipoId: ' + CAST(EquipoId AS NVARCHAR(10)) +
+                ', Robot: ' + RobotNombre +
+                ', ProgramaciónId: ' + CAST(ProgramacionId AS NVARCHAR(10)) +
+                ', Tipo: ' + TipoEjecucion +
                 ', Horario: ' + CONVERT(NVARCHAR(8), HoraInicio, 108) + ' - ' + CONVERT(NVARCHAR(8), HoraFin, 108) +
                 CASE WHEN DiasSemana IS NOT NULL THEN ', Días: ' + DiasSemana ELSE '' END +
                 CHAR(13) + CHAR(10)
             FROM #ConflictosDetectados;
-            
+
             RAISERROR(@MensajeConflictos, 16, 1);
             RETURN;
         END
@@ -202,18 +202,18 @@ BEGIN
           AND EsProgramado = 1
           AND RobotId = @RobotId
           AND EquipoId NOT IN (SELECT EquipoId FROM #NuevosEquiposProgramados);
-        
+
         DELETE FROM dbo.Asignaciones
         WHERE ProgramacionId = @ProgramacionId
           AND EsProgramado = 1
           AND RobotId = @RobotId
           AND EquipoId IN (SELECT EquipoId FROM #EquiposDesprogramados);
-        
+
         -- 5. Programar los nuevos equipos
         MERGE dbo.Asignaciones AS Target
         USING #NuevosEquiposProgramados AS Source
-        ON (Target.EquipoId = Source.EquipoId 
-            AND Target.RobotId = @RobotId 
+        ON (Target.EquipoId = Source.EquipoId
+            AND Target.RobotId = @RobotId
             AND Target.ProgramacionId = @ProgramacionId)
         WHEN MATCHED THEN
             UPDATE SET
@@ -230,14 +230,14 @@ BEGIN
         SET PermiteBalanceoDinamico = 0
         FROM dbo.Equipos E
         JOIN #NuevosEquiposProgramados NEP ON E.EquipoId = NEP.EquipoId;
-        
+
         UPDATE E
         SET E.PermiteBalanceoDinamico = 1
         FROM dbo.Equipos E
         JOIN #EquiposDesprogramados ED ON E.EquipoId = ED.EquipoId
         WHERE NOT EXISTS (
               SELECT 1 FROM dbo.Asignaciones a2
-              WHERE a2.EquipoId = E.EquipoId 
+              WHERE a2.EquipoId = E.EquipoId
                 AND (a2.EsProgramado = 1 OR a2.Reservado = 1)
           );
 
@@ -251,10 +251,10 @@ BEGIN
         SET @ErrorSeverity = ERROR_SEVERITY();
         SET @ErrorState = ERROR_STATE();
         DECLARE @Parametros NVARCHAR(MAX);
-        SET @Parametros = 
-            '@Robot = ' + ISNULL(@Robot, 'NULL') + 
-            ', @Equipos = ' + ISNULL(@Equipos, 'NULL') + 
-            ', @HoraInicio = ' + ISNULL(CONVERT(NVARCHAR(8), @HoraInicio, 108), 'NULL') + 
+        SET @Parametros =
+            '@Robot = ' + ISNULL(@Robot, 'NULL') +
+            ', @Equipos = ' + ISNULL(@Equipos, 'NULL') +
+            ', @HoraInicio = ' + ISNULL(CONVERT(NVARCHAR(8), @HoraInicio, 108), 'NULL') +
             ', @Tolerancia = ' + ISNULL(CAST(@Tolerancia AS NVARCHAR(10)), 'NULL') +
             ', @EsCiclico = ' + ISNULL(CAST(@EsCiclico AS NVARCHAR(1)), 'NULL');
         INSERT INTO ErrorLog (Usuario, SPNombre, ErrorMensaje, Parametros)

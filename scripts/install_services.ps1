@@ -49,7 +49,7 @@ Write-Host "Instalando servicios SAM..." -ForegroundColor Cyan
 
 foreach ($svc in $services) {
     Write-Host "`nConfigurando: $($svc.DisplayName)" -ForegroundColor Yellow
-    
+
     # Verificar si el servicio ya existe
     $existing = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
     if ($existing) {
@@ -57,10 +57,10 @@ foreach ($svc in $services) {
         nssm stop $svc.Name
         nssm remove $svc.Name confirm
     }
-    
+
     # Instalar servicio
     nssm install $svc.Name $pythonExe "-m" $svc.Module
-    
+
     # Configurar servicio
     nssm set $svc.Name DisplayName $svc.DisplayName
     nssm set $svc.Name Description $svc.Description
@@ -71,7 +71,7 @@ foreach ($svc in $services) {
     nssm set $svc.Name AppRotateOnline 1
     nssm set $svc.Name AppRotateBytes 10485760  # 10MB
     # nssm set $svc.Name Start SERVICE_AUTO_START
-    
+
     Write-Host "  ✓ Instalado correctamente" -ForegroundColor Green
 }
 

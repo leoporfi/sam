@@ -23,7 +23,7 @@ Uso:
 
 from typing import Any, Dict
 
-from reactpy import component, create_context, use_context
+from reactpy import create_context, use_context
 
 # Crear el contexto global
 AppContext = create_context({})

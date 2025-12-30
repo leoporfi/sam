@@ -4,7 +4,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ActualizarProgramacionSimple]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ActualizarProgramacionSimple] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ActualizarProgramacionSimple] AS'
 END
 GO
 
@@ -40,7 +40,7 @@ BEGIN
     -- CÁLCULO DE @HoraFin
     -------------------------------------------------------------------------
     SET @HoraFinCalculada = @HoraFin;
-    
+
     -- Si no se especificó HoraFin, calcularla usando la Tolerancia
     IF @HoraFinCalculada IS NULL AND @Tolerancia IS NOT NULL AND @Tolerancia > 0
     BEGIN
@@ -56,7 +56,7 @@ BEGIN
     -------------------------------------------------------------------------
 
     UPDATE dbo.Programaciones
-    SET 
+    SET
         TipoProgramacion = @TipoProgramacion,
         HoraInicio = @HoraInicio,
         HoraFin = ISNULL(@HoraFinCalculada, @HoraFin),  -- ✅ Usar la calculada
@@ -75,7 +75,7 @@ BEGIN
         FechaModificacion = GETDATE()
     WHERE
         ProgramacionId = @ProgramacionId;
-        
+
     IF @@ROWCOUNT = 0
     BEGIN
         RAISERROR('Programación no encontrada.', 16, 1);

@@ -169,7 +169,9 @@ class HookVerifier:
 
             if if_api_client_line is not None:
                 if use_app_context_line is None:
-                    self.results["errors"].append(f"{file_path.name}: No se encontró use_app_context() pero hay verificación de api_client")
+                    self.results["errors"].append(
+                        f"{file_path.name}: No se encontró use_app_context() pero hay verificación de api_client"
+                    )
                     return False
                 elif use_app_context_line > if_api_client_line:
                     self.results["errors"].append(
@@ -186,7 +188,9 @@ class HookVerifier:
                     else_count = before_hook.count("else:")
                     if if_count > else_count:
                         # Hay un if abierto, verificar indentación
-                        hook_indent = len(lines[use_app_context_line - 1]) - len(lines[use_app_context_line - 1].lstrip())
+                        hook_indent = len(lines[use_app_context_line - 1]) - len(
+                            lines[use_app_context_line - 1].lstrip()
+                        )
                         # Buscar el último if antes de esta línea
                         for j in range(use_app_context_line - 2, -1, -1):
                             if "if " in lines[j] and ":" in lines[j]:

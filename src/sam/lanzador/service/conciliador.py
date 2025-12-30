@@ -1,6 +1,6 @@
 # sam/lanzador/service/conciliador.py
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 import pytz
@@ -120,10 +120,10 @@ class Conciliador:
         if updates_params:
             query = """
                 UPDATE dbo.Ejecuciones
-                SET Estado = ?, 
-                    FechaFin = ?, 
+                SET Estado = ?,
+                    FechaFin = ?,
                     FechaInicioReal = ?,
-                    FechaActualizacion = GETDATE(), 
+                    FechaActualizacion = GETDATE(),
                     IntentosConciliadorFallidos = 0
                 WHERE EjecucionId = ? AND CallbackInfo IS NULL;
             """

@@ -71,7 +71,7 @@ DECLARE @NuevaSeccionCursor NVARCHAR(MAX) = '
         BEGIN
             -- Limpiar tabla temporal intermedia
             DELETE FROM #ResultadosValidacion;
-            
+
             -- Insertar resultados del SP en la tabla temporal intermedia
             INSERT INTO #ResultadosValidacion
             EXEC dbo.ValidarSolapamientoVentanas
@@ -90,7 +90,7 @@ DECLARE @NuevaSeccionCursor NVARCHAR(MAX) = '
 
             -- Insertar solo las columnas necesarias en #ConflictosDetectados
             INSERT INTO #ConflictosDetectados (EquipoId, RobotNombre, ProgramacionId, TipoEjecucion)
-            SELECT 
+            SELECT
                 @EquipoIdActual AS EquipoId,
                 RobotNombre,
                 ProgramacionId,
@@ -115,7 +115,7 @@ IF CHARINDEX('DROP TABLE #ResultadosValidacion', @NuevoSPText) = 0
 BEGIN
     -- Buscar el final del SP (antes del END final)
     DECLARE @UltimoEnd INT = LEN(@NuevoSPText) - CHARINDEX('END', REVERSE(@NuevoSPText)) + 1
-    
+
     -- Insertar DROP TABLE antes del último END
     SET @NuevoSPText = STUFF(@NuevoSPText, @UltimoEnd, 0, CHAR(13) + CHAR(10) + '        IF OBJECT_ID(''tempdb..#ResultadosValidacion'') IS NOT NULL' + CHAR(13) + CHAR(10) + '            DROP TABLE #ResultadosValidacion;' + CHAR(13) + CHAR(10))
 END
@@ -126,4 +126,3 @@ EXEC sp_executesql @NuevoSPText
 PRINT 'SP ActualizarProgramacionCompleta actualizado correctamente.'
 PRINT 'El INSERT ahora usa tabla temporal intermedia para ValidarSolapamientoVentanas.'
 PRINT ''
-

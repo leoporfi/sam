@@ -7,11 +7,11 @@ SELECT R.Robot, EQ.Equipo, A.RobotId, A.EquipoId, A.EsProgramado, A.Reservado
 FROM     dbo.Asignaciones AS A INNER JOIN
                   dbo.Equipos AS EQ ON A.EquipoId = EQ.EquipoId INNER JOIN
                   dbo.Robots AS R ON A.RobotId = R.RobotId
-' 
+'
 IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_DiagramPane1' , N'SCHEMA',N'dbo', N'VIEW',N'AsignacionesView', NULL,NULL))
 	EXEC sys.sp_addextendedproperty @name=N'MS_DiagramPane1', @value=N'[0E232FF0-B466-11cf-A24F-00AA00A3EFFF, 1.00]
-Begin DesignProperties = 
-   Begin PaneConfigurations = 
+Begin DesignProperties =
+   Begin PaneConfigurations =
       Begin PaneConfiguration = 0
          NumPanes = 4
          Configuration = "(H (1[40] 4[20] 2[20] 3) )"
@@ -74,14 +74,14 @@ Begin DesignProperties =
       End
       ActivePaneConfig = 0
    End
-   Begin DiagramPane = 
-      Begin Origin = 
+   Begin DiagramPane =
+      Begin Origin =
          Top = 0
          Left = 0
       End
-      Begin Tables = 
+      Begin Tables =
          Begin Table = "A"
-            Begin Extent = 
+            Begin Extent =
                Top = 7
                Left = 48
                Bottom = 170
@@ -91,7 +91,7 @@ Begin DesignProperties =
             TopColumn = 0
          End
          Begin Table = "EQ"
-            Begin Extent = 
+            Begin Extent =
                Top = 111
                Left = 303
                Bottom = 274
@@ -101,7 +101,7 @@ Begin DesignProperties =
             TopColumn = 0
          End
          Begin Table = "R"
-            Begin Extent = 
+            Begin Extent =
                Top = 7
                Left = 532
                Bottom = 170
@@ -112,9 +112,9 @@ Begin DesignProperties =
          End
       End
    End
-   Begin SQLPane = 
+   Begin SQLPane =
    End
-   Begin DataPane = 
+   Begin DataPane =
       Begin ParameterDefaults = ""
       End
       Begin ColumnWidths = 9
@@ -129,7 +129,7 @@ Begin DesignProperties =
          Width = 1200
       End
    End
-   Begin CriteriaPane = 
+   Begin CriteriaPane =
       Begin ColumnWidths = 11
          Column = 1440
          Alias = 900

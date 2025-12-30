@@ -143,4 +143,3 @@ update_schedule_simple(db, programacion_id=1, data=data)
 2. **Probar desde API:** Crear una programación cíclica usando Postman o curl
 3. **Verificar logs:** Asegurar que no hay errores
 4. **Frontend:** Cuando esté listo, actualizar la UI para exponer los nuevos campos
-

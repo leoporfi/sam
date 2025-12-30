@@ -148,7 +148,7 @@ BEGIN
     SET NOCOUNT ON;
 
     WITH ProgramasFiltradosCTE AS (
-        SELECT 
+        SELECT
             p.ProgramacionId,
             p.RobotId,
             r.Robot AS RobotNombre,
@@ -167,7 +167,7 @@ BEGIN
             CONVERT(VARCHAR(10), p.FechaInicioVentana, 23) AS FechaInicioVentana,
             CONVERT(VARCHAR(10), p.FechaFinVentana, 23) AS FechaFinVentana,
             p.IntervaloEntreEjecuciones,
-            
+
             -- --- CAMBIO AQUÍ ---
             -- Usamos STRING_AGG para listar nombres, pero filtrando por p.ProgramacionId
             (
@@ -182,17 +182,17 @@ BEGIN
             COUNT(*) OVER() AS TotalRows
         FROM dbo.Programaciones p
         JOIN dbo.Robots r ON p.RobotId = r.RobotId
-        WHERE 
+        WHERE
             (@RobotId IS NULL OR p.RobotId = @RobotId)
             AND (@Tipo IS NULL OR p.TipoProgramacion = @Tipo)
             AND (@Activo IS NULL OR p.Activo = @Activo)
             AND (
-                @Search IS NULL OR 
-                r.Robot LIKE '%' + @Search + '%' OR 
+                @Search IS NULL OR
+                r.Robot LIKE '%' + @Search + '%' OR
                 p.TipoProgramacion LIKE '%' + @Search + '%'
             )
     )
-    
+
     SELECT *
     FROM ProgramasFiltradosCTE
     ORDER BY RobotNombre, HoraInicio
@@ -217,4 +217,3 @@ PRINT '  - FechaFinVentana';
 PRINT '  - IntervaloEntreEjecuciones';
 PRINT '';
 PRINT '=============================================';
-

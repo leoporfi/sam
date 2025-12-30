@@ -62,7 +62,9 @@ def format_equipos_list(
     elif isinstance(equipos, list):
         if equipos and isinstance(equipos[0], dict):
             # Lista de diccionarios: extraer 'Equipo' o 'Nombre'
-            nombres = sorted({d.get("Equipo") or d.get("Nombre", "") for d in equipos if d.get("Equipo") or d.get("Nombre")})
+            nombres = sorted(
+                {d.get("Equipo") or d.get("Nombre", "") for d in equipos if d.get("Equipo") or d.get("Nombre")}
+            )
         else:
             # Lista de strings
             nombres = sorted({str(name).strip() for name in equipos if str(name).strip()})

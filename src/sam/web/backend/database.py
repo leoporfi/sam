@@ -1,14 +1,13 @@
 # web/backend/database.py
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
 from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.database import DatabaseConnector
 from sam.common.sincronizador_comun import SincronizadorComun
 
 from .schemas import (
-    AssignmentUpdateRequest,
     EquipoCreateRequest,
     RobotCreateRequest,
     RobotUpdateRequest,
@@ -128,9 +127,13 @@ def get_robots(
         # Programado = True  -> robots que tienen al menos una programación activa
         # Programado = False -> robots sin programaciones activas
         if programado:
-            conditions.append("EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)")
+            conditions.append(
+                "EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)"
+            )
         else:
-            conditions.append("NOT EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)")
+            conditions.append(
+                "NOT EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)"
+            )
 
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
 
@@ -233,7 +236,9 @@ def get_asignaciones_by_robot(db: DatabaseConnector, robot_id: int) -> List[Dict
     return db.ejecutar_consulta(query, (robot_id,), es_select=True)
 
 
-def update_asignaciones_robot(db: DatabaseConnector, robot_id: int, assign_ids: List[int], unassign_ids: List[int]) -> Dict:
+def update_asignaciones_robot(
+    db: DatabaseConnector, robot_id: int, assign_ids: List[int], unassign_ids: List[int]
+) -> Dict:
     robot_info = db.ejecutar_consulta("SELECT EsOnline FROM dbo.Robots WHERE RobotId = ?", (robot_id,), es_select=True)
     if not robot_info:
         raise ValueError("Robot no encontrado")
@@ -243,7 +248,9 @@ def update_asignaciones_robot(db: DatabaseConnector, robot_id: int, assign_ids: 
             # 1. Desasignar equipos
             if unassign_ids:
                 unassign_placeholders = ",".join("?" for _ in unassign_ids)
-                unassign_query = f"DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId IN ({unassign_placeholders})"
+                unassign_query = (
+                    f"DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId IN ({unassign_placeholders})"
+                )
                 cursor.execute(unassign_query, robot_id, *unassign_ids)
 
             # 2. Asignar nuevos equipos
@@ -316,8 +323,8 @@ def get_available_devices_for_robot_inline(db: DatabaseConnector, robot_id: int)
             WHERE EsProgramado = 1
               AND RobotId != ?
         )
-        SELECT 
-            E.EquipoId, 
+        SELECT
+            E.EquipoId,
             E.Equipo,
             ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
             CAST(0 AS BIT) AS Reservado
@@ -397,7 +404,9 @@ def delete_schedule(db: DatabaseConnector, programacion_id: int, robot_id: int):
 
 
 def create_schedule(db: DatabaseConnector, data: ScheduleData):
-    robot_nombre_result = db.ejecutar_consulta("SELECT Robot FROM dbo.Robots WHERE RobotId = ?", (data.RobotId,), es_select=True)
+    robot_nombre_result = db.ejecutar_consulta(
+        "SELECT Robot FROM dbo.Robots WHERE RobotId = ?", (data.RobotId,), es_select=True
+    )
     if not robot_nombre_result:
         raise ValueError(f"No se encontró un robot con el ID {data.RobotId}")
     robot_str = robot_nombre_result[0]["Robot"]
@@ -543,12 +552,12 @@ def update_schedule_simple(db: DatabaseConnector, schedule_id: int, data: Schedu
 
     sql = """
         EXEC dbo.ActualizarProgramacionSimple
-            @ProgramacionId=?, 
-            @TipoProgramacion=?, 
-            @HoraInicio=?, 
-            @DiasSemana=?, 
-            @DiaDelMes=?, 
-            @FechaEspecifica=?, 
+            @ProgramacionId=?,
+            @TipoProgramacion=?,
+            @HoraInicio=?,
+            @DiasSemana=?,
+            @DiaDelMes=?,
+            @FechaEspecifica=?,
             @Tolerancia=?,
             @Activo=?,
             @DiaInicioMes=?,
@@ -667,9 +676,9 @@ def get_schedule_devices_data(db: DatabaseConnector, schedule_id: int) -> Dict[s
                 WHERE EsProgramado = 1
                   AND ProgramacionId != ?
             )
-            SELECT 
-                e.EquipoId AS ID, 
-                e.Equipo AS Nombre, 
+            SELECT
+                e.EquipoId AS ID,
+                e.Equipo AS Nombre,
                 e.Licencia,
                 ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
                 CAST(0 AS BIT) AS Reservado
@@ -698,9 +707,9 @@ def get_schedule_devices_data(db: DatabaseConnector, schedule_id: int) -> Dict[s
                 WHERE EsProgramado = 1
                   AND ProgramacionId != ?
             )
-            SELECT 
-                e.EquipoId AS ID, 
-                e.Equipo AS Nombre, 
+            SELECT
+                e.EquipoId AS ID,
+                e.Equipo AS Nombre,
                 e.Licencia,
                 ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
                 CAST(0 AS BIT) AS Reservado
@@ -879,8 +888,8 @@ def get_system_config(db: DatabaseConnector, key: str) -> str:
 def set_system_config(db: DatabaseConnector, key: str, value: str):
     """Actualiza el valor de una configuración."""
     query = """
-        UPDATE dbo.ConfiguracionSistema 
-        SET Valor = ?, FechaActualizacion = GETDATE() 
+        UPDATE dbo.ConfiguracionSistema
+        SET Valor = ?, FechaActualizacion = GETDATE()
         WHERE Clave = ?
     """
     db.ejecutar_consulta(query, (str(value), key), es_select=False)
@@ -892,7 +901,7 @@ def set_system_config(db: DatabaseConnector, key: str, value: str):
 def get_all_mappings(db: DatabaseConnector) -> List[Dict]:
     """Obtiene todos los mapeos con el nombre del robot interno asociado."""
     query = """
-        SELECT m.*, r.Robot as RobotNombre 
+        SELECT m.*, r.Robot as RobotNombre
         FROM dbo.MapeoRobots m
         LEFT JOIN dbo.Robots r ON m.RobotId = r.RobotId
         ORDER BY m.Proveedor, m.NombreExterno
@@ -905,7 +914,9 @@ def create_mapping(db: DatabaseConnector, data: dict):
         INSERT INTO dbo.MapeoRobots (Proveedor, NombreExterno, RobotId, Descripcion)
         VALUES (?, ?, ?, ?)
     """
-    db.ejecutar_consulta(query, (data["Proveedor"], data["NombreExterno"], data["RobotId"], data.get("Descripcion")), es_select=False)
+    db.ejecutar_consulta(
+        query, (data["Proveedor"], data["NombreExterno"], data["RobotId"], data.get("Descripcion")), es_select=False
+    )
 
 
 def delete_mapping(db: DatabaseConnector, mapeo_id: int):

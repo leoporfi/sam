@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[AnalisisDispersionRobot]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[AnalisisDispersionRobot] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[AnalisisDispersionRobot] AS'
 END
 
 ALTER   PROCEDURE [dbo].[AnalisisDispersionRobot]
@@ -66,7 +66,7 @@ BEGIN
     SELECT * INTO #ConDelta FROM ConDelta;
 
     /* 2. RESUMEN: agrupado por equipo + robot */
-    SELECT  
+    SELECT
             r.Robot,
             e.Equipo,
             COUNT(*)            AS Ejecuciones,
@@ -85,7 +85,7 @@ BEGIN
 	SELECT * FROM #Resumen ORDER BY Robot, Equipo;
 
     /* 3. DETALLE */
-    SELECT  
+    SELECT
             cd.EjecucionID,
             cd.UserId,
             cd.EquipoId,
@@ -107,4 +107,3 @@ BEGIN
     DROP TABLE #Resumen;
     DROP TABLE #ConDelta;
 END;
-

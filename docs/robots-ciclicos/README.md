@@ -39,4 +39,3 @@ docs/robots-ciclicos/
     ├── EJEMPLO_POSTMAN_CURL.md
     └── VERIFICACION_CAMBIOS.md
 ```
-

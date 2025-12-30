@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[MergeEquipos]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[MergeEquipos] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[MergeEquipos] AS'
 END
 ALTER PROCEDURE [dbo].[MergeEquipos]
     @EquipoList dbo.EquipoListType READONLY
@@ -57,13 +57,13 @@ BEGIN
         UPDATE E SET E.EquipoId = U.NewEquipoId
         FROM dbo.Ejecuciones AS E
         INNER JOIN #IdUpdates AS U ON E.EquipoId = U.OldEquipoId;
-        
+
         UPDATE EH SET EH.EquipoId = U.NewEquipoId
         FROM dbo.Ejecuciones_Historico AS EH
         INNER JOIN #IdUpdates AS U ON EH.EquipoId = U.OldEquipoId;
 
         -- 4. MANEJAR LA TABLA PADRE (Equipos)
-        
+
         -- 4a. Eliminar los registros de Equipos ANTIGUOS.
         --     (Es seguro porque los hijos ya no apuntan a él)
         DELETE T
@@ -76,7 +76,7 @@ BEGIN
             EquipoId, Equipo, UserId, UserName, Licencia, Activo_SAM,
             PoolId, PermiteBalanceoDinamico, EstadoBalanceador
         )
-        SELECT 
+        SELECT
             U.NewEquipoId, U.Equipo, U.UserId, U.UserName, U.Licencia, U.Activo_SAM,
             -- Aplicamos la configuración de SAM que guardamos
             U.OldPoolId,
@@ -89,7 +89,7 @@ BEGIN
         MERGE dbo.Equipos AS T
         USING (
             -- Excluimos los que ya manejamos en el paso 4b
-            SELECT * FROM @EquipoList 
+            SELECT * FROM @EquipoList
             WHERE Equipo NOT IN (SELECT Equipo FROM #IdUpdates)
         ) AS S
         ON (T.EquipoId = S.EquipoId) -- Coincidencia normal por ID

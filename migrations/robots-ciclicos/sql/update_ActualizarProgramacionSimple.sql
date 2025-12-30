@@ -33,7 +33,7 @@ BEGIN
     SET NOCOUNT ON;
 
     UPDATE dbo.Programaciones
-    SET 
+    SET
         TipoProgramacion = @TipoProgramacion,
         HoraInicio = @HoraInicio,
         HoraFin = @HoraFin,
@@ -57,4 +57,3 @@ GO
 
 PRINT 'SP ActualizarProgramacionSimple actualizado.'
 GO
-

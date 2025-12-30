@@ -12,7 +12,7 @@ CREATE TABLE [dbo].[HistoricoBalanceo](
 	[AccionTomada] [nvarchar](50) NOT NULL,
 	[Justificacion] [nvarchar](255) NULL,
 	[PoolId] [int] NULL,
- CONSTRAINT [PK_HistoricoBalanceo] PRIMARY KEY CLUSTERED 
+ CONSTRAINT [PK_HistoricoBalanceo] PRIMARY KEY CLUSTERED
 (
 	[HistoricoId] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]

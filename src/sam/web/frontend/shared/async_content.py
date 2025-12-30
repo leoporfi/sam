@@ -16,7 +16,7 @@ Uso:
     )
 """
 
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from reactpy import component, html
 

@@ -221,13 +221,13 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                     function setupMutuallyExclusiveAccordions() {
                         const configAccordion = document.getElementById('accordion-config');
                         const paramsAccordion = document.getElementById('accordion-params');
-                        
+
                         if (!configAccordion || !paramsAccordion) {
                             // Si los elementos no existen aún, reintentar después de un breve delay
                             setTimeout(setupMutuallyExclusiveAccordions, 50);
                             return;
                         }
-                        
+
                         const closeOther = (current) => {
                             if (current === configAccordion && paramsAccordion.hasAttribute('open')) {
                                 paramsAccordion.removeAttribute('open');
@@ -235,7 +235,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                 configAccordion.removeAttribute('open');
                             }
                         };
-                        
+
                         // Remover listeners anteriores si existen (para evitar duplicados)
                         if (configAccordion._toggleHandler) {
                             configAccordion.removeEventListener('toggle', configAccordion._toggleHandler);
@@ -243,7 +243,7 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                         if (paramsAccordion._toggleHandler) {
                             paramsAccordion.removeEventListener('toggle', paramsAccordion._toggleHandler);
                         }
-                        
+
                         // Agregar nuevos listeners
                         configAccordion._toggleHandler = function(e) {
                             if (e.target.open) {
@@ -255,11 +255,11 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                                 closeOther(e.target);
                             }
                         };
-                        
+
                         configAccordion.addEventListener('toggle', configAccordion._toggleHandler);
                         paramsAccordion.addEventListener('toggle', paramsAccordion._toggleHandler);
                     }
-                    
+
                     // Ejecutar después de un pequeño delay para asegurar que los elementos existan
                     setTimeout(setupMutuallyExclusiveAccordions, 100);
                 })();

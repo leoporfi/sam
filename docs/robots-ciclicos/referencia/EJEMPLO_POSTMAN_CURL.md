@@ -85,7 +85,7 @@ curl -X POST "http://localhost:8000/api/schedules" \
 Después de crear una programación, verificar en SQL:
 
 ```sql
-SELECT 
+SELECT
     ProgramacionId,
     RobotId,
     TipoProgramacion,
@@ -109,4 +109,3 @@ EXEC dbo.ObtenerRobotsEjecutables;
 ```
 
 3. Verificar en logs del Lanzador que el robot se ejecuta cíclicamente
-

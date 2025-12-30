@@ -4,7 +4,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[CrearProgramacion]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CrearProgramacion] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CrearProgramacion] AS'
 END
 GO
 
@@ -30,7 +30,7 @@ ALTER PROCEDURE [dbo].[CrearProgramacion]
 AS
 BEGIN
     SET NOCOUNT ON;
-    SET XACT_ABORT ON; 
+    SET XACT_ABORT ON;
 
     DECLARE @RobotId INT;
     DECLARE @NewProgramacionId INT;
@@ -39,7 +39,7 @@ BEGIN
     DECLARE @ErrorState INT;
     DECLARE @EquipoIdActual INT;
     DECLARE @ConflictosCount INT = 0;
-    
+
     -- Variables para cálculo de HoraFin (fuera del loop)
     DECLARE @FechaBase DATETIME;
     DECLARE @InicioFull DATETIME;
@@ -68,26 +68,26 @@ BEGIN
         -- Validaciones existentes
         SELECT @RobotId = RobotId FROM dbo.Robots WHERE Robot = @Robot;
         IF @RobotId IS NULL BEGIN RAISERROR('El robot especificado no existe.', 16, 1); RETURN; END
-        
-        IF @TipoProgramacion = 'Semanal' AND ISNULL(@DiasSemana, '') = '' 
+
+        IF @TipoProgramacion = 'Semanal' AND ISNULL(@DiasSemana, '') = ''
             RAISERROR('Para una programación Semanal, se debe especificar @DiasSemana.', 16, 1);
-        IF @TipoProgramacion = 'Mensual' AND @DiaDelMes IS NULL 
+        IF @TipoProgramacion = 'Mensual' AND @DiaDelMes IS NULL
             RAISERROR('Para una programación Mensual, se debe especificar @DiaDelMes.', 16, 1);
-        IF @TipoProgramacion = 'Especifica' AND @FechaEspecifica IS NULL 
+        IF @TipoProgramacion = 'Especifica' AND @FechaEspecifica IS NULL
             RAISERROR('Para una programación Específica, se debe especificar @FechaEspecifica.', 16, 1);
-        
+
         -- Validaciones para RangoMensual
         IF @TipoProgramacion = 'RangoMensual'
         BEGIN
             IF @DiaInicioMes IS NULL AND @DiaFinMes IS NULL AND @UltimosDiasMes IS NULL
                 RAISERROR('Para RangoMensual, debe especificar un rango (DiaInicioMes+DiaFinMes) o UltimosDiasMes.', 16, 1);
-            
+
             IF @DiaInicioMes IS NOT NULL AND @DiaFinMes IS NOT NULL AND @UltimosDiasMes IS NOT NULL
                 RAISERROR('No puede especificar simultáneamente un rango Y UltimosDiasMes.', 16, 1);
-            
+
             IF (@DiaInicioMes IS NOT NULL AND @DiaFinMes IS NULL) OR (@DiaInicioMes IS NULL AND @DiaFinMes IS NOT NULL)
                 RAISERROR('Debe especificar ambos: DiaInicioMes y DiaFinMes.', 16, 1);
-            
+
             IF @DiaInicioMes IS NOT NULL AND @DiaFinMes IS NOT NULL AND @DiaInicioMes > @DiaFinMes
                 RAISERROR('DiaInicioMes no puede ser mayor que DiaFinMes.', 16, 1);
         END
@@ -98,12 +98,12 @@ BEGIN
             -- Validar que HoraFin sea mayor que HoraInicio (si ambos están definidos)
             IF @HoraFin IS NOT NULL AND @HoraInicio >= @HoraFin
                 RAISERROR('HoraFin debe ser mayor que HoraInicio para robots cíclicos.', 16, 1);
-            
+
             -- Validar rango de fechas
             IF @FechaInicioVentana IS NOT NULL AND @FechaFinVentana IS NOT NULL
                 AND @FechaInicioVentana > @FechaFinVentana
                 RAISERROR('FechaInicioVentana no puede ser mayor que FechaFinVentana.', 16, 1);
-            
+
             -- Validar intervalo entre ejecuciones
             IF @IntervaloEntreEjecuciones IS NOT NULL AND @IntervaloEntreEjecuciones < 1
                 RAISERROR('IntervaloEntreEjecuciones debe ser mayor que 0.', 16, 1);
@@ -121,7 +121,7 @@ BEGIN
         -------------------------------------------------------------------------
         -- Preservar el valor original de @HoraFin
         SET @HoraFinCalculada = @HoraFin;
-        
+
         -- Si no se especificó HoraFin, calcularla usando la Tolerancia
         IF @HoraFinCalculada IS NULL AND @Tolerancia IS NOT NULL AND @Tolerancia > 0
         BEGIN
@@ -181,20 +181,20 @@ BEGIN
         IF @ConflictosCount > 0
         BEGIN
             -- Construir mensaje de error detallado
-            DECLARE @MensajeConflictos NVARCHAR(MAX) = 
-                'Se detectaron ' + CAST(@ConflictosCount AS NVARCHAR(10)) + 
+            DECLARE @MensajeConflictos NVARCHAR(MAX) =
+                'Se detectaron ' + CAST(@ConflictosCount AS NVARCHAR(10)) +
                 ' solapamiento(s) de ventanas temporales:' + CHAR(13) + CHAR(10);
-            
-            SELECT @MensajeConflictos = @MensajeConflictos + 
-                '  - EquipoId: ' + CAST(EquipoId AS NVARCHAR(10)) + 
-                ', Robot: ' + RobotNombre + 
-                ', ProgramaciónId: ' + CAST(ProgramacionId AS NVARCHAR(10)) + 
-                ', Tipo: ' + TipoEjecucion + 
+
+            SELECT @MensajeConflictos = @MensajeConflictos +
+                '  - EquipoId: ' + CAST(EquipoId AS NVARCHAR(10)) +
+                ', Robot: ' + RobotNombre +
+                ', ProgramaciónId: ' + CAST(ProgramacionId AS NVARCHAR(10)) +
+                ', Tipo: ' + TipoEjecucion +
                 ', Horario: ' + CONVERT(NVARCHAR(8), HoraInicio, 108) + ' - ' + CONVERT(NVARCHAR(8), HoraFin, 108) +
                 CASE WHEN DiasSemana IS NOT NULL THEN ', Días: ' + DiasSemana ELSE '' END +
                 CHAR(13) + CHAR(10)
             FROM #ConflictosDetectados;
-            
+
             RAISERROR(@MensajeConflictos, 16, 1);
             RETURN;
         END
@@ -203,13 +203,13 @@ BEGIN
 
         -- Insertar la nueva programación (con los nuevos campos)
         INSERT INTO dbo.Programaciones (
-            RobotId, TipoProgramacion, HoraInicio, HoraFin, Tolerancia, Activo, 
+            RobotId, TipoProgramacion, HoraInicio, HoraFin, Tolerancia, Activo,
             FechaCreacion, DiasSemana, DiaDelMes, FechaEspecifica,
             DiaInicioMes, DiaFinMes, UltimosDiasMes,
             EsCiclico, FechaInicioVentana, FechaFinVentana, IntervaloEntreEjecuciones
         )
         VALUES (
-            @RobotId, @TipoProgramacion, @HoraInicio, @HoraFin, @Tolerancia, 1, 
+            @RobotId, @TipoProgramacion, @HoraInicio, @HoraFin, @Tolerancia, 1,
             GETDATE(),
             CASE WHEN @TipoProgramacion = 'Semanal' THEN @DiasSemana ELSE NULL END,
             CASE WHEN @TipoProgramacion = 'Mensual' THEN @DiaDelMes ELSE NULL END,
@@ -238,7 +238,7 @@ BEGIN
         FROM dbo.Equipos E JOIN #EquiposAProgramar NEP ON E.EquipoId = NEP.EquipoId;
 
         COMMIT TRANSACTION;
-        
+
         DECLARE @TipoEjecucionStr NVARCHAR(20) = CASE WHEN @EsCiclico = 1 THEN 'cíclica' ELSE 'única' END;
         PRINT 'Programación de tipo "' + @TipoProgramacion + '" (' + @TipoEjecucionStr + ') creada exitosamente.';
 
@@ -256,7 +256,7 @@ BEGIN
         SET @ErrorMessage = ERROR_MESSAGE();
         SET @ErrorSeverity = ERROR_SEVERITY();
         SET @ErrorState = ERROR_STATE();
-        
+
         DECLARE @Parametros NVARCHAR(MAX) = FORMATMESSAGE(
             '@Robot=%s, @TipoProgramacion=%s, @EsCiclico=%s, @HoraInicio=%s, @HoraFin=%s',
             ISNULL(@Robot, 'NULL'), ISNULL(@TipoProgramacion, 'NULL'),
@@ -264,10 +264,10 @@ BEGIN
             ISNULL(CONVERT(NVARCHAR(8), @HoraInicio, 108), 'NULL'),
             ISNULL(CONVERT(NVARCHAR(8), @HoraFin, 108), 'NULL')
         );
-        
+
         INSERT INTO dbo.ErrorLog (Usuario, SPNombre, ErrorMensaje, Parametros)
         VALUES (SUSER_NAME(), 'CrearProgramacion', @ErrorMessage, @Parametros);
-        
+
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END
