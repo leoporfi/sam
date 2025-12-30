@@ -1,6 +1,6 @@
 [project]
 name = "sam"
-version = "0.1.1"
+version = "1.1.0"
 description = "Sistema Automático de Robots - RPA Orchestration"
 requires-python = ">=3.9"
 dependencies = [
