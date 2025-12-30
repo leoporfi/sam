@@ -46,6 +46,11 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
         # Aplicar trim automático a campos de texto
         if isinstance(value, str) and field not in ["TipoProgramacion", "RobotId", "DiasSemana"]:
             value = value.strip()
+
+        # FIX: Convertir cadenas vacías a None para campos de fecha/hora opcionales
+        if field in ["FechaInicioVentana", "FechaFinVentana", "FechaEspecifica", "HoraFin"] and value == "":
+            value = None
+
         new_form_data = {**form_data, field: value}
 
         if field == "TipoProgramacion":
@@ -98,7 +103,9 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
                     html.select(
                         {
                             "value": str(form_data.get("RobotId", "")),
-                            "on_change": lambda e: handle_change("RobotId", int(e["target"]["value"]) if e["target"]["value"] else None),
+                            "on_change": lambda e: handle_change(
+                                "RobotId", int(e["target"]["value"]) if e["target"]["value"] else None
+                            ),
                             "required": True,
                             "size": min(max(len(filtered_robots), 1), 8),  # Mostrar entre 1 y 8 opciones
                             "style": {
@@ -112,7 +119,9 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
                     ),
                     html.small(
                         {"style": {"color": "var(--pico-muted-color)", "fontSize": "0.85em"}},
-                        f"{len(filtered_robots)} robot(s) disponible(s)" if robot_search else f"{len(robots_list)} robot(s) disponible(s)",
+                        f"{len(filtered_robots)} robot(s) disponible(s)"
+                        if robot_search
+                        else f"{len(robots_list)} robot(s) disponible(s)",
                     ),
                 ),
                 # Fila 2: Tipo de Programación
@@ -217,14 +226,17 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
                 # Si es RangoMensual
                 html.div(
                     {"class_name": "rango-mensual-options"},
-                    html.p({"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}}, "Seleccione una opción:"),
+                    html.p(
+                        {"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}}, "Seleccione una opción:"
+                    ),
                     html.label(
                         html.input(
                             {
                                 "type": "radio",
                                 "name": "rango-option",
                                 "value": "rango",
-                                "checked": form_data.get("DiaInicioMes") is not None and form_data.get("DiaFinMes") is not None,
+                                "checked": form_data.get("DiaInicioMes") is not None
+                                and form_data.get("DiaFinMes") is not None,
                                 "on_change": lambda e: handle_change("rango_option", "rango"),
                             }
                         ),
@@ -241,8 +253,11 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
                                     "min": 1,
                                     "max": 31,
                                     "placeholder": "1",
-                                    "on_change": lambda e: handle_change("DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None),
-                                    "disabled": form_data.get("rango_option") != "rango" and form_data.get("DiaInicioMes") is None,
+                                    "on_change": lambda e: handle_change(
+                                        "DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                    ),
+                                    "disabled": form_data.get("rango_option") != "rango"
+                                    and form_data.get("DiaInicioMes") is None,
                                 }
                             ),
                         ),
@@ -255,7 +270,9 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
                                     "min": 1,
                                     "max": 31,
                                     "placeholder": "10",
-                                    "on_change": lambda e: handle_change("DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                                    "on_change": lambda e: handle_change(
+                                        "DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                    ),
                                 }
                             ),
                         ),
@@ -286,7 +303,9 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
                                 "min": 1,
                                 "max": 31,
                                 "placeholder": "10",
-                                "on_change": lambda e: handle_change("PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                                "on_change": lambda e: handle_change(
+                                    "PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                ),
                             }
                         ),
                     )
@@ -313,7 +332,9 @@ def ScheduleCreateForm(form_data: Dict[str, Any], on_change: Callable, robots_li
                                 "min": 1,
                                 "max": 31,
                                 "placeholder": "5",
-                                "on_change": lambda e: handle_change("UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                                "on_change": lambda e: handle_change(
+                                    "UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                ),
                             }
                         ),
                     )
@@ -510,7 +531,9 @@ def ScheduleCreateModal(
                 has_primeros = form_data.get("PrimerosDiasMes")
                 has_ultimos = form_data.get("UltimosDiasMes")
                 if not (has_rango or has_primeros or has_ultimos):
-                    raise ValueError("Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días.")
+                    raise ValueError(
+                        "Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días."
+                    )
 
             # Validaciones para robots cíclicos
             if form_data.get("EsCiclico"):
