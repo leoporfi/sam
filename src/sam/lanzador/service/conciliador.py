@@ -89,6 +89,7 @@ class Conciliador:
             dep_id = detalle.get("deploymentId")
             status_api = detalle.get("status")
             end_date_str = detalle.get("endDateTime")
+            start_date_str = detalle.get("startDateTime")
             ejecucion_id = mapa_deploy_a_ejecucion.get(dep_id)
 
             if not all([dep_id, status_api, ejecucion_id]):
@@ -111,7 +112,9 @@ class Conciliador:
                 continue
 
             fecha_fin_dt = self._convertir_utc_a_local_sam(end_date_str)
-            updates_params.append((final_status_db, fecha_fin_dt, ejecucion_id))
+            fecha_inicio_real_dt = self._convertir_utc_a_local_sam(start_date_str)
+
+            updates_params.append((final_status_db, fecha_fin_dt, fecha_inicio_real_dt, ejecucion_id))
 
         # Actualizar estados finales (COMPLETED, RUN_FAILED, etc.)
         if updates_params:
@@ -119,6 +122,7 @@ class Conciliador:
                 UPDATE dbo.Ejecuciones
                 SET Estado = ?, 
                     FechaFin = ?, 
+                    FechaInicioReal = ?,
                     FechaActualizacion = GETDATE(), 
                     IntentosConciliadorFallidos = 0
                 WHERE EjecucionId = ? AND CallbackInfo IS NULL;
