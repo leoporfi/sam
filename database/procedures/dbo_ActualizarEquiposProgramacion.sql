@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ActualizarEquiposProgramacion]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ActualizarEquiposProgramacion] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ActualizarEquiposProgramacion] AS'
 END
 
 ALTER PROCEDURE [dbo].[ActualizarEquiposProgramacion]
@@ -11,9 +11,9 @@ ALTER PROCEDURE [dbo].[ActualizarEquiposProgramacion]
 AS
 BEGIN
     SET NOCOUNT ON;
-    
+
     BEGIN TRANSACTION;
-    
+
     BEGIN TRY
         -- 1. Obtener el RobotId asociado a esta programación
         DECLARE @RobotId INT;
@@ -21,17 +21,17 @@ BEGIN
 
         -- 2. Eliminar asignaciones previas de esta programación
         -- (Limpiamos la tabla Asignaciones para este ID de programación)
-        DELETE FROM dbo.Asignaciones 
+        DELETE FROM dbo.Asignaciones
         WHERE ProgramacionId = @ProgramacionId;
 
         -- 3. Insertar las nuevas asignaciones
         INSERT INTO dbo.Asignaciones (RobotId, EquipoId, EsProgramado, Reservado, FechaAsignacion, ProgramacionId, AsignadoPor)
-        SELECT 
+        SELECT
             @RobotId,
-            ID, 
+            ID,
             1, -- EsProgramado
             0, -- Reservado (asumimos 0 para programación estándar)
-            GETDATE(), 
+            GETDATE(),
             @ProgramacionId,
             'SAM_WEB'
         FROM @EquiposIds;
@@ -41,7 +41,7 @@ BEGIN
     BEGIN CATCH
         IF @@TRANCOUNT > 0
             ROLLBACK TRANSACTION;
-            
+
         DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
         DECLARE @ErrorSeverity INT = ERROR_SEVERITY();
         DECLARE @ErrorState INT = ERROR_STATE();
@@ -49,4 +49,3 @@ BEGIN
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END
-

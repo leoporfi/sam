@@ -74,7 +74,11 @@ def filter_robots_by_name(robots: List[Dict[str, Any]], search_term: Optional[st
         return robots
 
     search_lower = search_term.lower().strip()
-    return [robot for robot in robots if search_lower in robot.get("Robot", "").lower() or search_lower in robot.get("Nombre", "").lower()]
+    return [
+        robot
+        for robot in robots
+        if search_lower in robot.get("Robot", "").lower() or search_lower in robot.get("Nombre", "").lower()
+    ]
 
 
 def filter_equipos_by_status(
@@ -119,7 +123,11 @@ def filter_equipos_by_name(equipos: List[Dict[str, Any]], search_term: Optional[
         return equipos
 
     search_lower = search_term.lower().strip()
-    return [equipo for equipo in equipos if search_lower in equipo.get("Equipo", "").lower() or search_lower in equipo.get("Nombre", "").lower()]
+    return [
+        equipo
+        for equipo in equipos
+        if search_lower in equipo.get("Equipo", "").lower() or search_lower in equipo.get("Nombre", "").lower()
+    ]
 
 
 def filter_schedules_by_robot(schedules: List[Dict[str, Any]], robot_id: Optional[int]) -> List[Dict[str, Any]]:

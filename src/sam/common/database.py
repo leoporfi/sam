@@ -11,7 +11,7 @@ import pyodbc
 from .config_manager import ConfigManager
 
 if TYPE_CHECKING:
-    from sam.common.a360_client import AutomationAnywhereClient
+    pass
 
 logger = logging.getLogger(__name__)
 

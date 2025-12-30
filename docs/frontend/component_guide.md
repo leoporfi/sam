@@ -27,7 +27,7 @@ from sam.web.frontend.shared.async_content import AsyncContent
 @component
 def RobotList():
     robots, loading, error = use_robots_data()
-    
+
     return AsyncContent(
         loading=loading,
         error=error,
@@ -272,7 +272,7 @@ Todos los hooks y componentes que necesitan `APIClient` lo reciben a través de:
    api_client = APIClient(base_url="http://127.0.0.1:8000")
    app_context_value = {"api_client": api_client}
    return AppContext(children=..., value=app_context_value)
-   
+
    # En hooks o componentes
    from sam.web.frontend.state.app_context import use_app_context
    api_client = use_app_context()["api_client"]
@@ -378,7 +378,7 @@ from sam.web.frontend.shared.styles import ROBOT_CARD
 def RobotsPage():
     """Página principal de robots."""
     robots_state = use_robots()
-    
+
     columns = [
         {
             "key": "Robot",
@@ -391,7 +391,7 @@ def RobotsPage():
             "render": lambda row: "✅ Activo" if row["Activo"] else "❌ Inactivo",
         },
     ]
-    
+
     return html.div(
         html.h1("Robots"),
         DataTable(
@@ -421,7 +421,7 @@ from ...shared.styles import CARD, BUTTON_PRIMARY
 def MyFeatureCard(data: Dict[str, Any]):
     """
     Componente de ejemplo siguiendo estándares.
-    
+
     Args:
         data: Diccionario con datos del feature
     """
@@ -450,10 +450,10 @@ from ..state.app_context import use_app_context
 def use_my_feature(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
     """
     Hook para gestionar feature.
-    
+
     Args:
         api_client: Cliente API opcional para inyección de dependencias.
-    
+
     Returns:
         Dict con datos y funciones del hook.
     """
@@ -461,12 +461,12 @@ def use_my_feature(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
     if api_client is None:
         app_context = use_app_context()
         api_client = app_context.get("api_client")
-    
+
     # Estados
     data, set_data = use_state([])
     loading, set_loading = use_state(True)
     error, set_error = use_state(None)
-    
+
     # Efecto para cargar datos
     @use_effect(dependencies=[])
     def load_data():
@@ -479,10 +479,10 @@ def use_my_feature(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
                 set_error(str(e))
             finally:
                 set_loading(False)
-        
+
         task = asyncio.create_task(fetch())
         return lambda: task.cancel()
-    
+
     return {
         "data": data,
         "loading": loading,
@@ -520,10 +520,10 @@ from sam.web.frontend.hooks.use_robots_hook import use_robots
 def test_use_robots_with_mock():
     mock_client = MagicMock(spec=APIClient)
     mock_client.get_robots = AsyncMock(return_value={"robots": [], "total": 0})
-    
+
     # Inyectar mock
     robots_state = use_robots(api_client=mock_client)
-    
+
     assert robots_state["robots"] == []
 ```
 
@@ -538,6 +538,3 @@ def test_use_robots_with_mock():
 ---
 
 **Última actualización:** Fase 6 - Testing y Documentación
-
-
-

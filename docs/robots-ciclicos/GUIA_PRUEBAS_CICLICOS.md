@@ -10,7 +10,7 @@
 ### Base de Datos
 - ⚠️ **PENDIENTE**: Los SPs necesitan ser actualizados con los nuevos parámetros
   - `CrearProgramacion` - Falta actualizar
-  - `ActualizarProgramacionCompleta` - Falta actualizar  
+  - `ActualizarProgramacionCompleta` - Falta actualizar
   - `ActualizarProgramacionSimple` - Falta actualizar
 
 ## 🔧 Pasos para Completar la Migración
@@ -123,4 +123,3 @@ response = requests.post("http://localhost:8000/api/schedules", json=data)
 ## 📞 Siguiente Paso
 
 Una vez que los SPs estén actualizados y las pruebas pasen, la funcionalidad estará completamente lista para usar.
-

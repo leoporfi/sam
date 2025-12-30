@@ -4,7 +4,6 @@ Ejecutar: python probar_api_ciclicos.py
 """
 
 import json
-import sys
 
 import requests
 

@@ -4,8 +4,8 @@
 ---
 
 ## DIAPOSITIVA 1: Portada del Servicio
-**Título:** Interfaz Web de SAM  
-**Subtítulo:** Consola Central de Gestión  
+**Título:** Interfaz Web de SAM
+**Subtítulo:** Consola Central de Gestión
 **Elementos visuales:**
 - Ícono de dashboard/panel de control
 - Badge: "Módulo Gestión"
@@ -17,15 +17,15 @@
 **Título:** La Diferencia Entre Ver y Gestionar
 
 **NO es solo visualización:**
-❌ Dashboard de métricas pasivas  
-❌ Reportes estáticos  
-❌ Logs formateados  
+❌ Dashboard de métricas pasivas
+❌ Reportes estáticos
+❌ Logs formateados
 
 **ES una consola de gestión:**
-✅ ABM completo (Alta, Baja, Modificación)  
-✅ Configuración en caliente  
-✅ Estrategia de asignación  
-✅ Programación de tareas  
+✅ ABM completo (Alta, Baja, Modificación)
+✅ Configuración en caliente
+✅ Estrategia de asignación
+✅ Programación de tareas
 
 **Objetivo:**
 Permitir al equipo de soporte y administradores configurar el comportamiento del orquestador **sin tocar la base de datos** directamente.
@@ -118,7 +118,7 @@ Permitir al equipo de soporte y administradores configurar el comportamiento del
 - **Interfaz:**
   ```
   Nombre Externo (Clouders/A360) → Nombre Interno (SAM)
-  
+
   [RBT_FAC_V3         ] → [Robot_Facturas  ]  [Guardar]
   [Queue_Pagos_Prod   ] → [Robot_Pagos     ]  [Guardar]
   [Proc_RRHH_Legacy   ] → [Robot_Legajos   ]  [Guardar]
@@ -155,8 +155,8 @@ PASO 4: BACKEND (api.py)
 Recibe request → Valida con Pydantic (schemas.py)
       ↓
 PASO 5: BASE DE DATOS (database.py)
-EXEC dbo.ActualizarRobotConfig 
-  @RobotId=15, 
+EXEC dbo.ActualizarRobotConfig
+  @RobotId=15,
   @Prioridad=1
       ↓
 PASO 6: CONFIRMACIÓN

@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[EliminarPool]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[EliminarPool] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[EliminarPool] AS'
 END
 -- Reemplaza los SPs de la respuesta anterior con estos:
 
@@ -41,4 +41,3 @@ BEGIN
         THROW;
     END CATCH
 END
-

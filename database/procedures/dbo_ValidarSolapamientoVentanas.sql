@@ -5,7 +5,7 @@ GO
 
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ValidarSolapamientoVentanas]') AND type in (N'P', N'PC'))
 BEGIN
-    EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ValidarSolapamientoVentanas] AS' 
+    EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ValidarSolapamientoVentanas] AS'
 END
 GO
 
@@ -40,7 +40,7 @@ BEGIN
     ---------------------------------------------------------------------------
     -- Devuelve todas las programaciones existentes que causan conflicto
     -- con la nueva programación que se está intentando crear.
-    SELECT 
+    SELECT
         A.EquipoId,
         P.ProgramacionId,
         R.Robot AS RobotNombre,
@@ -54,14 +54,14 @@ BEGIN
         P.DiaInicioMes,
         P.DiaFinMes,
         P.UltimosDiasMes,
-        CASE 
+        CASE
             WHEN P.EsCiclico = 1 THEN 'Cíclico'
             ELSE 'Una vez'
         END AS TipoEjecucion
     FROM dbo.Programaciones P
     INNER JOIN dbo.Asignaciones A ON P.ProgramacionId = A.ProgramacionId
     INNER JOIN dbo.Robots R ON P.RobotId = R.RobotId
-    WHERE 
+    WHERE
         -- Filtro básico: mismo equipo, programaciones activas
         A.EquipoId = @EquipoId
         AND P.Activo = 1
@@ -75,7 +75,7 @@ BEGIN
         -- NULL = fecha infinita (siempre activa)
         AND (
             (@FechaInicioVentana IS NULL OR P.FechaFinVentana IS NULL OR @FechaInicioVentana <= P.FechaFinVentana)
-            AND 
+            AND
             (@FechaFinVentana IS NULL OR P.FechaInicioVentana IS NULL OR @FechaFinVentana >= P.FechaInicioVentana)
         )
 
@@ -85,8 +85,8 @@ BEGIN
         -- Verificamos intersección de horas en el día.
         -- Lógica: (StartA < EndB) AND (EndA > StartB)
         AND (
-            @HoraInicio < ISNULL(P.HoraFin, '23:59:59') 
-            AND 
+            @HoraInicio < ISNULL(P.HoraFin, '23:59:59')
+            AND
             @HoraFinCalculada > P.HoraInicio
         )
 
@@ -98,7 +98,7 @@ BEGIN
             -- Una programación Diaria ejecuta todos los días, por lo que colisiona
             -- con cualquier otra programación que tenga solapamiento de horario.
             (@TipoProgramacion = 'Diaria' OR P.TipoProgramacion = 'Diaria')
-            
+
             OR
 
             -- CASO B: SEMANAL vs SEMANAL
@@ -106,7 +106,7 @@ BEGIN
             -- Ejemplo: Lu,Ma,Mi choca con Mi,Ju,Vi (tienen Mi en común)
             (@TipoProgramacion = 'Semanal' AND P.TipoProgramacion = 'Semanal'
              AND EXISTS (
-                SELECT 1 
+                SELECT 1
                 FROM STRING_SPLIT(@DiasSemana, ',') s1
                 JOIN STRING_SPLIT(P.DiasSemana, ',') s2 ON LTRIM(RTRIM(s1.value)) = LTRIM(RTRIM(s2.value))
              )
@@ -117,7 +117,7 @@ BEGIN
             -- CASO C: MENSUAL vs MENSUAL
             -- Dos programaciones mensuales chocan solo si ejecutan el mismo día del mes.
             -- Ejemplo: día 5 choca con día 5, pero no con día 10
-            (@TipoProgramacion = 'Mensual' AND P.TipoProgramacion = 'Mensual' 
+            (@TipoProgramacion = 'Mensual' AND P.TipoProgramacion = 'Mensual'
              AND @DiaDelMes = P.DiaDelMes)
 
             OR
@@ -137,14 +137,14 @@ BEGIN
              )
             )
 
-            OR 
+            OR
 
             -- CASO E: ESPECÍFICA vs ESPECÍFICA
             -- Dos programaciones específicas chocan solo si son para la misma fecha exacta.
             (@TipoProgramacion = 'Especifica' AND P.TipoProgramacion = 'Especifica'
              AND P.FechaEspecifica = @FechaEspecifica
             )
-            
+
             -----------------------------------------------------------------------
             -- NOTA SOBRE LIMITACIONES:
             -----------------------------------------------------------------------

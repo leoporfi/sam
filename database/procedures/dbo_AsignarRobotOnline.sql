@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[AsignarRobotOnline]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[AsignarRobotOnline] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[AsignarRobotOnline] AS'
 END
 ALTER PROCEDURE [dbo].[AsignarRobotOnline]
     @Robot NVARCHAR(100),
@@ -10,7 +10,7 @@ ALTER PROCEDURE [dbo].[AsignarRobotOnline]
 AS
 BEGIN
     SET NOCOUNT ON;
-    
+
     BEGIN TRY
         BEGIN TRANSACTION;
 
@@ -18,7 +18,7 @@ BEGIN
         -- Validar la existencia del robot
         DECLARE @RobotId INT;
         SELECT @RobotId = RobotId FROM Robots WHERE Robot = @Robot;
-        
+
         IF @RobotId IS NULL
         BEGIN
             RAISERROR('El robot especificado no existe.', 16, 1);
@@ -33,8 +33,8 @@ BEGIN
         -- Iterar sobre los equipos y asignarlos
         DECLARE @EquipoNombre NVARCHAR(255);
         DECLARE @EquipoId INT;
-        
-        DECLARE equipo_cursor CURSOR FOR 
+
+        DECLARE equipo_cursor CURSOR FOR
         SELECT Equipo FROM @EquiposTemp;
 
         OPEN equipo_cursor;
@@ -44,7 +44,7 @@ BEGIN
         BEGIN
             -- Validar la existencia del equipo
             SELECT @EquipoId = EquipoId FROM Equipos WHERE Equipo = @EquipoNombre;
-            
+
             IF @EquipoId IS NULL
             BEGIN
                 PRINT 'El equipo "' + @EquipoNombre + '" no existe. Se omitirá su asignación.';

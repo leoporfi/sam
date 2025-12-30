@@ -3,8 +3,6 @@ Script de prueba para crear una programación cíclica con ventanas
 Usar desde Python o adaptar para Postman/curl
 """
 
-import json
-from datetime import date, time
 
 import requests
 
@@ -59,7 +57,7 @@ def crear_programacion(data: dict):
     try:
         response = requests.post(url, json=data, headers=headers)
         response.raise_for_status()
-        print(f"✅ Programación creada exitosamente:")
+        print("✅ Programación creada exitosamente:")
         print(f"   Respuesta: {response.json()}")
         return response.json()
     except requests.exceptions.HTTPError as e:

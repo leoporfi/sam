@@ -5,9 +5,9 @@ Permite agregar/eliminar variables y configurar sus tipos y valores sin necesida
 """
 
 import json
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
-from reactpy import component, event, html, use_callback, use_effect, use_state
+from reactpy import component, event, html, use_effect, use_state
 
 # Tipos de datos soportados por la API de Automation Anywhere
 AA360_ATTRIBUTE_TYPES = [
@@ -344,7 +344,10 @@ def BotInputEditor(value: Optional[str], on_change: Callable):
                             "name": "bot-input-var-name",
                             "placeholder": "Ej: in_NumRepeticion",
                             "value": new_var_name,
-                            "on_change": lambda e: (set_new_var_name(e["target"]["value"].strip()), set_new_var_error(None)),
+                            "on_change": lambda e: (
+                                set_new_var_name(e["target"]["value"].strip()),
+                                set_new_var_error(None),
+                            ),
                         }
                     ),
                 ),
@@ -368,7 +371,11 @@ def BotInputEditor(value: Optional[str], on_change: Callable):
                             "placeholder": "Valor..." if new_var_type != "BOOLEAN" else "true/false",
                             "value": new_var_value,
                             "on_change": lambda e: (
-                                set_new_var_value(e["target"]["value"].strip() if isinstance(e["target"]["value"], str) else e["target"]["value"]),
+                                set_new_var_value(
+                                    e["target"]["value"].strip()
+                                    if isinstance(e["target"]["value"], str)
+                                    else e["target"]["value"]
+                                ),
                                 set_new_var_error(None),
                             ),
                         }

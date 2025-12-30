@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[CargarProgramacionDiaria]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CargarProgramacionDiaria] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CargarProgramacionDiaria] AS'
 END
 -- =============================================
 -- Author:      <Author,,Name>
@@ -130,9 +130,9 @@ BEGIN
 
         -- Registrar el error en la tabla ErrorLog
         DECLARE @Parametros NVARCHAR(MAX);
-        SET @Parametros = '@Robot = ' + @Robot + 
-                        ', @Equipos = ' + @Equipos + 
-                        ', @HoraInicio = ' + CONVERT(NVARCHAR(8), @HoraInicio, 108) + 
+        SET @Parametros = '@Robot = ' + @Robot +
+                        ', @Equipos = ' + @Equipos +
+                        ', @HoraInicio = ' + CONVERT(NVARCHAR(8), @HoraInicio, 108) +
                         ', @Tolerancia = ' + CAST(@Tolerancia AS NVARCHAR(10));
 
         -- Luego:
@@ -151,4 +151,3 @@ BEGIN
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END
-

@@ -10,7 +10,7 @@ CREATE TABLE [dbo].[Asignaciones](
 	[FechaAsignacion] [datetime2](0) NULL,
 	[AsignadoPor] [nvarchar](50) NULL,
 	[ProgramacionId] [int] NULL,
- CONSTRAINT [UQ_RobotEquipoProgramacion] UNIQUE NONCLUSTERED 
+ CONSTRAINT [UQ_RobotEquipoProgramacion] UNIQUE NONCLUSTERED
 (
 	[RobotId] ASC,
 	[EquipoId] ASC,

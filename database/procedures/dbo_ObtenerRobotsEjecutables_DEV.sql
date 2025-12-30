@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerRobotsEjecutables_DEV]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerRobotsEjecutables_DEV] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerRobotsEjecutables_DEV] AS'
 END
 
 ALTER PROCEDURE [dbo].[ObtenerRobotsEjecutables_DEV]
@@ -29,7 +29,7 @@ BEGIN
 
     -- Insertar robots programados elegibles (CORREGIDO)
     INSERT INTO #ResultadosRobots (RobotId, EquipoId, UserId, Hora, EsProgramado)
-    SELECT 
+    SELECT
         R.RobotId,
         A.EquipoId,
         E.UserId,
@@ -41,18 +41,18 @@ BEGIN
     INNER JOIN Programaciones P ON A.ProgramacionId = P.ProgramacionId
     -- CALCULOS AUXILIARES (APPLY)
     CROSS APPLY (
-        SELECT 
+        SELECT
             -- 1. Calculamos la hora de fin real (sumando tolerancia)
             DATEADD(MINUTE, P.Tolerancia, P.HoraInicio) AS HoraFin,
-            
+
             -- 2. Determinamos a qué FECHA pertenece esta ejecución teórica
-            CASE 
-                WHEN @HoraActual < P.HoraInicio AND P.HoraInicio > '12:00' 
+            CASE
+                WHEN @HoraActual < P.HoraInicio AND P.HoraInicio > '12:00'
                 THEN CAST(DATEADD(DAY, -1, @FechaActual) AS DATE)
                 ELSE CAST(@FechaActual AS DATE)
             END AS FechaTeoricaProgramacion
     ) Calc
-    WHERE 
+    WHERE
         A.EsProgramado = 1
         AND R.Activo = 1
         AND P.Activo = 1
@@ -60,10 +60,10 @@ BEGIN
         AND (
             (
                 (Calc.HoraFin >= P.HoraInicio AND @HoraActual BETWEEN P.HoraInicio AND Calc.HoraFin) -- Caso Normal
-                OR 
+                OR
                 (Calc.HoraFin < P.HoraInicio AND (@HoraActual >= P.HoraInicio OR @HoraActual <= Calc.HoraFin)) -- Caso Medianoche
             )
-            AND 
+            AND
             (
                 -- Diaria
                 (P.TipoProgramacion = 'Diaria')
@@ -93,18 +93,18 @@ BEGIN
         AND NOT EXISTS (
             SELECT 1
             FROM Ejecuciones Ejec
-            WHERE Ejec.EquipoId = A.EquipoId 
+            WHERE Ejec.EquipoId = A.EquipoId
               AND (Ejec.Estado IN ('DEPLOYED', 'QUEUED', 'PENDING_EXECUTION', 'RUNNING', 'UPDATE', 'RUN_PAUSED')
                    OR (Ejec.Estado = 'UNKNOWN' AND Ejec.FechaUltimoUNKNOWN > DATEADD(HOUR, -2, GETDATE())))
         )
         -- No duplicar equipos en la misma vuelta del SP
-        AND NOT EXISTS ( 
+        AND NOT EXISTS (
             SELECT 1 FROM #ResultadosRobots RR WHERE RR.EquipoId = A.EquipoId
         );
 
     -- Insertar robots online elegibles (SIN CAMBIOS)
     INSERT INTO #ResultadosRobots (RobotId, EquipoId, UserId, Hora, EsProgramado)
-    SELECT 
+    SELECT
         R.RobotId,
         A.EquipoId,
         E.UserId,
@@ -113,7 +113,7 @@ BEGIN
     FROM Robots R
     INNER JOIN Asignaciones A ON R.RobotId = A.RobotId
     INNER JOIN Equipos E ON A.EquipoId = E.EquipoId
-    WHERE 
+    WHERE
         R.EsOnline = 1
         AND R.Activo = 1
         AND A.EsProgramado = 0
@@ -121,7 +121,7 @@ BEGIN
         AND NOT EXISTS (
             SELECT 1
             FROM Ejecuciones Ejec
-            WHERE Ejec.EquipoId = A.EquipoId 
+            WHERE Ejec.EquipoId = A.EquipoId
               AND (Ejec.Estado IN ('DEPLOYED', 'QUEUED', 'PENDING_EXECUTION', 'RUNNING', 'UPDATE', 'RUN_PAUSED')
                    OR (Ejec.Estado = 'UNKNOWN' AND Ejec.FechaUltimoUNKNOWN > DATEADD(HOUR, -2, GETDATE())))
         );

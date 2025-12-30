@@ -5,7 +5,7 @@ GO
 
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[usp_AnalizarLatenciaEjecuciones]') AND type in (N'P', N'PC'))
 BEGIN
-    EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[usp_AnalizarLatenciaEjecuciones] AS' 
+    EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[usp_AnalizarLatenciaEjecuciones] AS'
 END
 GO
 
@@ -29,7 +29,7 @@ BEGIN
 
     -- CTE para unificar datos
     WITH AllExecutions AS (
-        SELECT 
+        SELECT
             EjecucionId,
             RobotId,
             EquipoId,
@@ -40,10 +40,10 @@ BEGIN
             'ACTUAL' AS Origen
         FROM dbo.Ejecuciones
         WHERE (@Scope IN ('ACTUALES', 'TODAS'))
-        
+
         UNION ALL
-        
-        SELECT 
+
+        SELECT
             EjecucionId,
             RobotId,
             EquipoId,
@@ -55,7 +55,7 @@ BEGIN
         FROM dbo.Ejecuciones_Historico
         WHERE (@Scope IN ('HISTORICAS', 'TODAS'))
     )
-    SELECT 
+    SELECT
         EjecucionId,
         RobotId,
         EquipoId,
@@ -68,7 +68,7 @@ BEGIN
         DATEDIFF(SECOND, FechaInicioA360, FechaFinA360) AS DuracionEjecucionSegundos,
         DATEDIFF(SECOND, FechaLanzamientoSAM, FechaFinA360) AS DuracionTotalSegundos
     FROM AllExecutions
-    WHERE 
+    WHERE
         FechaLanzamientoSAM BETWEEN @FechaDesde AND @FechaHasta
         AND FechaInicioA360 IS NOT NULL -- Solo analizar si tenemos el dato real
     ORDER BY FechaLanzamientoSAM DESC;

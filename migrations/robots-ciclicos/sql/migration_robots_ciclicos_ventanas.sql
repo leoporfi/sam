@@ -70,32 +70,32 @@ GO
 -- =============================================
 
 IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description', N'SCHEMA', N'dbo', N'TABLE', N'Programaciones', N'COLUMN', N'EsCiclico'))
-    EXEC sys.sp_addextendedproperty @name=N'MS_Description', 
-        @value=N'Indica si el robot se ejecuta cíclicamente (1) o solo una vez (0/NULL). Si es 1, el robot se ejecutará repetidamente dentro de la ventana temporal definida.' , 
+    EXEC sys.sp_addextendedproperty @name=N'MS_Description',
+        @value=N'Indica si el robot se ejecuta cíclicamente (1) o solo una vez (0/NULL). Si es 1, el robot se ejecutará repetidamente dentro de la ventana temporal definida.' ,
         @level0type=N'SCHEMA', @level0name=N'dbo', @level1type=N'TABLE', @level1name=N'Programaciones', @level2type=N'COLUMN', @level2name=N'EsCiclico'
 GO
 
 IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description', N'SCHEMA', N'dbo', N'TABLE', N'Programaciones', N'COLUMN', N'HoraFin'))
-    EXEC sys.sp_addextendedproperty @name=N'MS_Description', 
-        @value=N'Hora de fin del rango horario permitido para ejecución. Si es NULL y EsCiclico=1, se permite ejecución durante todo el día.' , 
+    EXEC sys.sp_addextendedproperty @name=N'MS_Description',
+        @value=N'Hora de fin del rango horario permitido para ejecución. Si es NULL y EsCiclico=1, se permite ejecución durante todo el día.' ,
         @level0type=N'SCHEMA', @level0name=N'dbo', @level1type=N'TABLE', @level1name=N'Programaciones', @level2type=N'COLUMN', @level2name=N'HoraFin'
 GO
 
 IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description', N'SCHEMA', N'dbo', N'TABLE', N'Programaciones', N'COLUMN', N'FechaInicioVentana'))
-    EXEC sys.sp_addextendedproperty @name=N'MS_Description', 
-        @value=N'Fecha desde la cual la ventana temporal es válida. Si es NULL, la ventana es válida desde la fecha de creación.' , 
+    EXEC sys.sp_addextendedproperty @name=N'MS_Description',
+        @value=N'Fecha desde la cual la ventana temporal es válida. Si es NULL, la ventana es válida desde la fecha de creación.' ,
         @level0type=N'SCHEMA', @level0name=N'dbo', @level1type=N'TABLE', @level1name=N'Programaciones', @level2type=N'COLUMN', @level2name=N'FechaInicioVentana'
 GO
 
 IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description', N'SCHEMA', N'dbo', N'TABLE', N'Programaciones', N'COLUMN', N'FechaFinVentana'))
-    EXEC sys.sp_addextendedproperty @name=N'MS_Description', 
-        @value=N'Fecha hasta la cual la ventana temporal es válida. Si es NULL, la ventana es válida indefinidamente.' , 
+    EXEC sys.sp_addextendedproperty @name=N'MS_Description',
+        @value=N'Fecha hasta la cual la ventana temporal es válida. Si es NULL, la ventana es válida indefinidamente.' ,
         @level0type=N'SCHEMA', @level0name=N'dbo', @level1type=N'TABLE', @level1name=N'Programaciones', @level2type=N'COLUMN', @level2name=N'FechaFinVentana'
 GO
 
 IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description', N'SCHEMA', N'dbo', N'TABLE', N'Programaciones', N'COLUMN', N'IntervaloEntreEjecuciones'))
-    EXEC sys.sp_addextendedproperty @name=N'MS_Description', 
-        @value=N'Minutos de espera entre ejecuciones cíclicas. Si es NULL y EsCiclico=1, se ejecuta tan pronto como el equipo esté disponible.' , 
+    EXEC sys.sp_addextendedproperty @name=N'MS_Description',
+        @value=N'Minutos de espera entre ejecuciones cíclicas. Si es NULL y EsCiclico=1, se ejecuta tan pronto como el equipo esté disponible.' ,
         @level0type=N'SCHEMA', @level0name=N'dbo', @level1type=N'TABLE', @level1name=N'Programaciones', @level2type=N'COLUMN', @level2name=N'IntervaloEntreEjecuciones'
 GO
 
@@ -123,12 +123,12 @@ CREATE PROCEDURE [dbo].[ValidarSolapamientoVentanas]
 AS
 BEGIN
     SET NOCOUNT ON;
-    
+
     -- Si HoraFin es NULL, asumimos que es el final del día (23:59:59)
     DECLARE @HoraFinCalculada TIME = ISNULL(@HoraFin, '23:59:59');
-    
+
     -- Buscar programaciones activas del mismo equipo que puedan solaparse
-    SELECT 
+    SELECT
         P.ProgramacionId,
         R.Robot AS RobotNombre,
         P.TipoProgramacion,
@@ -141,7 +141,7 @@ BEGIN
         P.DiaInicioMes,
         P.DiaFinMes,
         P.UltimosDiasMes,
-        CASE 
+        CASE
             WHEN P.EsCiclico = 1 THEN 'Cíclico'
             ELSE 'Una vez'
         END AS TipoEjecucion
@@ -168,7 +168,7 @@ BEGIN
             OR
             (P.FechaInicioVentana IS NULL AND P.FechaFinVentana IS NULL)
             OR
-            (@FechaInicioVentana IS NOT NULL AND @FechaFinVentana IS NOT NULL 
+            (@FechaInicioVentana IS NOT NULL AND @FechaFinVentana IS NOT NULL
              AND P.FechaInicioVentana IS NOT NULL AND P.FechaFinVentana IS NOT NULL
              AND NOT (@FechaFinVentana < P.FechaInicioVentana OR @FechaInicioVentana > P.FechaFinVentana))
         )
@@ -179,7 +179,7 @@ BEGIN
             OR
             -- Semanal: verificar días de la semana
             (@TipoProgramacion = 'Semanal' AND P.TipoProgramacion = 'Semanal'
-             AND (@DiasSemana IS NULL OR P.DiasSemana IS NULL 
+             AND (@DiasSemana IS NULL OR P.DiasSemana IS NULL
                   OR EXISTS (SELECT 1 FROM STRING_SPLIT(@DiasSemana, ',') s1
                             CROSS JOIN STRING_SPLIT(P.DiasSemana, ',') s2
                             WHERE LTRIM(RTRIM(s1.value)) = LTRIM(RTRIM(s2.value))))
@@ -201,10 +201,10 @@ BEGIN
                  (@UltimosDiasMes IS NOT NULL AND P.UltimosDiasMes IS NOT NULL)
                  OR
                  -- Rango vs últimos días (simplificado: siempre conflicto potencial)
-                 ((@DiaInicioMes IS NOT NULL OR @DiaFinMes IS NOT NULL) 
+                 ((@DiaInicioMes IS NOT NULL OR @DiaFinMes IS NOT NULL)
                   AND P.UltimosDiasMes IS NOT NULL)
                  OR
-                 (@UltimosDiasMes IS NOT NULL 
+                 (@UltimosDiasMes IS NOT NULL
                   AND (P.DiaInicioMes IS NOT NULL OR P.DiaFinMes IS NOT NULL))
              )
             )
@@ -231,4 +231,3 @@ GO
 PRINT 'Migración completada exitosamente.';
 PRINT 'NOTA: Los Stored Procedures deben ser actualizados en un siguiente paso.';
 GO
-

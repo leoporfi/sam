@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[CargarProgramacionRangoMensual]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CargarProgramacionRangoMensual] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CargarProgramacionRangoMensual] AS'
 END
 
 ALTER PROCEDURE [dbo].[CargarProgramacionRangoMensual]
@@ -83,27 +83,27 @@ BEGIN
         IF @RobotId IS NULL
         BEGIN
             RAISERROR('El robot especificado no existe.', 16, 1);
-            RETURN; 
+            RETURN;
         END
 
         -- Insertar en Programaciones con el nuevo tipo 'RangoMensual'
         INSERT INTO dbo.Programaciones (
-            RobotId, 
-            TipoProgramacion, 
-            HoraInicio, 
-            Tolerancia, 
-            Activo, 
+            RobotId,
+            TipoProgramacion,
+            HoraInicio,
+            Tolerancia,
+            Activo,
             FechaCreacion,
             DiaInicioMes,
             DiaFinMes,
             UltimosDiasMes
         )
         VALUES (
-            @RobotId, 
-            'RangoMensual', 
-            @HoraInicio, 
-            @Tolerancia, 
-            1, 
+            @RobotId,
+            'RangoMensual',
+            @HoraInicio,
+            @Tolerancia,
+            1,
             GETDATE(),
             @DiaInicioMes,
             @DiaFinMes,
@@ -175,14 +175,14 @@ BEGIN
         DEALLOCATE team_cursor;
 
         COMMIT TRANSACTION;
-        
+
         -- Mensaje de éxito con detalles
         DECLARE @MensajeDetalle NVARCHAR(500);
         IF @UltimosDiasMes IS NOT NULL
             SET @MensajeDetalle = 'los últimos ' + CAST(@UltimosDiasMes AS NVARCHAR(10)) + ' días de cada mes';
         ELSE
             SET @MensajeDetalle = 'del día ' + CAST(@DiaInicioMes AS NVARCHAR(10)) + ' al ' + CAST(@DiaFinMes AS NVARCHAR(10)) + ' de cada mes';
-        
+
         PRINT 'Programación de rango mensual cargada exitosamente para el robot ' + @Robot + ' - Ejecutará ' + @MensajeDetalle;
 
     END TRY
@@ -197,9 +197,9 @@ BEGIN
 
         -- Registrar el error en la tabla ErrorLog
         DECLARE @Parametros NVARCHAR(MAX);
-        SET @Parametros = '@Robot = ' + @Robot + 
-                        ', @Equipos = ' + @Equipos + 
-                        ', @HoraInicio = ' + CONVERT(NVARCHAR(8), @HoraInicio, 108) + 
+        SET @Parametros = '@Robot = ' + @Robot +
+                        ', @Equipos = ' + @Equipos +
+                        ', @HoraInicio = ' + CONVERT(NVARCHAR(8), @HoraInicio, 108) +
                         ', @Tolerancia = ' + CAST(@Tolerancia AS NVARCHAR(10)) +
                         ', @DiaInicioMes = ' + ISNULL(CAST(@DiaInicioMes AS NVARCHAR(10)), 'NULL') +
                         ', @DiaFinMes = ' + ISNULL(CAST(@DiaFinMes AS NVARCHAR(10)), 'NULL') +
@@ -217,4 +217,3 @@ BEGIN
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END
-

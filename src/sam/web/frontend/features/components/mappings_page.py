@@ -1,8 +1,7 @@
 # src/sam/web/frontend/features/components/mappings_page.py
 import asyncio
-from typing import Dict, List
 
-from reactpy import component, event, html, use_effect, use_state
+from reactpy import component, html, use_effect, use_state
 
 # Importación manual para datalist
 from reactpy.core.vdom import make_vdom_constructor
@@ -52,7 +51,9 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
 
             # Extraer proveedores existentes
             existing_providers = sorted(list(set(m["Proveedor"] for m in m_data)))
-            all_providers = sorted(list(set(existing_providers + ["A360", "Orquestador", "RPA360", "Tisam", "General"])))
+            all_providers = sorted(
+                list(set(existing_providers + ["A360", "Orquestador", "RPA360", "Tisam", "General"]))
+            )
             set_known_providers(all_providers)
         except asyncio.CancelledError:
             raise
@@ -219,7 +220,9 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                                             "href": "#",
                                             "class_name": "secondary",
                                             "data-tooltip": "Eliminar Alias",
-                                            "on_click": lambda e, mid=m["MapeoId"]: asyncio.create_task(handle_delete(mid)),
+                                            "on_click": lambda e, mid=m["MapeoId"]: asyncio.create_task(
+                                                handle_delete(mid)
+                                            ),
                                         },
                                         html.i({"class_name": "fa-solid fa-trash"}),
                                     )

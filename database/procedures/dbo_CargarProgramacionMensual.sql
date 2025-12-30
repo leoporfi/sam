@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[CargarProgramacionMensual]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CargarProgramacionMensual] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CargarProgramacionMensual] AS'
 END
 -- =============================================
 -- Author:      <Author,,Name>
@@ -49,7 +49,7 @@ BEGIN
         IF @RobotId IS NULL
         BEGIN
             RAISERROR('El robot especificado no existe.', 16, 1);
-            RETURN; 
+            RETURN;
         END
 
         -- Insertar en Programaciones
@@ -81,7 +81,7 @@ BEGIN
 
         WHILE @@FETCH_STATUS = 0
         BEGIN
-            SET @CurrentEquipoId = NULL; 
+            SET @CurrentEquipoId = NULL;
 
             -- Obtener EquipoId para el equipo actual
             SELECT @CurrentEquipoId = EquipoId FROM dbo.Equipos WHERE Equipo = @CurrentEquipoNombre;
@@ -94,9 +94,9 @@ BEGIN
                     UPDATE dbo.Asignaciones
                     SET EsProgramado = 1,
                         ProgramacionId = @NewProgramacionId,
-                        Reservado = 0, 
+                        Reservado = 0,
                         AsignadoPor = 'SP_Programacion_Mensual',
-                        FechaAsignacion = GETDATE() 
+                        FechaAsignacion = GETDATE()
                     WHERE RobotId = @RobotId AND EquipoId = @CurrentEquipoId;
                 END
                 ELSE
@@ -136,9 +136,9 @@ BEGIN
 
         -- Registrar el error en la tabla ErrorLog
         DECLARE @Parametros NVARCHAR(MAX);
-        SET @Parametros = '@Robot = ' + @Robot + 
-                        ', @Equipos = ' + @Equipos + 
-                        ', @HoraInicio = ' + CONVERT(NVARCHAR(8), @HoraInicio, 108) + 
+        SET @Parametros = '@Robot = ' + @Robot +
+                        ', @Equipos = ' + @Equipos +
+                        ', @HoraInicio = ' + CONVERT(NVARCHAR(8), @HoraInicio, 108) +
                         ', @Tolerancia = ' + CAST(@Tolerancia AS NVARCHAR(10));
 
         -- Luego:
@@ -157,4 +157,3 @@ BEGIN
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END
-

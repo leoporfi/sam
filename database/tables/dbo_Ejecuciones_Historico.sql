@@ -16,7 +16,7 @@ CREATE TABLE [dbo].[Ejecuciones_Historico](
 	[FechaActualizacion] [datetime2](0) NULL,
 	[IntentosConciliadorFallidos] [int] NOT NULL,
 	[CallbackInfo] [nvarchar](max) NULL,
- CONSTRAINT [PK_Ejecuciones_Historico] PRIMARY KEY CLUSTERED 
+ CONSTRAINT [PK_Ejecuciones_Historico] PRIMARY KEY CLUSTERED
 (
 	[HistoricoId] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]

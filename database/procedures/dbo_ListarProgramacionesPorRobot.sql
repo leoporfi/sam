@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ListarProgramacionesPorRobot]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ListarProgramacionesPorRobot] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ListarProgramacionesPorRobot] AS'
 END
 -- =============================================
 -- Author:      <Author>
@@ -72,4 +72,3 @@ BEGIN
     ORDER BY
         P.ProgramacionId;
 END
-

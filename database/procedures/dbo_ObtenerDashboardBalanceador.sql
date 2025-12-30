@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerDashboardBalanceador]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerDashboardBalanceador] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerDashboardBalanceador] AS'
 END
 -- =============================================
 -- Author:      Sistema SAM
@@ -22,8 +22,8 @@ BEGIN
 
     -- Establecer fechas por defecto si no se proporcionan
     IF @FechaInicio IS NULL
-        SET @FechaInicio = DATEADD(DAY, -30, GETDATE()); 
-    
+        SET @FechaInicio = DATEADD(DAY, -30, GETDATE());
+
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
 
@@ -34,35 +34,35 @@ BEGIN
         SELECT
             'METRICAS_GENERALES' AS TipoResultado,
             COUNT(*) AS TotalAcciones,
-            
+
             -- Clasificación con prioridad: DESASIGNAR primero, luego ASIGNAR
             -- Esto evita que "DESASIGNAR" se cuente como "ASIGNAR"
-            SUM(CASE 
+            SUM(CASE
                 WHEN AccionTomada LIKE 'DESASIGNAR%' OR AccionTomada LIKE '%QUITAR%' THEN 0
-                WHEN AccionTomada LIKE 'ASIGNAR%' OR AccionTomada LIKE '%AGREGAR%' THEN 1 
-                ELSE 0 
+                WHEN AccionTomada LIKE 'ASIGNAR%' OR AccionTomada LIKE '%AGREGAR%' THEN 1
+                ELSE 0
             END) AS TotalAsignaciones,
-            
-            SUM(CASE 
-                WHEN AccionTomada LIKE 'DESASIGNAR%' OR AccionTomada LIKE '%QUITAR%' THEN 1 
-                ELSE 0 
+
+            SUM(CASE
+                WHEN AccionTomada LIKE 'DESASIGNAR%' OR AccionTomada LIKE '%QUITAR%' THEN 1
+                ELSE 0
             END) AS TotalDesasignaciones,
-            
+
             -- Nueva métrica: acciones no clasificadas
-            SUM(CASE 
+            SUM(CASE
                 WHEN AccionTomada NOT LIKE 'ASIGNAR%'
-                 AND AccionTomada NOT LIKE 'DESASIGNAR%' 
+                 AND AccionTomada NOT LIKE 'DESASIGNAR%'
                  AND AccionTomada NOT LIKE '%AGREGAR%'
-                 AND AccionTomada NOT LIKE '%QUITAR%' 
-                THEN 1 
-                ELSE 0 
+                 AND AccionTomada NOT LIKE '%QUITAR%'
+                THEN 1
+                ELSE 0
             END) AS AccionesOtras,
-            
+
             -- Métricas basadas en el delta real de equipos
             SUM(CASE WHEN (EquiposAsignadosDespues - EquiposAsignadosAntes) > 0 THEN 1 ELSE 0 END) AS AsignacionesReales,
             SUM(CASE WHEN (EquiposAsignadosDespues - EquiposAsignadosAntes) < 0 THEN 1 ELSE 0 END) AS DesasignacionesReales,
             SUM(CASE WHEN (EquiposAsignadosDespues - EquiposAsignadosAntes) = 0 THEN 1 ELSE 0 END) AS AccionesSinCambio,
-            
+
             AVG(CAST(EquiposAsignadosDespues - EquiposAsignadosAntes AS FLOAT)) AS PromedioMovimientoNeto,
             COUNT(DISTINCT RobotId) AS RobotsAfectados,
             AVG(CAST(TicketsPendientes AS FLOAT)) AS PromedioTicketsPendientes
@@ -98,9 +98,9 @@ BEGIN
             CAST(FechaBalanceo AS DATE) AS Fecha,
             COUNT(*) AS TotalAcciones,
             SUM(CASE WHEN AccionTomada LIKE 'DESASIGNAR%' OR AccionTomada LIKE '%QUITAR%' THEN 0
-                     WHEN AccionTomada LIKE 'ASIGNAR%' OR AccionTomada LIKE '%AGREGAR%' THEN 1 
+                     WHEN AccionTomada LIKE 'ASIGNAR%' OR AccionTomada LIKE '%AGREGAR%' THEN 1
                      ELSE 0 END) AS Asignaciones,
-            SUM(CASE WHEN AccionTomada LIKE 'DESASIGNAR%' OR AccionTomada LIKE '%QUITAR%' THEN 1 
+            SUM(CASE WHEN AccionTomada LIKE 'DESASIGNAR%' OR AccionTomada LIKE '%QUITAR%' THEN 1
                      ELSE 0 END) AS Desasignaciones,
             AVG(CAST(TicketsPendientes AS FLOAT)) AS PromedioTickets,
             COUNT(DISTINCT RobotId) AS RobotsActivos
@@ -127,13 +127,13 @@ BEGIN
             ISNULL(Stats.CambiosEquipos, 0) AS CambiosEquipos
         FROM Robots R
         LEFT JOIN (
-            SELECT 
+            SELECT
                 H.RobotId,
                 COUNT(*) AS TotalAcciones,
                 SUM(CASE WHEN H.AccionTomada LIKE 'DESASIGNAR%' OR H.AccionTomada LIKE '%QUITAR%' THEN 0
-                         WHEN H.AccionTomada LIKE 'ASIGNAR%' OR H.AccionTomada LIKE '%AGREGAR%' THEN 1 
+                         WHEN H.AccionTomada LIKE 'ASIGNAR%' OR H.AccionTomada LIKE '%AGREGAR%' THEN 1
                          ELSE 0 END) AS Asignaciones,
-                SUM(CASE WHEN H.AccionTomada LIKE 'DESASIGNAR%' OR H.AccionTomada LIKE '%QUITAR%' THEN 1 
+                SUM(CASE WHEN H.AccionTomada LIKE 'DESASIGNAR%' OR H.AccionTomada LIKE '%QUITAR%' THEN 1
                          ELSE 0 END) AS Desasignaciones,
                 AVG(CAST(H.EquiposAsignadosAntes AS FLOAT)) AS PromedioEquiposAntes,
                 AVG(CAST(H.EquiposAsignadosDespues AS FLOAT)) AS PromedioEquiposDespues,
@@ -159,22 +159,22 @@ BEGIN
             (SELECT COUNT(*) FROM Robots WHERE EsOnline = 1 AND (@PoolId IS NULL OR PoolId = @PoolId)) AS RobotsOnline,
             (SELECT COUNT(*) FROM Equipos WHERE Activo_SAM = 1 AND (@PoolId IS NULL OR PoolId = @PoolId)) AS EquiposActivos,
             (SELECT COUNT(*) FROM Equipos WHERE PermiteBalanceoDinamico = 1 AND (@PoolId IS NULL OR PoolId = @PoolId)) AS EquiposBalanceables,
-            (SELECT COUNT(*) FROM Asignaciones A 
-             INNER JOIN Robots R ON A.RobotId = R.RobotId 
+            (SELECT COUNT(*) FROM Asignaciones A
+             INNER JOIN Robots R ON A.RobotId = R.RobotId
              WHERE A.EsProgramado = 1 AND (@PoolId IS NULL OR R.PoolId = @PoolId)) AS AsignacionesProgramadas,
-            (SELECT COUNT(*) FROM Asignaciones A 
-             INNER JOIN Robots R ON A.RobotId = R.RobotId 
+            (SELECT COUNT(*) FROM Asignaciones A
+             INNER JOIN Robots R ON A.RobotId = R.RobotId
              WHERE A.Reservado = 1 AND (@PoolId IS NULL OR R.PoolId = @PoolId)) AS AsignacionesReservadas,
-            (SELECT COUNT(*) FROM Ejecuciones E 
-             INNER JOIN Robots R ON E.RobotId = R.RobotId 
-             WHERE E.Estado IN ('DEPLOYED', 'RUNNING', 'QUEUED', 'PENDING_EXECUTION') 
+            (SELECT COUNT(*) FROM Ejecuciones E
+             INNER JOIN Robots R ON E.RobotId = R.RobotId
+             WHERE E.Estado IN ('DEPLOYED', 'RUNNING', 'QUEUED', 'PENDING_EXECUTION')
              AND (@PoolId IS NULL OR R.PoolId = @PoolId)) AS EjecucionesActivas;
 
         -- =============================================
         -- RESULT SET 6: DETECCIÓN DE THRASHING
         -- =============================================
         WITH ThrashingAnalysis AS (
-            SELECT 
+            SELECT
                 RobotId,
                 FechaBalanceo,
                 AccionTomada,
@@ -193,7 +193,7 @@ BEGIN
             COUNT(DISTINCT RobotId) AS RobotsAfectados,
             AVG(CAST(MinutosDesdeUltimaAccion AS FLOAT)) AS PromedioMinutosEntreAcciones
         FROM ThrashingAnalysis
-        WHERE MinutosDesdeUltimaAccion <= 5 
+        WHERE MinutosDesdeUltimaAccion <= 5
             AND ((AccionTomada LIKE '%ASIGNAR%' AND AccionAnterior LIKE '%DESASIGNAR%')
                  OR (AccionTomada LIKE '%DESASIGNAR%' AND AccionAnterior LIKE '%ASIGNAR%'));
 

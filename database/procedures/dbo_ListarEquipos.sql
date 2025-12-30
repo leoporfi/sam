@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ListarEquipos]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ListarEquipos] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ListarEquipos] AS'
 END
 /*
 MODIFICACIÓN:
@@ -25,7 +25,7 @@ BEGIN
 
     -- Usamos OUTER APPLY para obtener la asignación de MAYOR prioridad
     -- Esto evita duplicados de equipos.
-    DECLARE @SelectFromClause NVARCHAR(MAX) = 
+    DECLARE @SelectFromClause NVARCHAR(MAX) =
         'FROM dbo.Equipos e
          LEFT JOIN dbo.Pools p ON e.PoolId = p.PoolId
          OUTER APPLY (
@@ -42,7 +42,7 @@ BEGIN
                 a.Reservado DESC,    -- 2. Prioridad a Reservado
                 a.FechaAsignacion DESC -- 3. Luego al más reciente
          ) AS AsignacionInfo';
-    
+
     DECLARE @WhereClause NVARCHAR(MAX) = 'WHERE 1=1';
     DECLARE @Params NVARCHAR(MAX) = '@p_Nombre NVARCHAR(100), @p_ActivoSAM BIT, @p_PermiteBalanceo BIT';
 
@@ -61,32 +61,31 @@ BEGIN
     -- Añadimos 'EsProgramado' a las columnas ordenables
     DECLARE @SortableColumns TABLE (ColName NVARCHAR(100) PRIMARY KEY);
     INSERT INTO @SortableColumns VALUES ('Equipo'), ('Licencia'), ('Activo_SAM'), ('PermiteBalanceoDinamico'), ('RobotAsignado'), ('Pool'), ('EsProgramado');
-    
+
     IF NOT EXISTS (SELECT 1 FROM @SortableColumns WHERE ColName = @SortBy)
         SET @SortBy = 'Equipo';
 
     -- Mapeo de SortBy a las columnas reales (incluyendo la del OUTER APPLY)
-    DECLARE @SortColumnReal NVARCHAR(100) = 
+    DECLARE @SortColumnReal NVARCHAR(100) =
         CASE @SortBy
             WHEN 'RobotAsignado' THEN 'AsignacionInfo.Robot'
             WHEN 'EsProgramado' THEN 'AsignacionInfo.EsProgramado'
             WHEN 'Pool' THEN 'p.Nombre'
             ELSE 'e.' + QUOTENAME(@SortBy)
         END;
-    
+
     DECLARE @OrderByClause NVARCHAR(100) = @SortColumnReal + ' ' + @SortDir;
     DECLARE @Offset INT = (@Page - 1) * @Size;
 
-    DECLARE @MainQuery NVARCHAR(MAX) = 
-        'SELECT 
+    DECLARE @MainQuery NVARCHAR(MAX) =
+        'SELECT
             e.EquipoId, e.Equipo, e.UserName, e.Licencia, e.Activo_SAM, e.PermiteBalanceoDinamico,
             ISNULL(AsignacionInfo.Robot, ''N/A'') as RobotAsignado,
             ISNULL(AsignacionInfo.EsProgramado, 0) as EsProgramado, -- <-- NUEVA COLUMNA
             ISNULL(p.Nombre, ''N/A'') as Pool
-         ' + @SelectFromClause + ' ' + @WhereClause + 
+         ' + @SelectFromClause + ' ' + @WhereClause +
         ' ORDER BY ' + @OrderByClause +
         ' OFFSET ' + CAST(@Offset AS NVARCHAR(10)) + ' ROWS FETCH NEXT ' + CAST(@Size AS NVARCHAR(10)) + ' ROWS ONLY';
 
     EXEC sp_executesql @MainQuery, @Params, @p_Nombre = @Nombre, @p_ActivoSAM = @ActivoSAM, @p_PermiteBalanceo = @PermiteBalanceo;
 END
-

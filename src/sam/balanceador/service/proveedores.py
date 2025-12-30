@@ -43,7 +43,10 @@ class CloudersProveedor(CargaProveedorBase):
         try:
             robots_db = db_sam.ejecutar_consulta(query, es_select=True) or []
             # Se usa strip() para limpiar posibles espacios en blanco en los nombres
-            return {r["Robot"].strip(): {"id": r["RobotId"], "activo": r["Activo"], "es_online": r["EsOnline"]} for r in robots_db}
+            return {
+                r["Robot"].strip(): {"id": r["RobotId"], "activo": r["Activo"], "es_online": r["EsOnline"]}
+                for r in robots_db
+            }
         except Exception as e:
             logger.error(f"Error fatal al construir el mapa de robots de SAM: {e}", exc_info=True)
             return {}

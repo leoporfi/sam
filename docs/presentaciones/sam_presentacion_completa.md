@@ -4,8 +4,8 @@
 ---
 
 ## DIAPOSITIVA 1: Portada
-**Título:** Sistema SAM - Orquestador Inteligente de RPA  
-**Subtítulo:** Sistema de Asignación y Monitoreo para Automation 360  
+**Título:** Sistema SAM - Orquestador Inteligente de RPA
+**Subtítulo:** Sistema de Asignación y Monitoreo para Automation 360
 **Elementos visuales sugeridos:**
 - Logo o ícono representativo del proyecto
 - Fondo tecnológico moderno

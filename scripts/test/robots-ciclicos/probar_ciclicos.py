@@ -19,10 +19,14 @@ def obtener_ids_validos(db: DatabaseConnector):
     print("Obteniendo RobotId y EquipoId válidos...")
 
     # Obtener un robot activo
-    robot_result = db.ejecutar_consulta("SELECT TOP 1 RobotId, Robot FROM dbo.Robots WHERE Activo = 1 ORDER BY RobotId", es_select=True)
+    robot_result = db.ejecutar_consulta(
+        "SELECT TOP 1 RobotId, Robot FROM dbo.Robots WHERE Activo = 1 ORDER BY RobotId", es_select=True
+    )
 
     # Obtener un equipo activo
-    equipo_result = db.ejecutar_consulta("SELECT TOP 1 EquipoId, Equipo FROM dbo.Equipos WHERE Activo_SAM = 1 ORDER BY EquipoId", es_select=True)
+    equipo_result = db.ejecutar_consulta(
+        "SELECT TOP 1 EquipoId, Equipo FROM dbo.Equipos WHERE Activo_SAM = 1 ORDER BY EquipoId", es_select=True
+    )
 
     if not robot_result:
         raise ValueError("[ERROR] No hay robots activos en la BD")
@@ -47,7 +51,7 @@ def verificar_programacion_creada(db: DatabaseConnector, robot_id: int):
 
     resultado = db.ejecutar_consulta(
         """
-        SELECT TOP 1 
+        SELECT TOP 1
             ProgramacionId,
             EsCiclico,
             HoraInicio,
@@ -97,7 +101,10 @@ def probar_crear_programacion_ciclica():
         print("Conectando a la base de datos...")
         sql_config = ConfigManager.get_sql_server_config("SQL_SAM")
         db = DatabaseConnector(
-            servidor=sql_config["servidor"], base_datos=sql_config["base_datos"], usuario=sql_config["usuario"], contrasena=sql_config["contrasena"]
+            servidor=sql_config["servidor"],
+            base_datos=sql_config["base_datos"],
+            usuario=sql_config["usuario"],
+            contrasena=sql_config["contrasena"],
         )
         print("   [OK] Conectado")
         print()
@@ -152,7 +159,10 @@ def probar_retrocompatibilidad():
     try:
         sql_config = ConfigManager.get_sql_server_config("SQL_SAM")
         db = DatabaseConnector(
-            servidor=sql_config["servidor"], base_datos=sql_config["base_datos"], usuario=sql_config["usuario"], contrasena=sql_config["contrasena"]
+            servidor=sql_config["servidor"],
+            base_datos=sql_config["base_datos"],
+            usuario=sql_config["usuario"],
+            contrasena=sql_config["contrasena"],
         )
 
         robot_id, equipo_id = obtener_ids_validos(db)

@@ -14,23 +14,23 @@ El servicio está construido sobre asyncio para manejar múltiples tareas concur
 
 ### **Componentes Principales**
 
-1. **Desplegador (service/desplegador.py) \- El Brazo Ejecutor**:  
-   * Consulta la BD (dbo.ObtenerRobotsEjecutables) buscando tareas pendientes.  
+1. **Desplegador (service/desplegador.py) \- El Brazo Ejecutor**:
+   * Consulta la BD (dbo.ObtenerRobotsEjecutables) buscando tareas pendientes.
    * Verifica si estamos en **Pausa Operacional** (ventana de mantenimiento configurada).
    * Obtiene los parámetros de entrada (bot_input) específicos de cada robot o usa valores por defecto.
-   * Solicita el despliegue a la API de A360, inyectando cabeceras de autenticación para el Callback (token estático + token dinámico del API Gateway).  
+   * Solicita el despliegue a la API de A360, inyectando cabeceras de autenticación para el Callback (token estático + token dinámico del API Gateway).
    * Registra el deploymentId en la tabla Ejecuciones con estado DEPLOYED.
    * Implementa reintentos inteligentes según el tipo de error (ver sección de Errores 412).
-2. **Conciliador (service/conciliador.py) \- El Auditor**:  
-   * Monitorea las ejecuciones que siguen activas en SAM.  
-   * Pregunta a A360: *"¿En qué estado está el deployment X?"*.  
-   * Si detecta discrepancias (ej. el robot murió sin avisar), actualiza la BD para cerrar la ejecución.  
-   * **Gestión de ejecuciones antiguas:** Marca como UNKNOWN ejecuciones que superan el umbral de días de tolerancia (configurable, por defecto 30 días).  
-3. **Sincronizador (service/sincronizador.py) \- El Actualizador**:  
-   * Mantiene los catálogos al día. Trae de A360 la lista completa de:  
-     * **Robots** (Taskbots).  
-     * **Equipos** (Bot Runners).  
-     * **Usuarios**.  
+2. **Conciliador (service/conciliador.py) \- El Auditor**:
+   * Monitorea las ejecuciones que siguen activas en SAM.
+   * Pregunta a A360: *"¿En qué estado está el deployment X?"*.
+   * Si detecta discrepancias (ej. el robot murió sin avisar), actualiza la BD para cerrar la ejecución.
+   * **Gestión de ejecuciones antiguas:** Marca como UNKNOWN ejecuciones que superan el umbral de días de tolerancia (configurable, por defecto 30 días).
+3. **Sincronizador (service/sincronizador.py) \- El Actualizador**:
+   * Mantiene los catálogos al día. Trae de A360 la lista completa de:
+     * **Robots** (Taskbots).
+     * **Equipos** (Bot Runners).
+     * **Usuarios**.
    * Permite que SAM "vea" los nuevos robots creados en A360 sin intervención manual.
 
 ## **3\. Lógica Crítica: Manejo de Errores 412**
@@ -50,7 +50,7 @@ El error **412 Precondition Failed** tiene **DOS causas distintas** que el siste
   - Acción requerida: "Revisar configuración del robot en A360"
 - 📝 El deployment NO se registra en la BD
 
-**Acción de Soporte:** 
+**Acción de Soporte:**
 1. Verificar en A360 Control Room la configuración de "Compatible Targets" del robot
 2. Asegurarse de que el robot tenga al menos un target compatible configurado
 
@@ -95,13 +95,13 @@ Verificar en A360:
 
 Cuando A360 no responde claramente sobre el estado de un robot, SAM lo marca como UNKNOWN.
 
-* **UNKNOWN Transitorio (reciente):**  
-  * **Significado:** "Perdí contacto con A360 para este deployment".  
+* **UNKNOWN Transitorio (reciente):**
+  * **Significado:** "Perdí contacto con A360 para este deployment".
   * **Acción del Sistema:** SAM registra el estado UNKNOWN y actualiza `FechaUltimoUNKNOWN`. El sistema incrementa el contador `IntentosConciliadorFallidos` y reintentará en el próximo ciclo de conciliación.
   * **Nota importante:** El estado UNKNOWN transitorio NO bloquea automáticamente el equipo para nuevos lanzamientos en la implementación actual.
-  
-* **UNKNOWN Final (antigüedad > umbral de días):**  
-  * **Significado:** "La ejecución lleva demasiado tiempo sin respuesta definitiva".  
+
+* **UNKNOWN Final (antigüedad > umbral de días):**
+  * **Significado:** "La ejecución lleva demasiado tiempo sin respuesta definitiva".
   * **Acción del Sistema:** Después de superar el umbral configurable (`LANZADOR_DIAS_TOLERANCIA_UNKNOWN`, por defecto 30 días), SAM marca definitivamente como UNKNOWN con `FechaFin`, cerrando la ejecución.
 
 **Nota para Soporte:** El umbral de tolerancia para marcar UNKNOWN final es configurable (por defecto 30 días).
@@ -223,7 +223,7 @@ El servicio **Conciliador** se encarga de obtener estos datos de la API de A360 
 Se dispone de un procedimiento almacenado para consultar métricas de latencia a demanda:
 
 ```sql
-EXEC dbo.usp_AnalizarLatenciaEjecuciones 
+EXEC dbo.usp_AnalizarLatenciaEjecuciones
     @Scope = 'TODAS',           -- 'ACTUALES', 'HISTORICAS', 'TODAS'
     @FechaDesde = '2025-01-01', -- Opcional
     @FechaHasta = NULL          -- Opcional (Default: GETDATE())
@@ -240,15 +240,15 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 
 ### **Intervalos de Tiempo**
 
-* LANZADOR\_INTERVALO\_LANZAMIENTO\_SEG: Frecuencia de búsqueda de tareas (ej. 15).  
-* LANZADOR\_INTERVALO\_CONCILIACION\_SEG: Frecuencia de auditoría (ej. 300).  
+* LANZADOR\_INTERVALO\_LANZAMIENTO\_SEG: Frecuencia de búsqueda de tareas (ej. 15).
+* LANZADOR\_INTERVALO\_CONCILIACION\_SEG: Frecuencia de auditoría (ej. 300).
 * LANZADOR\_INTERVALO\_SINCRONIZACION\_SEG: Frecuencia de actualización de maestros (ej. 3600).
 
 ### **Conexión A360**
 
-* AA\_CR\_URL: URL del Control Room.  
-* AA\_CR\_USER: Usuario de servicio (Bot Runner/Creator).  
-* AA\_CR\_API\_KEY: API Key del usuario.  
+* AA\_CR\_URL: URL del Control Room.
+* AA\_CR\_USER: Usuario de servicio (Bot Runner/Creator).
+* AA\_CR\_API\_KEY: API Key del usuario.
 * AA\_URL\_CALLBACK: La URL pública donde sam.callback escucha (inyectada en cada robot).
 
 ### **Autenticación Callback**
@@ -258,7 +258,7 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 
 ### **Reglas de Negocio y Reintentos**
 
-* LANZADOR\_MAX\_WORKERS: Cuántos deploys simultáneos puede hacer (ej. 10).  
+* LANZADOR\_MAX\_WORKERS: Cuántos deploys simultáneos puede hacer (ej. 10).
 * LANZADOR\_PAUSA\_LANZAMIENTO: Tupla con ventana donde **NO** se lanzan robots (formato interno, ej. ("23:00", "06:00")).
 * LANZADOR\_REPETICIONES: Valor por defecto para el parámetro `in_NumRepeticion` cuando un robot NO tiene parámetros personalizados (por defecto 1).
 * LANZADOR\_MAX\_REINTENTOS\_DEPLOY: Intentos ante errores 412 temporales (por defecto 2).
@@ -268,9 +268,9 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 
 ## **9\. Diagnóstico de Fallos (Troubleshooting)**
 
-* **Log:** lanzador.log  
+* **Log:** lanzador.log
 
-### **Caso: "El robot no arranca"**  
+### **Caso: "El robot no arranca"**
 
 1. **Revisar el log del Desplegador:** Buscar trazas de errores en el ciclo de lanzamiento.
 
@@ -288,11 +288,11 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
    - Sistema desactiva la asignación automáticamente
    - **Solución:** Revisar permisos, licencias y existencia del robot en A360
 
-5. **Ventana de Pausa:** 
+5. **Ventana de Pausa:**
    - Verificar si la hora actual está dentro de la ventana de pausa configurada
    - El log indicará: "Lanzador en PAUSA operativa configurada"
 
-### **Caso: "El robot terminó pero sigue corriendo en SAM"**  
+### **Caso: "El robot terminó pero sigue corriendo en SAM"**
 
 1. **Revisar el log del Conciliador:** Reporta resultado de consultas a A360
 2. **Conectividad A360:** Verificar excepciones de red o timeouts

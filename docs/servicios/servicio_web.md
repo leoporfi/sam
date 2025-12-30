@@ -8,9 +8,9 @@ La **Interfaz Web** de SAM actúa como la consola central de administración y o
 
 Sus funciones principales son:
 
-1. **Inventario:** Alta, baja y modificación de Robots y Equipos.  
-2. **Configuración:** Definición de prioridades, límites de concurrencia y ventanas de mantenimiento.  
-3. **Estrategia:** Creación de "Pools" de equipos y asignación (Mapeo) de robots a estos pools.  
+1. **Inventario:** Alta, baja y modificación de Robots y Equipos.
+2. **Configuración:** Definición de prioridades, límites de concurrencia y ventanas de mantenimiento.
+3. **Estrategia:** Creación de "Pools" de equipos y asignación (Mapeo) de robots a estos pools.
 4. **Programación:** Gestión de los cronogramas de ejecución (Schedules).
 
 ## **2. Arquitectura y Componentes**
@@ -21,8 +21,8 @@ El servicio opera como una aplicación monolítica ligera que sirve tanto la API
 
 Ubicado en src/sam/web/backend. Expone una API RESTful que actúa como pasarela hacia los Stored Procedures de la base de datos.
 
-* **api.py**: Router principal. Define endpoints como /api/robots, /api/equipos, /api/mappings, /api/schedules. Maneja parámetros de filtrado (programado, online, tipo, etc.) y validación de datos.  
-* **database.py**: Capa de acceso a datos. Ejecuta los procedimientos almacenados (ej. ActualizarRobotConfig, CrearProgramacion, ActualizarProgramacionSimple/Completa). Incluye manejo de STRING_AGG con NVARCHAR(MAX) para evitar límites de 8000 bytes.  
+* **api.py**: Router principal. Define endpoints como /api/robots, /api/equipos, /api/mappings, /api/schedules. Maneja parámetros de filtrado (programado, online, tipo, etc.) y validación de datos.
+* **database.py**: Capa de acceso a datos. Ejecuta los procedimientos almacenados (ej. ActualizarRobotConfig, CrearProgramacion, ActualizarProgramacionSimple/Completa). Incluye manejo de STRING_AGG con NVARCHAR(MAX) para evitar límites de 8000 bytes.
 * **schemas.py**: Modelos Pydantic para validación de requests/responses. Incluye ScheduleData, ScheduleEditData con soporte para campos de RangoMensual (DiaInicioMes, DiaFinMes, UltimosDiasMes, PrimerosDiasMes).
 
 ### **Frontend (ReactPy)**
@@ -54,24 +54,24 @@ Componentes y utilidades reutilizables utilizados en toda la aplicación:
 
 #### **Módulos Funcionales (features/)**
 
-1. **Gestión de Robots (features/components/robot_list.py + features/modals/robots_modals.py)**:  
-   * Tabla interactiva para ver el estado de los robots con filtros (Online, Programados, búsqueda).  
-   * Modales para editar configuración crítica: **Prioridad** (1-10) y **Límites** (máx. equipos simultáneos).  
-   * Modal de **Asignación de Equipos**: Permite asignar/desasignar equipos a robots con búsqueda y selección múltiple. Incluye overlay de carga durante operaciones.  
+1. **Gestión de Robots (features/components/robot_list.py + features/modals/robots_modals.py)**:
+   * Tabla interactiva para ver el estado de los robots con filtros (Online, Programados, búsqueda).
+   * Modales para editar configuración crítica: **Prioridad** (1-10) y **Límites** (máx. equipos simultáneos).
+   * Modal de **Asignación de Equipos**: Permite asignar/desasignar equipos a robots con búsqueda y selección múltiple. Incluye overlay de carga durante operaciones.
    * Modal de **Programación de Robots**: Gestión de programaciones específicas de cada robot, con soporte para todos los tipos de programación.
 
-2. **Gestión de Equipos (features/components/equipo_list.py + features/modals/equipos_modals.py)**:  
-   * Visualización de dispositivos conectados.  
-   * Control para **Habilitar/Deshabilitar** equipos manualmente (modo mantenimiento).  
+2. **Gestión de Equipos (features/components/equipo_list.py + features/modals/equipos_modals.py)**:
+   * Visualización de dispositivos conectados.
+   * Control para **Habilitar/Deshabilitar** equipos manualmente (modo mantenimiento).
 
-3. **Gestión de Pools (features/components/pool_list.py + features/modals/pool_modals.py)**:  
-   * ABM de Pools (agrupaciones lógicas de máquinas).  
-   * Configuración de "Aislamiento" (si el pool acepta carga externa o no).  
+3. **Gestión de Pools (features/components/pool_list.py + features/modals/pool_modals.py)**:
+   * ABM de Pools (agrupaciones lógicas de máquinas).
+   * Configuración de "Aislamiento" (si el pool acepta carga externa o no).
 
-4. **Mapeos (features/components/mappings_page.py)**:  
-   * Interfaz para configurar la equivalencia entre nombres de robots externos e internos. Permite que el **Balanceador** reconozca un robot que no figura en la tabla principal con el mismo nombre que reportan los proveedores externos (como el Orquestador de Clouders, la base de datos RPA360 o futuras integraciones), asegurando la correcta asignación de carga.  
+4. **Mapeos (features/components/mappings_page.py)**:
+   * Interfaz para configurar la equivalencia entre nombres de robots externos e internos. Permite que el **Balanceador** reconozca un robot que no figura en la tabla principal con el mismo nombre que reportan los proveedores externos (como el Orquestador de Clouders, la base de datos RPA360 o futuras integraciones), asegurando la correcta asignación de carga.
 
-5. **Programaciones (features/components/schedule_list.py + features/modals/schedule_modal.py + features/modals/schedule_create_modal.py)**:  
+5. **Programaciones (features/components/schedule_list.py + features/modals/schedule_modal.py + features/modals/schedule_create_modal.py)**:
    * Gestión completa de tareas programadas con soporte para múltiples tipos:
      * **Diaria**: Ejecución diaria a una hora específica.
      * **Semanal**: Ejecución en días específicos de la semana.
@@ -89,28 +89,28 @@ Componentes y utilidades reutilizables utilizados en toda la aplicación:
 
 ### **Ejemplo 1: Edición de un Robot**
 
-1. **Usuario**: En la pantalla "Robots", hace clic en "Editar" sobre un proceso y cambia la prioridad a '1'.  
-2. **Frontend (robots_modals.py)**: Captura el evento y llama a api_client.update_robot().  
-3. **Cliente API**: Envía un PUT /api/robots/{id} con el payload JSON.  
-4. **Backend (api.py)**: Recibe la petición, valida los datos con Pydantic (schemas.py).  
-5. **Base de Datos (database.py)**: Ejecuta el SP dbo.ActualizarRobotConfig con los nuevos parámetros.  
+1. **Usuario**: En la pantalla "Robots", hace clic en "Editar" sobre un proceso y cambia la prioridad a '1'.
+2. **Frontend (robots_modals.py)**: Captura el evento y llama a api_client.update_robot().
+3. **Cliente API**: Envía un PUT /api/robots/{id} con el payload JSON.
+4. **Backend (api.py)**: Recibe la petición, valida los datos con Pydantic (schemas.py).
+5. **Base de Datos (database.py)**: Ejecuta el SP dbo.ActualizarRobotConfig con los nuevos parámetros.
 6. **Confirmación**: La BD confirma el cambio, el Backend responde 200 OK, y el Frontend muestra una notificación "Toast" (notifications.py) de éxito.
 
 ### **Ejemplo 2: Creación de una Programación con Feedback Visual**
 
 1. **Usuario**: En la pantalla "Programaciones", hace clic en "Programación" → "Crear Nueva Programación".
-2. **Frontend (schedule_create_modal.py)**: 
+2. **Frontend (schedule_create_modal.py)**:
    * Muestra el modal con formulario completo.
    * Usuario selecciona robot (con búsqueda), tipo de programación, hora, y configuración específica según el tipo.
 3. **Usuario**: Hace clic en "Crear Programación".
-4. **Frontend**: 
+4. **Frontend**:
    * Muestra `LoadingOverlay` con mensaje "Creando programación, esto puede tardar unos segundos...".
    * Deshabilita botón de cierre y todos los controles del modal.
    * Cambia texto del botón a "Procesando...".
 5. **Cliente API**: Envía POST /api/schedules con el payload JSON.
 6. **Backend (api.py)**: Valida datos y llama a database.create_schedule().
 7. **Base de Datos (database.py)**: Ejecuta SP dbo.CrearProgramacion (que automáticamente establece EsOnline=0 si el robot estaba online).
-8. **Confirmación**: 
+8. **Confirmación**:
    * Backend responde 200 OK.
    * Frontend oculta el overlay, muestra notificación de éxito y cierra el modal.
    * La lista de programaciones se actualiza automáticamente.
@@ -128,25 +128,25 @@ Cualquier cambio en estas variables requiere reiniciar el servicio SAM_Web.
 
 ### **Servidor Web**
 
-* INTERFAZ_WEB_HOST: IP de escucha (default 0.0.0.0).  
-* INTERFAZ_WEB_PORT: Puerto TCP (default 8000).  
+* INTERFAZ_WEB_HOST: IP de escucha (default 0.0.0.0).
+* INTERFAZ_WEB_PORT: Puerto TCP (default 8000).
 * INTERFAZ_WEB_DEBUG: true/false. Modo desarrollo (recarga automática). **Desactivar en Producción**.
 
 ### **Base de Datos**
 
-* SQL_SAM_DRIVER: Driver ODBC (ej. {ODBC Driver 17 for SQL Server}).  
-* SQL_SAM_HOST, SQL_SAM_DB_NAME: Ubicación de la BD.  
+* SQL_SAM_DRIVER: Driver ODBC (ej. {ODBC Driver 17 for SQL Server}).
+* SQL_SAM_HOST, SQL_SAM_DB_NAME: Ubicación de la BD.
 * SQL_SAM_UID, SQL_SAM_PWD: Credenciales de acceso.
 
 ### **Logging**
 
-* LOG_DIRECTORY: Ruta física de logs (ej. C:\RPA\Logs\SAM).  
+* LOG_DIRECTORY: Ruta física de logs (ej. C:\RPA\Logs\SAM).
 * APP_LOG_FILENAME_INTERFAZ_WEB: Nombre del archivo (ej. web.log).
 
 ## **5. Ejecución y Soporte**
 
-* **Ejecución Manual (Dev):** `uv run -m sam.web`  
-* **Servicio Windows:** SAM_Web (Gestionado por NSSM).  
+* **Ejecución Manual (Dev):** `uv run -m sam.web`
+* **Servicio Windows:** SAM_Web (Gestionado por NSSM).
 * **Logs:** Revisar web.log para errores de conexión con la BD o validación de datos.
 
 ## **6. Reglas de Negocio y Procedimientos Operativos**
@@ -222,7 +222,7 @@ Esta sección detalla **qué se puede hacer**, **cómo hacerlo** y **qué restri
    * Hacer clic en la flecha "←" (Desasignar).
 7. Hacer clic en "Guardar".
 8. **Confirmación**: El sistema mostrará un modal de confirmación antes de aplicar los cambios.
-9. **Resultado**: 
+9. **Resultado**:
    * Los equipos asignados se marcan con `EsProgramado=1` en la tabla `Asignaciones`.
    * Si el robot tiene programaciones activas, los equipos se vinculan a esas programaciones.
    * Los equipos asignados se marcan con `PermiteBalanceoDinamico=0` para proteger las asignaciones programadas.
@@ -277,7 +277,7 @@ Esta sección detalla **qué se puede hacer**, **cómo hacerlo** y **qué restri
 1. Ir a la página "Programaciones".
 2. Hacer clic en el botón "Programación" → "Crear Nueva Programación".
 3. En el modal de creación:
-   * **Seleccionar Robot**: 
+   * **Seleccionar Robot**:
      * Usar el buscador para filtrar robots por nombre.
      * Seleccionar el robot del dropdown (muestra todos los robots activos).
    * **Tipo de Programación**: Seleccionar uno de los 5 tipos disponibles.
@@ -290,7 +290,7 @@ Esta sección detalla **qué se puede hacer**, **cómo hacerlo** y **qué restri
      * Si es **Específica**: Seleccionar fecha del calendario.
 4. Hacer clic en "Crear Programación".
 5. **Confirmación**: El sistema mostrará un modal de confirmación.
-6. **Resultado**: 
+6. **Resultado**:
    * La programación se crea con estado `Activo=1`.
    * El robot pasa a `EsOnline=0` automáticamente.
    * **Nota**: Los equipos se asignan después de crear la programación (ver procedimiento siguiente).
@@ -306,7 +306,7 @@ Esta sección detalla **qué se puede hacer**, **cómo hacerlo** y **qué restri
 3. En el modal de asignación:
    * Seleccionar los equipos deseados de la lista disponible.
    * Hacer clic en "Guardar".
-4. **Resultado**: 
+4. **Resultado**:
    * Los equipos se vinculan a la programación en `Asignaciones` con `EsProgramado=1`.
    * Los equipos se marcan con `PermiteBalanceoDinamico=0`.
 
@@ -330,7 +330,7 @@ Esta sección detalla **qué se puede hacer**, **cómo hacerlo** y **qué restri
 1. Desde la página "Programaciones":
    * Localizar la programación en la tabla o tarjeta.
    * Hacer clic en el switch "Activo" (toggle).
-2. **Resultado Inmediato**: 
+2. **Resultado Inmediato**:
    * Si se desactiva (`Activo=0`): El servicio Lanzador ignorará esta programación.
    * Si se activa (`Activo=1`): El servicio Lanzador la considerará en el próximo ciclo.
 
@@ -340,7 +340,7 @@ Esta sección detalla **qué se puede hacer**, **cómo hacerlo** y **qué restri
    * Hacer clic en el botón "Eliminar" (ícono de basura).
 2. **Confirmación**: El sistema mostrará un modal pidiendo confirmación.
 3. Hacer clic en "Confirmar" en el modal.
-4. **Resultado**: 
+4. **Resultado**:
    * La programación se elimina de `Programaciones`.
    * Las asignaciones relacionadas (`EsProgramado=1`) se eliminan de `Asignaciones`.
    * **Nota**: Los equipos NO recuperan automáticamente `PermiteBalanceoDinamico=1` (debe hacerse manualmente si se requiere).
@@ -366,7 +366,7 @@ Esta sección detalla **qué se puede hacer**, **cómo hacerlo** y **qué restri
 1. Ir a la página "Equipos".
 2. Localizar el equipo en la tabla.
 3. Hacer clic en el switch "Activo" para desactivarlo.
-4. **Resultado**: 
+4. **Resultado**:
    * El equipo se marca como `Activo_SAM=0`.
    * El servicio Lanzador y Balanceador ignorarán este equipo.
    * Las ejecuciones en curso continuarán, pero no se asignarán nuevas tareas.

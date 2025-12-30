@@ -55,7 +55,7 @@ CREATE PROCEDURE [dbo].[CrearProgramacion]
 AS
 BEGIN
     SET NOCOUNT ON;
-    SET XACT_ABORT ON; 
+    SET XACT_ABORT ON;
 
     DECLARE @RobotId INT;
     DECLARE @NewProgramacionId INT;
@@ -125,7 +125,7 @@ BEGIN
         BEGIN
             -- Limpiar tabla temporal intermedia
             DELETE FROM #ResultadosValidacion;
-            
+
             -- Insertar resultados del SP en la tabla temporal intermedia
             INSERT INTO #ResultadosValidacion
             EXEC dbo.ValidarSolapamientoVentanas
@@ -144,7 +144,7 @@ BEGIN
 
             -- Insertar solo las columnas necesarias en #ConflictosDetectados
             INSERT INTO #ConflictosDetectados (EquipoId, RobotNombre, ProgramacionId, TipoEjecucion)
-            SELECT 
+            SELECT
                 @EquipoIdActual AS EquipoId,
                 RobotNombre,
                 ProgramacionId,
@@ -163,17 +163,17 @@ BEGIN
         SELECT @ConflictosCount = COUNT(*) FROM #ConflictosDetectados;
         IF @ConflictosCount > 0
         BEGIN
-            DECLARE @MensajeConflictos NVARCHAR(MAX) = 
-                'Se detectaron ' + CAST(@ConflictosCount AS NVARCHAR(10)) + 
+            DECLARE @MensajeConflictos NVARCHAR(MAX) =
+                'Se detectaron ' + CAST(@ConflictosCount AS NVARCHAR(10)) +
                 ' solapamiento(s) de ventanas temporales:' + CHAR(13) + CHAR(10);
-            
-            SELECT @MensajeConflictos = @MensajeConflictos + 
-                '  - EquipoId: ' + CAST(EquipoId AS NVARCHAR(10)) + 
-                ', Robot: ' + RobotNombre + 
-                ', ProgramaciónId: ' + CAST(ProgramacionId AS NVARCHAR(10)) + 
+
+            SELECT @MensajeConflictos = @MensajeConflictos +
+                '  - EquipoId: ' + CAST(EquipoId AS NVARCHAR(10)) +
+                ', Robot: ' + RobotNombre +
+                ', ProgramaciónId: ' + CAST(ProgramacionId AS NVARCHAR(10)) +
                 ', Tipo: ' + TipoEjecucion + CHAR(13) + CHAR(10)
             FROM #ConflictosDetectados;
-            
+
             RAISERROR(@MensajeConflictos, 16, 1);
             RETURN;
         END
@@ -187,43 +187,43 @@ BEGIN
         -- 11. DiaInicioMes, 12. DiaFinMes, 13. UltimosDiasMes,
         -- 14. EsCiclico, 15. HoraFin, 16. FechaInicioVentana, 17. FechaFinVentana, 18. IntervaloEntreEjecuciones
         INSERT INTO dbo.Programaciones (
-            RobotId, 
-            TipoProgramacion, 
-            HoraInicio, 
-            DiasSemana, 
-            DiaDelMes, 
+            RobotId,
+            TipoProgramacion,
+            HoraInicio,
+            DiasSemana,
+            DiaDelMes,
             FechaEspecifica,
-            Tolerancia, 
-            Activo, 
+            Tolerancia,
+            Activo,
             FechaCreacion,
             FechaModificacion,
-            DiaInicioMes, 
-            DiaFinMes, 
+            DiaInicioMes,
+            DiaFinMes,
             UltimosDiasMes,
-            EsCiclico, 
-            HoraFin, 
-            FechaInicioVentana, 
-            FechaFinVentana, 
+            EsCiclico,
+            HoraFin,
+            FechaInicioVentana,
+            FechaFinVentana,
             IntervaloEntreEjecuciones
         )
         VALUES (
-            @RobotId, 
-            @TipoProgramacion, 
+            @RobotId,
+            @TipoProgramacion,
             @HoraInicio,
             CASE WHEN @TipoProgramacion = 'Semanal' THEN @DiasSemana ELSE NULL END,
             CASE WHEN @TipoProgramacion = 'Mensual' THEN @DiaDelMes ELSE NULL END,
             CASE WHEN @TipoProgramacion = 'Especifica' THEN @FechaEspecifica ELSE NULL END,
-            @Tolerancia, 
-            1, 
+            @Tolerancia,
+            1,
             GETDATE(),
             NULL,  -- FechaModificacion se establece en UPDATE, no en INSERT
             CASE WHEN @TipoProgramacion = 'RangoMensual' THEN @DiaInicioMes ELSE NULL END,
             CASE WHEN @TipoProgramacion = 'RangoMensual' THEN @DiaFinMes ELSE NULL END,
             CASE WHEN @TipoProgramacion = 'RangoMensual' THEN @UltimosDiasMes ELSE NULL END,
-            @EsCiclico, 
-            @HoraFin, 
-            @FechaInicioVentana, 
-            @FechaFinVentana, 
+            @EsCiclico,
+            @HoraFin,
+            @FechaInicioVentana,
+            @FechaFinVentana,
             @IntervaloEntreEjecuciones
         );
 
@@ -248,7 +248,7 @@ BEGIN
         JOIN #EquiposAProgramar EP ON E.EquipoId = EP.EquipoId;
 
         COMMIT TRANSACTION;
-        
+
         DECLARE @TipoEjecucionStr NVARCHAR(20) = CASE WHEN @EsCiclico = 1 THEN 'cíclica' ELSE 'única' END;
         PRINT 'Programación de tipo "' + @TipoProgramacion + '" (' + @TipoEjecucionStr + ') creada exitosamente.';
     END TRY
@@ -280,4 +280,3 @@ GO
 PRINT 'SP CrearProgramacion actualizado correctamente.'
 PRINT 'El INSERT ahora incluye FechaModificacion (18 columnas).'
 GO
-

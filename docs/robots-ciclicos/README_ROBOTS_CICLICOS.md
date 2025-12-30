@@ -240,4 +240,3 @@ EXEC dbo.CrearProgramacion
 
 - Documentación del modelo de datos: `docs/Documentación del Modelo de Datos y Reglas de Negocio.md`
 - Stored Procedures: `SAM.sql`
-

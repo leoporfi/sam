@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[EliminarProgramacionCompleta]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[EliminarProgramacionCompleta] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[EliminarProgramacionCompleta] AS'
 END
 
 -- Usamos CREATE OR ALTER para que el script se pueda ejecutar múltiples veces sin error.
@@ -25,8 +25,8 @@ BEGIN
         INSERT INTO #EquiposAfectados (EquipoId)
         SELECT DISTINCT EquipoId
         FROM dbo.Asignaciones
-        WHERE ProgramacionId = @ProgramacionId 
-          AND RobotId = @RobotId 
+        WHERE ProgramacionId = @ProgramacionId
+          AND RobotId = @RobotId
           AND EsProgramado = 1;
 
         -- 2. Eliminar las asignaciones VINCULADAS A ESTA PROGRAMACIÓN
@@ -51,7 +51,7 @@ BEGIN
         JOIN #EquiposAfectados A ON E.EquipoId = A.EquipoId
         WHERE NOT EXISTS (
             SELECT 1 FROM dbo.Asignaciones a2
-            WHERE a2.EquipoId = E.EquipoId 
+            WHERE a2.EquipoId = E.EquipoId
               AND (a2.EsProgramado = 1 OR a2.Reservado = 1)
         );
 

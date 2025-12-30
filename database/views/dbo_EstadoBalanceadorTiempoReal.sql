@@ -17,7 +17,7 @@ SELECT
     R.PrioridadBalanceo,
     R.TicketsPorEquipoAdicional,
     ISNULL(EA.Equipos, 0) AS EquiposAsignados,
-    CASE 
+    CASE
         WHEN R.EsOnline = 1 THEN ''Online''
         WHEN EXISTS(SELECT 1 FROM Programaciones P WHERE P.RobotId = R.RobotId AND P.Activo = 1) THEN ''Programado''
         WHEN R.Activo = 0 THEN ''Inactivo''
@@ -37,7 +37,7 @@ SELECT
 FROM Robots R
 LEFT JOIN EquiposAsignados EA ON R.Robot = EA.Robot
 LEFT JOIN (
-    SELECT 
+    SELECT
         RobotId,
         MAX(FechaBalanceo) AS UltimaActividad,
         FIRST_VALUE(AccionTomada) OVER (PARTITION BY RobotId ORDER BY FechaBalanceo DESC) AS UltimaAccion
@@ -46,7 +46,7 @@ LEFT JOIN (
     GROUP BY RobotId, AccionTomada, FechaBalanceo
 ) HB ON R.RobotId = HB.RobotId
 LEFT JOIN (
-    SELECT 
+    SELECT
         RobotId,
         COUNT(*) AS EjecucionesActivas
     FROM Ejecuciones
@@ -56,4 +56,4 @@ LEFT JOIN (
 LEFT JOIN Pools P ON R.PoolId = P.PoolId
 WHERE R.Activo = 1;
 
-' 
+'

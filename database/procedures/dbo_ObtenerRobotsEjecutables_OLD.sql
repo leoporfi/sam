@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerRobotsEjecutables_OLD]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerRobotsEjecutables_OLD] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerRobotsEjecutables_OLD] AS'
 END
 
 ALTER   PROCEDURE [dbo].[ObtenerRobotsEjecutables_OLD]
@@ -32,7 +32,7 @@ BEGIN
     -- PARTE 1: Robots Programados (Tradicionales - Una vez)
     -- =============================================
     INSERT INTO #ResultadosRobots (RobotId, EquipoId, UserId, Hora, EsProgramado, PrioridadBalanceo)
-    SELECT 
+    SELECT
         R.RobotId,
         A.EquipoId,
         E.UserId,
@@ -44,15 +44,15 @@ BEGIN
     INNER JOIN Equipos E ON A.EquipoId = E.EquipoId
     INNER JOIN Programaciones P ON A.ProgramacionId = P.ProgramacionId
     CROSS APPLY (
-        SELECT 
+        SELECT
             DATEADD(MINUTE, P.Tolerancia, P.HoraInicio) AS HoraFin,
-            CASE 
-                WHEN @HoraActual < P.HoraInicio AND P.HoraInicio > '12:00' 
+            CASE
+                WHEN @HoraActual < P.HoraInicio AND P.HoraInicio > '12:00'
                 THEN CAST(DATEADD(DAY, -1, @FechaActual) AS DATE)
                 ELSE @FechaActualDate
             END AS FechaTeoricaProgramacion
     ) Calc
-    WHERE 
+    WHERE
         A.EsProgramado = 1
         AND R.Activo = 1
         AND P.Activo = 1
@@ -61,7 +61,7 @@ BEGIN
         AND (
             (P.FechaInicioVentana IS NULL AND P.FechaFinVentana IS NULL)
             OR
-            (@FechaActualDate >= ISNULL(P.FechaInicioVentana, @FechaActualDate) 
+            (@FechaActualDate >= ISNULL(P.FechaInicioVentana, @FechaActualDate)
              AND @FechaActualDate <= ISNULL(P.FechaFinVentana, @FechaActualDate))
         )
         -- Validar rango horario (si está definido)
@@ -76,10 +76,10 @@ BEGIN
         AND (
             (
                 (Calc.HoraFin >= P.HoraInicio AND @HoraActual BETWEEN P.HoraInicio AND Calc.HoraFin)
-                OR 
+                OR
                 (Calc.HoraFin < P.HoraInicio AND (@HoraActual >= P.HoraInicio OR @HoraActual <= Calc.HoraFin))
             )
-            AND 
+            AND
             (
                 (P.TipoProgramacion = 'Diaria')
                 OR (P.TipoProgramacion = 'Semanal' AND UPPER(P.DiasSemana COLLATE Latin1_General_CI_AI) LIKE '%' + @DiaSemanaActual + '%')
@@ -103,12 +103,12 @@ BEGIN
         AND NOT EXISTS (
             SELECT 1
             FROM Ejecuciones Ejec
-            WHERE Ejec.EquipoId = A.EquipoId 
+            WHERE Ejec.EquipoId = A.EquipoId
               AND (Ejec.Estado IN ('DEPLOYED', 'QUEUED', 'PENDING_EXECUTION', 'RUNNING', 'UPDATE', 'RUN_PAUSED')
                    OR (Ejec.Estado = 'UNKNOWN' AND Ejec.FechaUltimoUNKNOWN > DATEADD(HOUR, -2, GETDATE())))
         )
         -- No duplicar equipos en la misma vuelta del SP
-        AND NOT EXISTS ( 
+        AND NOT EXISTS (
             SELECT 1 FROM #ResultadosRobots RR WHERE RR.EquipoId = A.EquipoId
         );
 
@@ -116,7 +116,7 @@ BEGIN
     -- PARTE 2: Robots Cíclicos con Ventanas
     -- =============================================
     INSERT INTO #ResultadosRobots (RobotId, EquipoId, UserId, Hora, EsProgramado, PrioridadBalanceo)
-    SELECT 
+    SELECT
         R.RobotId,
         A.EquipoId,
         E.UserId,
@@ -127,7 +127,7 @@ BEGIN
     INNER JOIN Asignaciones A ON R.RobotId = A.RobotId
     INNER JOIN Equipos E ON A.EquipoId = E.EquipoId
     INNER JOIN Programaciones P ON A.ProgramacionId = P.ProgramacionId
-    WHERE 
+    WHERE
         A.EsProgramado = 1
         AND R.Activo = 1
         AND P.Activo = 1
@@ -136,7 +136,7 @@ BEGIN
         AND (
             (P.FechaInicioVentana IS NULL AND P.FechaFinVentana IS NULL)
             OR
-            (@FechaActualDate >= ISNULL(P.FechaInicioVentana, @FechaActualDate) 
+            (@FechaActualDate >= ISNULL(P.FechaInicioVentana, @FechaActualDate)
              AND @FechaActualDate <= ISNULL(P.FechaFinVentana, @FechaActualDate))
         )
         -- Validar rango horario
@@ -174,12 +174,12 @@ BEGIN
         AND NOT EXISTS (
             SELECT 1
             FROM Ejecuciones Ejec
-            WHERE Ejec.EquipoId = A.EquipoId 
+            WHERE Ejec.EquipoId = A.EquipoId
               AND (Ejec.Estado IN ('DEPLOYED', 'QUEUED', 'PENDING_EXECUTION', 'RUNNING', 'UPDATE', 'RUN_PAUSED')
                    OR (Ejec.Estado = 'UNKNOWN' AND Ejec.FechaUltimoUNKNOWN > DATEADD(HOUR, -2, GETDATE())))
         )
         -- No duplicar equipos en la misma vuelta del SP
-        AND NOT EXISTS ( 
+        AND NOT EXISTS (
             SELECT 1 FROM #ResultadosRobots RR WHERE RR.EquipoId = A.EquipoId
         );
 
@@ -187,7 +187,7 @@ BEGIN
     -- PARTE 3: Robots Online (SIN CAMBIOS)
     -- =============================================
     INSERT INTO #ResultadosRobots (RobotId, EquipoId, UserId, Hora, EsProgramado, PrioridadBalanceo)
-    SELECT 
+    SELECT
         R.RobotId,
         A.EquipoId,
         E.UserId,
@@ -197,7 +197,7 @@ BEGIN
     FROM Robots R
     INNER JOIN Asignaciones A ON R.RobotId = A.RobotId
     INNER JOIN Equipos E ON A.EquipoId = E.EquipoId
-    WHERE 
+    WHERE
         R.EsOnline = 1
         AND R.Activo = 1
         AND A.EsProgramado = 0
@@ -205,7 +205,7 @@ BEGIN
         AND NOT EXISTS (
             SELECT 1
             FROM Ejecuciones Ejec
-            WHERE Ejec.EquipoId = A.EquipoId 
+            WHERE Ejec.EquipoId = A.EquipoId
               AND (Ejec.Estado IN ('DEPLOYED', 'QUEUED', 'PENDING_EXECUTION', 'RUNNING', 'UPDATE', 'RUN_PAUSED')
                    OR (Ejec.Estado = 'UNKNOWN' AND Ejec.FechaUltimoUNKNOWN > DATEADD(HOUR, -2, GETDATE())))
         );
@@ -217,35 +217,34 @@ BEGIN
     -- 1. EsProgramado (programados primero)
     -- 2. PrioridadBalanceo (menor = mayor prioridad)
     -- 3. Hora (más temprano primero)
-    
+
     -- RESULTADO FINAL: Ordenar y seleccionar el mejor por equipo
     -- El ROW_NUMBER ya ordenó correctamente dentro de cada equipo
     -- Hacemos JOIN con la tabla temporal para tener acceso a EsProgramado y PrioridadBalanceo en el ORDER BY
-    SELECT 
-        R.RobotId, 
-        R.EquipoId, 
-        R.UserId, 
+    SELECT
+        R.RobotId,
+        R.EquipoId,
+        R.UserId,
         R.Hora
     FROM (
-        SELECT 
-            RobotId, 
-            EquipoId, 
-            UserId, 
+        SELECT
+            RobotId,
+            EquipoId,
+            UserId,
             Hora,
             EsProgramado,
             PrioridadBalanceo,
             ROW_NUMBER() OVER (
-                PARTITION BY EquipoId 
+                PARTITION BY EquipoId
                 ORDER BY EsProgramado DESC, PrioridadBalanceo ASC, Hora ASC
             ) AS RN
         FROM #ResultadosRobots
     ) AS Ordenados
-    INNER JOIN #ResultadosRobots R 
-        ON Ordenados.RobotId = R.RobotId 
+    INNER JOIN #ResultadosRobots R
+        ON Ordenados.RobotId = R.RobotId
         AND Ordenados.EquipoId = R.EquipoId
     WHERE Ordenados.RN = 1  -- Solo el de mayor prioridad por equipo
     ORDER BY R.EsProgramado DESC, R.PrioridadBalanceo ASC, R.Hora;
 
     DROP TABLE #ResultadosRobots;
 END
-

@@ -1,9 +1,7 @@
-import asyncio
-
 # Asumimos que el script de test está en una carpeta 'tests/'
 # y los fuentes están en 'src/', por lo que ajustamos el path.
 from datetime import datetime
-from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 

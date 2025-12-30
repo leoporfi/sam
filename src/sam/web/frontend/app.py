@@ -115,7 +115,9 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
         search_term=search_input,
         on_search_change=set_search_input,
         active_filter="all" if robots_filters.get("active") is None else str(robots_filters.get("active")).lower(),
-        on_active_change=lambda value: robots_state["set_filters"](lambda prev: {**prev, "active": None if value == "all" else value == "true"}),
+        on_active_change=lambda value: robots_state["set_filters"](
+            lambda prev: {**prev, "active": None if value == "all" else value == "true"}
+        ),
         online_filter=online_filter_value,
         on_online_change=handle_online_change,
         is_searching=is_searching,
@@ -123,7 +125,11 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
         on_sync_equipos=equipos_state.get("trigger_sync"),
     )
 
-    base_key = str(selected_robot.get("RobotId", uuid.uuid4())) if selected_robot and isinstance(selected_robot, dict) else str(uuid.uuid4())
+    base_key = (
+        str(selected_robot.get("RobotId", uuid.uuid4()))
+        if selected_robot and isinstance(selected_robot, dict)
+        else str(uuid.uuid4())
+    )
 
     return PageWithLayout(
         theme_is_dark=theme_is_dark,
@@ -179,7 +185,11 @@ def PoolsPage(theme_is_dark: bool, on_theme_toggle):
 
     # Filtrar pools por búsqueda (memoizado para evitar recálculos innecesarios)
     filtered_pools = use_memo(
-        lambda: [pool for pool in pools_state["pools"] if not debounced_search or debounced_search.lower() in pool["Nombre"].lower()],
+        lambda: [
+            pool
+            for pool in pools_state["pools"]
+            if not debounced_search or debounced_search.lower() in pool["Nombre"].lower()
+        ],
         [pools_state["pools"], debounced_search],
     )
 
@@ -314,10 +324,18 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
         search=search_input,
         on_search=set_search_input,
         is_searching=is_searching,
-        active_filter="all" if equipos_state["filters"].get("active") is None else str(equipos_state["filters"].get("active")).lower(),
-        on_active=lambda value: equipos_state["set_filters"](lambda prev: {**prev, "active": None if value == "all" else value == "true"}),
-        balanceable_filter="all" if equipos_state["filters"].get("balanceable") is None else str(equipos_state["filters"].get("balanceable")).lower(),
-        on_balanceable=lambda value: equipos_state["set_filters"](lambda prev: {**prev, "balanceable": None if value == "all" else value == "true"}),
+        active_filter="all"
+        if equipos_state["filters"].get("active") is None
+        else str(equipos_state["filters"].get("active")).lower(),
+        on_active=lambda value: equipos_state["set_filters"](
+            lambda prev: {**prev, "active": None if value == "all" else value == "true"}
+        ),
+        balanceable_filter="all"
+        if equipos_state["filters"].get("balanceable") is None
+        else str(equipos_state["filters"].get("balanceable")).lower(),
+        on_balanceable=lambda value: equipos_state["set_filters"](
+            lambda prev: {**prev, "balanceable": None if value == "all" else value == "true"}
+        ),
         on_create_equipo=handle_create_click,
     )
 
@@ -526,7 +544,13 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
                 ),
             ),
             html.div(
-                {"style": {"display": "block" if not schedules_state["loading"] and not schedules_state["error"] else "none"}},
+                {
+                    "style": {
+                        "display": "block"
+                        if not schedules_state["loading"] and not schedules_state["error"]
+                        else "none"
+                    }
+                },
                 SchedulesDashboard(
                     schedules=schedules_state["schedules"],
                     on_toggle=schedules_state["toggle_active"],
@@ -698,7 +722,9 @@ head = html.head(
     html.meta({"charset": "utf-8"}),
     html.meta({"name": "viewport", "content": "width=device-width, initial-scale=1"}),
     html.link({"rel": "stylesheet", "href": "/static/css/pico.violet.min.css"}),
-    html.link({"rel": "stylesheet", "href": "https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.colors.min.css"}),
+    html.link(
+        {"rel": "stylesheet", "href": "https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.colors.min.css"}
+    ),
     html.link({"rel": "stylesheet", "href": "/static/css/all.min.css"}),
     html.link({"rel": "stylesheet", "href": "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"}),
     html.link({"rel": "stylesheet", "href": "/static/custom.css"}),

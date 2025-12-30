@@ -2,7 +2,7 @@ SET ANSI_NULLS ON
 SET QUOTED_IDENTIFIER ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerRecursosParaPool]') AND type in (N'P', N'PC'))
 BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerRecursosParaPool] AS' 
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerRecursosParaPool] AS'
 END
 
 
@@ -28,4 +28,3 @@ BEGIN
     SELECT EquipoId AS ID, Equipo AS Nombre, 'Equipo' as Tipo FROM dbo.Equipos WHERE PoolId IS NULL AND Activo_SAM = 1;
 
 END
-

@@ -154,7 +154,9 @@ def SchedulesDashboard(
     error: str,
 ):
     """Componente principal que renderiza la tabla y paginación."""
-    pagination_component = Pagination(current_page, total_pages, len(schedules), total_count, on_page_change) if total_pages > 1 else None
+    pagination_component = (
+        Pagination(current_page, total_pages, len(schedules), total_count, on_page_change) if total_pages > 1 else None
+    )
 
     # Usar AsyncContent para manejar estados de carga/error/vacío
     return AsyncContent(
@@ -187,7 +189,13 @@ def SchedulesDashboard(
 
 
 @component
-def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable, on_delete: Callable):
+def SchedulesTable(
+    schedules: List[ScheduleData],
+    on_toggle: Callable,
+    on_edit: Callable,
+    on_assign_equipos: Callable,
+    on_delete: Callable,
+):
     headers = ["Robot", "Tipo", "Hora", "Días / Fecha", "Tol.", "Equipos", "Activo", "Acciones"]
 
     return html.article(
@@ -219,7 +227,11 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                         html.td(
                             html.strong(
                                 f"{format_time(s['HoraInicio'])}"
-                                + (f" - {format_time(s.get('HoraFin'))}" if _to_bool(s.get("EsCiclico")) and s.get("HoraFin") else "")
+                                + (
+                                    f" - {format_time(s.get('HoraFin'))}"
+                                    if _to_bool(s.get("EsCiclico")) and s.get("HoraFin")
+                                    else ""
+                                )
                             )
                         ),
                         html.td(format_schedule_details(s)),
@@ -236,7 +248,9 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                                         "type": "checkbox",
                                         "role": "switch",
                                         "checked": s["Activo"],
-                                        "on_change": event(lambda e, sid=s["ProgramacionId"]: on_toggle(sid, e["target"]["checked"])),
+                                        "on_change": event(
+                                            lambda e, sid=s["ProgramacionId"]: on_toggle(sid, e["target"]["checked"])
+                                        ),
                                     }
                                 ),
                             )
@@ -247,7 +261,9 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
                                 html.a(
                                     {
                                         "href": "#",
-                                        "on_click": event(lambda e, sid=s["ProgramacionId"]: on_edit(sid), prevent_default=True),
+                                        "on_click": event(
+                                            lambda e, sid=s["ProgramacionId"]: on_edit(sid), prevent_default=True
+                                        ),
                                         "data-tooltip": "Editar",
                                         "class_name": "secondary",
                                     },
@@ -289,7 +305,9 @@ def SchedulesTable(schedules: List[ScheduleData], on_toggle: Callable, on_edit: 
 
 
 @component
-def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable, on_delete: Callable):
+def ScheduleCard(
+    schedule: ScheduleData, on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable, on_delete: Callable
+):
     return html.article(
         {"class_name": SCHEDULE_CARD},
         html.header(
@@ -324,7 +342,11 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                 ),
                 html.strong(
                     f"{format_time(schedule['HoraInicio'])}"
-                    + (f" - {format_time(schedule.get('HoraFin'))}" if _to_bool(schedule.get("EsCiclico")) and schedule.get("HoraFin") else "")
+                    + (
+                        f" - {format_time(schedule.get('HoraFin'))}"
+                        if _to_bool(schedule.get("EsCiclico")) and schedule.get("HoraFin")
+                        else ""
+                    )
                 ),
             ),
             html.p(
@@ -360,7 +382,9 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                             "type": "checkbox",
                             "role": "switch",
                             "checked": schedule["Activo"],
-                            "on_click": event(lambda e, sid=schedule["ProgramacionId"]: on_toggle(sid, e["target"]["checked"])),
+                            "on_click": event(
+                                lambda e, sid=schedule["ProgramacionId"]: on_toggle(sid, e["target"]["checked"])
+                            ),
                         }
                     ),
                     html.span({"style": {"marginLeft": "8px"}}, "Activa"),
@@ -369,7 +393,9 @@ def ScheduleCard(schedule: ScheduleData, on_toggle: Callable, on_edit: Callable,
                     {
                         "class_name": "outline secondary",
                         # Pasa un dict con la info del robot
-                        "on_click": lambda e, s=schedule: on_assign_equipos({"RobotId": s["RobotId"], "Robot": s["RobotNombre"]}),
+                        "on_click": lambda e, s=schedule: on_assign_equipos(
+                            {"RobotId": s["RobotId"], "Robot": s["RobotNombre"]}
+                        ),
                         "aria-label": "Asignar Equipos",
                     },
                     html.i({"class_name": "fa-solid fa-computer"}),

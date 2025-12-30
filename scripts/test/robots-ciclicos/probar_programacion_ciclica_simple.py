@@ -17,10 +17,14 @@ from sam.web.backend.schemas import ScheduleData
 def obtener_ids_validos(db: DatabaseConnector):
     """Obtiene un RobotId y EquipoId válidos de la BD"""
     # Obtener un robot activo
-    robot_result = db.ejecutar_consulta("SELECT TOP 1 RobotId, Robot FROM dbo.Robots WHERE Activo = 1 ORDER BY RobotId", es_select=True)
+    robot_result = db.ejecutar_consulta(
+        "SELECT TOP 1 RobotId, Robot FROM dbo.Robots WHERE Activo = 1 ORDER BY RobotId", es_select=True
+    )
 
     # Obtener un equipo activo
-    equipo_result = db.ejecutar_consulta("SELECT TOP 1 EquipoId, Equipo FROM dbo.Equipos WHERE Activo_SAM = 1 ORDER BY EquipoId", es_select=True)
+    equipo_result = db.ejecutar_consulta(
+        "SELECT TOP 1 EquipoId, Equipo FROM dbo.Equipos WHERE Activo_SAM = 1 ORDER BY EquipoId", es_select=True
+    )
 
     if not robot_result:
         raise ValueError("No hay robots activos en la BD")
