@@ -39,6 +39,11 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
         # Aplicar trim automático a campos de texto (excepto números y campos especiales)
         if isinstance(value, str) and field not in ["TipoProgramacion", "DiasSemana", "HoraInicio"]:
             value = value.strip()
+
+        # FIX: Convertir cadenas vacías a None para campos de fecha/hora opcionales
+        if field in ["FechaInicioVentana", "FechaFinVentana", "FechaEspecifica", "HoraFin"] and value == "":
+            value = None
+
         new_form_data = {**form_data, field: value}
 
         if field == "TipoProgramacion":
@@ -160,7 +165,9 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
                 # Si es RangoMensual
                 html.div(
                     {"class_name": "rango-mensual-options"},
-                    html.p({"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}}, "Seleccione una opción:"),
+                    html.p(
+                        {"style": {"fontSize": "0.9em", "color": "var(--pico-muted-color)"}}, "Seleccione una opción:"
+                    ),
                     html.label(
                         html.input(
                             {
@@ -187,7 +194,9 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
                                     "min": 1,
                                     "max": 31,
                                     "placeholder": "1",
-                                    "on_change": lambda e: handle_change("DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                                    "on_change": lambda e: handle_change(
+                                        "DiaInicioMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                    ),
                                 }
                             ),
                         ),
@@ -200,7 +209,9 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
                                     "min": 1,
                                     "max": 31,
                                     "placeholder": "10",
-                                    "on_change": lambda e: handle_change("DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                                    "on_change": lambda e: handle_change(
+                                        "DiaFinMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                    ),
                                 }
                             ),
                         ),
@@ -236,7 +247,9 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
                                 "min": 1,
                                 "max": 31,
                                 "placeholder": "10",
-                                "on_change": lambda e: handle_change("PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                                "on_change": lambda e: handle_change(
+                                    "PrimerosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                ),
                             }
                         ),
                     )
@@ -263,7 +276,9 @@ def FullScheduleEditForm(form_data: Dict[str, Any], on_change: Callable):
                                 "min": 1,
                                 "max": 31,
                                 "placeholder": "5",
-                                "on_change": lambda e: handle_change("UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None),
+                                "on_change": lambda e: handle_change(
+                                    "UltimosDiasMes", int(e["target"]["value"]) if e["target"]["value"] else None
+                                ),
                             }
                         ),
                     )
@@ -434,7 +449,9 @@ def ScheduleEditModal(
                 formatted_schedule["EsCiclico"] = False
             elif isinstance(es_ciclico, (int, str)):
                 # Convertir 0/1 o "0"/"1" a booleano
-                formatted_schedule["EsCiclico"] = bool(int(es_ciclico)) if str(es_ciclico).isdigit() else bool(es_ciclico)
+                formatted_schedule["EsCiclico"] = (
+                    bool(int(es_ciclico)) if str(es_ciclico).isdigit() else bool(es_ciclico)
+                )
             else:
                 formatted_schedule["EsCiclico"] = bool(es_ciclico)
 
@@ -459,7 +476,9 @@ def ScheduleEditModal(
                 has_primeros = form_data.get("PrimerosDiasMes")
                 has_ultimos = form_data.get("UltimosDiasMes")
                 if not (has_rango or has_primeros or has_ultimos):
-                    raise ValueError("Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días.")
+                    raise ValueError(
+                        "Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días."
+                    )
             if tipo == "Especifica" and not form_data.get("FechaEspecifica"):
                 raise ValueError("Para 'Específica', la fecha es obligatoria.")
 
@@ -505,7 +524,9 @@ def ScheduleEditModal(
                 has_primeros = form_data.get("PrimerosDiasMes")
                 has_ultimos = form_data.get("UltimosDiasMes")
                 if not (has_rango or has_primeros or has_ultimos):
-                    raise ValueError("Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días.")
+                    raise ValueError(
+                        "Para 'Rango Mensual', debe especificar un rango, primeros N días, o últimos N días."
+                    )
             if tipo == "Especifica" and not form_data.get("FechaEspecifica"):
                 raise ValueError("Para 'Específica', la fecha es obligatoria.")
 
@@ -695,7 +716,9 @@ def DeviceList(title, items, selected_ids_set, handle_selection, handle_select_a
                                 )
                             ),
                             html.td(item["Nombre"]),
-                            html.td(html.span({"class_name": f"tag {get_estado(item)[1]}"}, get_estado(item)[0])) if has_status_column else None,
+                            html.td(html.span({"class_name": f"tag {get_estado(item)[1]}"}, get_estado(item)[0]))
+                            if has_status_column
+                            else None,
                         )
                         for item in filtered_items
                     ]
