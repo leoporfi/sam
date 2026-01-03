@@ -116,7 +116,6 @@ class HookVerifier:
 
             # Buscar patrones problemáticos
             in_conditional = False
-            conditional_depth = 0
             indent_level = 0
 
             for i, line in enumerate(lines, 1):
@@ -365,14 +364,13 @@ def main():
     verifier = HookVerifier(project_root)
 
     # Verificar hooks
-    hooks_ok = verifier.verify_all_hooks()
+    verifier.verify_all_hooks()
 
     # Verificar logs (opcional)
     if not args.skip_logs:
-        logs_ok = verifier.check_logs_for_errors(args.log_path)
+        verifier.check_logs_for_errors(args.log_path)
     else:
         print_header("Verificación de logs omitida")
-        logs_ok = True
 
     # Generar reporte
     verifier.generate_report()
