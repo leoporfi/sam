@@ -235,31 +235,6 @@ def ActionMenu(actions: List[dict]):
 
 
 @component
-def ThemeSwitcher(is_dark: bool, on_toggle: Callable):
-    """
-    Un interruptor para cambiar entre tema claro y oscuro, con iconos de sol y luna.
-    """
-
-    def handle_change(event):
-        on_toggle(event["target"]["checked"])
-
-    return html.label(
-        {"htmlFor": "theme-switcher", "class_name": "theme-switcher"},
-        html.span({"class_name": "material-symbols-outlined"}, "light_mode"),
-        html.input(
-            {
-                "type": "checkbox",
-                "id": "theme-switcher",
-                "role": "switch",
-                "checked": is_dark,
-                "on_change": handle_change,
-            }
-        ),
-        html.span({"class_name": "material-symbols-outlined"}, "dark_mode"),
-    )
-
-
-@component
 def ConfirmationModal(is_open: bool, title: str, message: str, on_confirm: Callable, on_cancel: Callable):
     """Un modal genérico para solicitar confirmación del usuario."""
     # Hooks SIEMPRE deben llamarse, independientemente de is_open,

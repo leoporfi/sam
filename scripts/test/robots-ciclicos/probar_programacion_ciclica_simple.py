@@ -9,9 +9,9 @@ import sys
 # Agregar el path del proyecto
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from sam.common.config_manager import ConfigManager
-from sam.common.database import DatabaseConnector
-from sam.web.backend.schemas import ScheduleData
+from sam.common.config_manager import ConfigManager  # noqa: E402
+from sam.common.database import DatabaseConnector  # noqa: E402
+from sam.web.backend.schemas import ScheduleData  # noqa: E402
 
 
 def obtener_ids_validos(db: DatabaseConnector):

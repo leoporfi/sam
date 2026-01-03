@@ -13,7 +13,7 @@ def test_can_import_common_module():
     está funcionando como se espera.
     """
     try:
-        from sam.common.config_loader import ConfigLoader
+        from sam.common.config_loader import ConfigLoader  # noqa: F401
 
         assert True, "La importación desde sam.common fue exitosa."
     except ImportError as e:
@@ -26,7 +26,7 @@ def test_can_import_service_module():
     que la resolución de rutas es completa.
     """
     try:
-        from sam.lanzador.service.desplegador import Desplegador
+        from sam.lanzador.service.desplegador import Desplegador  # noqa: F401
 
         assert True, "La importación desde sam.lanzador.service fue exitosa."
     except ImportError as e:
