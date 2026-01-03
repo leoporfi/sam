@@ -77,7 +77,7 @@ def crear_programacion_ciclica(data: dict):
             try:
                 result = response.json()
                 print(f"Respuesta: {json.dumps(result, indent=2)}")
-            except:
+            except Exception:
                 print(f"Respuesta: {response.text}")
             return True
         else:
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     try:
         response = requests.get(f"{BASE_URL}/docs", timeout=5)
         print("[OK] Servidor web disponible")
-    except:
+    except Exception:
         print(f"[ADVERTENCIA] No se pudo conectar a {BASE_URL}")
         print("Asegurate de que el servicio web esté corriendo.")
         print()

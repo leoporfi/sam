@@ -20,8 +20,6 @@ from typing import List, Optional
 
 from reactpy import component, html
 
-from .common_components import LoadingSpinner
-
 
 @component
 def AsyncContent(
@@ -60,7 +58,9 @@ def AsyncContent(
     if loading:
         if loading_component:
             return loading_component
-        return LoadingSpinner()
+        from .common_components import LoadingSpinner as CommonLoadingSpinner
+
+        return CommonLoadingSpinner()
 
     # Prioridad 3: Datos vacíos
     if data is not None and len(data) == 0:

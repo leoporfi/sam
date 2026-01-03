@@ -10,16 +10,16 @@ src_dir = root_dir / "src"
 sys.path.insert(0, str(src_dir))
 
 # Inicializar ConfigLoader antes de usar ConfigManager (igual que en los servicios)
-from sam.common.config_loader import ConfigLoader
-from sam.common.logging_setup import setup_logging
+from sam.common.config_loader import ConfigLoader  # noqa: E402
+from sam.common.logging_setup import setup_logging  # noqa: E402
 
 # Inicializar el servicio (necesario para cargar .env y configuración)
 SERVICE_NAME = "debug_create_schedule"
 ConfigLoader.initialize_service(SERVICE_NAME)
 setup_logging(service_name=SERVICE_NAME)
 
-from sam.common.config_manager import ConfigManager
-from sam.common.database import DatabaseConnector
+from sam.common.config_manager import ConfigManager  # noqa: E402
+from sam.common.database import DatabaseConnector  # noqa: E402
 
 
 def debug_create_schedule():
