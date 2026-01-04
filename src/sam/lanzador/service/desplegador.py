@@ -138,8 +138,11 @@ class Desplegador:
         y errores 400 como permanentes + alerta.
         """
         robot_id = robot_info.get("RobotId")
+        robot_nombre = robot_info.get("Robot")
         user_id = robot_info.get("UserId")
+        user_nombre = robot_info.get("UserName")
         equipo_id = robot_info.get("EquipoId")
+        equipo_nombre = robot_info.get("Equipo")
         hora = robot_info.get("Hora")
 
         # Obtener bot_input específico del robot o usar el valor por defecto
@@ -164,14 +167,15 @@ class Desplegador:
                 # Validar respuesta
                 if not deployment_result or "deploymentId" not in deployment_result:
                     error_msg = deployment_result.get("error", "No se recibió deploymentId")
-                    logger.error(f"Respuesta inválida de A360 para Robot {robot_id}: {error_msg}")
+                    logger.error(f"Respuesta inválida de A360 para Robot {robot_id} ({robot_nombre}): {error_msg}")
                     return {"status": "fallido", "robot_id": robot_id}
 
                 deployment_id = deployment_result["deploymentId"]
 
                 # 2. ÉXITO - Registrar en BD
                 logger.debug(
-                    f"Robot {robot_id} desplegado con ID: {deployment_id} en Equipo {equipo_id} (Intento {intento}/{max_intentos})"
+                    f"Robot {robot_id} ({robot_nombre}) desplegado con ID: {deployment_id} "
+                    f"en Equipo {equipo_id} ({equipo_nombre}) (Intento {intento}/{max_intentos})"
                 )
 
                 self._db_connector.insertar_registro_ejecucion(
@@ -216,21 +220,23 @@ class Desplegador:
 
                         # Enviar email inmediatamente con el mensaje de error completo
                         logger.error(
-                            f"Error 412 - Problema con Robot {robot_id} (no es problema del device). "
-                            f"Error: {response_text_full}"
+                            f"Error 412 - Problema con Robot {robot_id} ({robot_nombre}) - "
+                            f"No compatible targets. Error: {response_text_full}"
                         )
                         try:
                             self._notificador.send_alert(
-                                subject=f"[SAM CRÍTICO] Error en Robot {robot_id} - No Compatible Targets",
+                                subject=f"[SAM CRÍTICO] Robot '{robot_nombre}' sin Compatible Targets",
                                 message=(
                                     f"Error al desplegar robot (Error 412 - Problema con el robot, NO con el device):\n\n"
-                                    f"• RobotId: {robot_id}\n"
-                                    f"• EquipoId: {equipo_id}\n"
-                                    f"• UserId: {user_id}\n\n"
-                                    f"Mensaje de error completo:\n{response_text_full}\n\n"
-                                    f"Acción requerida: Revisar la configuración del robot en A360. "
-                                    f"El robot no tiene targets compatibles configurados."
+                                    f"🤖 Robot: {robot_nombre} (ID: {robot_id})\n"
+                                    f"💻 Equipo: {equipo_nombre} (ID: {equipo_id})\n"
+                                    f"👤 Usuario: {user_nombre} (ID: {user_id})\n\n"
+                                    f"📋 Mensaje de error completo:\n{response_text_full}\n\n"
+                                    f"⚠️ Acción requerida:\n"
+                                    f"   - Revisar la configuración del robot '{robot_nombre}' en A360\n"
+                                    f"   - Verificar que tenga al menos un Compatible Target configurado"
                                 ),
+                                is_critical=True,
                             )
                         except Exception as mail_e:
                             logger.error(f"Fallo al enviar alerta de error de robot: {mail_e}")
@@ -242,14 +248,17 @@ class Desplegador:
                     if not is_robot_error:
                         if intento < max_intentos:
                             logger.warning(
-                                f"Error 412 (Device Offline) Robot {robot_id} Equipo {equipo_id}. "
+                                f"Error 412 (Device Offline) Robot {robot_id} ({robot_nombre}) "
+                                f"Equipo {equipo_id} ({equipo_nombre}). "
                                 f"Reintentando ({intento + 1}/{max_intentos}) en {delay_seg}s..."
                             )
                             await asyncio.sleep(delay_seg)
                             continue
                         else:
                             logger.warning(
-                                f"Error 412 persistente Robot {robot_id} Equipo {equipo_id} después de {max_intentos} intentos. Dispositivo offline."
+                                f"Error 412 persistente Robot {robot_id} ({robot_nombre}) "
+                                f"Equipo {equipo_id} ({equipo_nombre}) después de {max_intentos} intentos. "
+                                f"Dispositivo offline."
                             )
                             break
                 elif status_code == 400:
@@ -279,7 +288,8 @@ class Desplegador:
 
                         if intento < max_intentos:
                             logger.warning(
-                                f"Error 400 (Device Offline) Robot {robot_id} Equipo {equipo_id}. "
+                                f"Error 400 (Device Offline) Robot {robot_id} ({robot_nombre}) "
+                                f"Equipo {equipo_id} ({equipo_nombre}). "
                                 f"Reintentando ({intento + 1}/{max_intentos}) en {delay_seg}s... "
                                 f"Error: {response_text}"
                             )
@@ -287,7 +297,8 @@ class Desplegador:
                             continue
                         else:
                             logger.warning(
-                                f"Error 400 persistente (Device Offline) Robot {robot_id} Equipo {equipo_id} "
+                                f"Error 400 persistente (Device Offline) Robot {robot_id} ({robot_nombre}) "
+                                f"Equipo {equipo_id} ({equipo_nombre}) "
                                 f"después de {max_intentos} intentos. Dispositivo no disponible."
                             )
                             # No desasignar, solo reportar el fallo
@@ -295,25 +306,32 @@ class Desplegador:
                     else:
                         # ERROR PERMANENTE (Bad Request de configuración)
                         logger.warning(
-                            f"Error 400 PERMANENTE Robot {robot_id} Equipo {equipo_id} Usuario {user_id}. "
+                            f"Error 400 PERMANENTE Robot {robot_id} ({robot_nombre}) "
+                            f"Equipo {equipo_id} ({equipo_nombre}) Usuario {user_id} ({user_nombre}). "
                             f"Revise configuración. Error: {response_text}"
                         )
 
                         # Solo alertar la primera vez por equipo
                         equipo_alertado_key = f"400_{equipo_id}"
                         if equipo_alertado_key not in self._equipos_alertados_400:
-                            logger.debug(f"Intentando enviar alerta para error 400 en equipo {equipo_id}")
+                            logger.debug(
+                                f"Intentando enviar alerta para error 400 en equipo {equipo_id} ({equipo_nombre})"
+                            )
                             try:
                                 self._notificador.send_alert(
-                                    subject=f"[SAM CRÍTICO] Error 400 Equipo {equipo_id}",
+                                    subject=f"[SAM CRÍTICO] Error 400 - Robot '{robot_nombre}' en Equipo '{equipo_nombre}'",
                                     message=(
                                         f"Error de Configuración (400 Bad Request) al desplegar:\n\n"
-                                        f"• RobotId: {robot_id}\n"
-                                        f"• EquipoId: {equipo_id}\n"
-                                        f"• UserId: {user_id}\n\n"
-                                        f"Causa: {response_text}\n\n"
-                                        f"Acción requerida: Verificar permisos, licencias o existencia del bot en A360."
+                                        f"🤖 Robot: {robot_nombre} (ID: {robot_id})\n"
+                                        f"💻 Equipo: {equipo_nombre} (ID: {equipo_id})\n"
+                                        f"👤 Usuario: {user_nombre} (ID: {user_id})\n\n"
+                                        f"📋 Causa del error:\n{response_text}\n\n"
+                                        f"⚠️ Acción requerida:\n"
+                                        f"   1. Verificar que el usuario '{user_nombre}' tenga permisos sobre el robot '{robot_nombre}'\n"
+                                        f"   2. Confirmar que haya licencias disponibles en A360\n"
+                                        f"   3. Validar que el robot exista en el Control Room"
                                     ),
+                                    is_critical=True,
                                 )
                                 self._equipos_alertados_400.add(equipo_alertado_key)
                             except Exception as mail_e:
@@ -326,7 +344,10 @@ class Desplegador:
                                 (robot_id, equipo_id),
                                 es_select=False,
                             )
-                            logger.debug(f"Asignación desactivada: Robot {robot_id} - Equipo {equipo_id}")
+                            logger.debug(
+                                f"Asignación desactivada: Robot {robot_id} ({robot_nombre}) - "
+                                f"Equipo {equipo_id} ({equipo_nombre})"
+                            )
                         except Exception as db_e:
                             logger.error(f"Error al desactivar asignación: {db_e}")
 
@@ -334,29 +355,42 @@ class Desplegador:
 
                 else:
                     # OTROS ERRORES HTTP
-                    logger.error(f"Error HTTP {status_code} Robot {robot_id} Equipo {equipo_id}: {response_text}")
+                    logger.error(
+                        f"Error HTTP {status_code} Robot {robot_id} ({robot_nombre}) "
+                        f"Equipo {equipo_id} ({equipo_nombre}): {response_text}"
+                    )
                     break
 
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 # ERRORES DE RED/TIMEOUT
                 if intento < max_intentos:
                     logger.warning(
-                        f"Error de Red ({type(e).__name__}) Robot {robot_id} Equipo {equipo_id}. "
+                        f"Error de Red ({type(e).__name__}) Robot {robot_id} ({robot_nombre}) "
+                        f"Equipo {equipo_id} ({equipo_nombre}). "
                         f"Reintentando ({intento + 1}/{max_intentos}) en {delay_seg}s..."
                     )
                     await asyncio.sleep(delay_seg)
                     continue
                 else:
-                    logger.error(f"Error de Red persistente Robot {robot_id} Equipo {equipo_id}. Fallo definitivo.")
+                    logger.error(
+                        f"Error de Red persistente Robot {robot_id} ({robot_nombre}) "
+                        f"Equipo {equipo_id} ({equipo_nombre}). Fallo definitivo."
+                    )
                     break
 
             except Exception as e:
                 # ERRORES GENÉRICOS
-                logger.error(f"Error genérico Robot {robot_id} Equipo {equipo_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Error genérico Robot {robot_id} ({robot_nombre}) Equipo {equipo_id} ({equipo_nombre}): {e}",
+                    exc_info=True,
+                )
                 break
 
         # Fallo después de todos los intentos
-        logger.error(f"Fallo definitivo Robot {robot_id} Equipo {equipo_id} después de {intento} intentos.")
+        logger.error(
+            f"Fallo definitivo Robot {robot_id} ({robot_nombre}) "
+            f"Equipo {equipo_id} ({equipo_nombre}) después de {intento} intentos."
+        )
         return {
             "status": "fallido",
             "robot_id": robot_id,

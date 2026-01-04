@@ -220,12 +220,14 @@ BEGIN
 
     -- RESULTADO FINAL: Ordenar y seleccionar el mejor por equipo
     -- El ROW_NUMBER ya ordenó correctamente dentro de cada equipo
-    -- Hacemos JOIN con la tabla temporal para tener acceso a EsProgramado y PrioridadBalanceo en el ORDER BY
     SELECT
-        R.RobotId,
-        R.EquipoId,
-        R.UserId,
-        R.Hora
+        Ord.RobotId,
+        Rob.Robot,           -- NUEVO: Nombre del robot
+        Ord.EquipoId,
+        Eq.Equipo,           -- NUEVO: Nombre del equipo
+        Ord.UserId,
+        Eq.UserName,          -- NUEVO: Nombre del usuario
+        Ord.Hora
     FROM (
         SELECT
             RobotId,
@@ -239,12 +241,11 @@ BEGIN
                 ORDER BY EsProgramado DESC, PrioridadBalanceo ASC, Hora ASC
             ) AS RN
         FROM #ResultadosRobots
-    ) AS Ordenados
-    INNER JOIN #ResultadosRobots R
-        ON Ordenados.RobotId = R.RobotId
-        AND Ordenados.EquipoId = R.EquipoId
-    WHERE Ordenados.RN = 1  -- Solo el de mayor prioridad por equipo
-    ORDER BY R.EsProgramado DESC, R.PrioridadBalanceo ASC, R.Hora;
+    ) AS Ord
+    INNER JOIN dbo.Robots Rob ON Ord.RobotId = Rob.RobotId
+    INNER JOIN dbo.Equipos Eq ON Ord.EquipoId = Eq.EquipoId
+    WHERE Ord.RN = 1  -- Solo el de mayor prioridad por equipo
+    ORDER BY Ord.EsProgramado DESC, Ord.PrioridadBalanceo ASC, Ord.Hora;
 
     DROP TABLE #ResultadosRobots;
 END

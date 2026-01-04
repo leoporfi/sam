@@ -45,9 +45,11 @@ El error **412 Precondition Failed** tiene **DOS causas distintas** que el siste
 **Comportamiento del Sistema:**
 - ✋ **NO reintenta** (es un error permanente de configuración)
 - 🚨 **Alerta INMEDIATA por email** con todos los detalles:
-  - RobotId, EquipoId, UserId
-  - Mensaje de error completo de A360
-  - Acción requerida: "Revisar configuración del robot en A360"
+  - 🤖 **Robot:** Nombre (ID)
+  - 💻 **Equipo:** Nombre (ID)
+  - 👤 **Usuario:** Nombre (ID)
+  - 📋 Mensaje de error completo de A360
+  - ⚠️ Acción requerida: "Revisar configuración del robot '{RobotNombre}' en A360"
 - 📝 El deployment NO se registra en la BD
 
 **Acción de Soporte:**
@@ -82,7 +84,9 @@ El error **412 Precondition Failed** tiene **DOS causas distintas** que el siste
 
 **Comportamiento del Sistema:**
 - ✋ **NO reintenta** (es permanente)
-- 🚨 **Alerta por email** (una sola vez por equipo en el ciclo)
+- 🚨 **Alerta por email** (una sola vez por equipo en el ciclo) con formato enriquecido:
+  - Subject: `[SAM CRÍTICO] Error 400 - Robot 'X' en Equipo 'Y'`
+  - Cuerpo con nombres legibles y acciones recomendadas.
 - ❌ **Desactiva la asignación** automáticamente (elimina registro de `dbo.Asignaciones`)
 
 **Acción de Soporte:**
@@ -277,7 +281,7 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 2. **Error 412 - Robot sin targets compatibles:**
    - Mensaje: `"No compatible targets found in automation"`
    - **Solución:** Configurar targets compatibles en A360 para ese robot
-   - El sistema envía alerta inmediata con detalles completos
+   - El sistema envía alerta inmediata con nombres legibles (Robot, Equipo, Usuario) y detalles completos
 
 3. **Error 412 - Dispositivo Offline (con reintentos):**
    - El sistema reintenta automáticamente
@@ -286,7 +290,7 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 
 4. **Error 400 - Configuración inválida:**
    - Sistema desactiva la asignación automáticamente
-   - **Solución:** Revisar permisos, licencias y existencia del robot en A360
+   - **Solución:** Revisar permisos, licencias y existencia del robot en A360 (el email indica exactamente qué usuario y robot están afectados)
 
 5. **Ventana de Pausa:**
    - Verificar si la hora actual está dentro de la ventana de pausa configurada
