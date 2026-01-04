@@ -1,4 +1,4 @@
-exclude: '^src/sam/web/static/'
+exclude: '^(src/sam/web/static/|docs/mejoras/)'
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0

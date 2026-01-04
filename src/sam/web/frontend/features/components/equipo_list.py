@@ -26,8 +26,6 @@ from ...shared.styles import (
     ROBOT_CARD_BODY,
     ROBOT_CARD_HEADER,
     SEARCH_INPUT,
-    STATUS_EJECUCION_DEMANDA,
-    STATUS_EJECUCION_PROGRAMADO,
     TABLE_CONTAINER,
     TAG,
     TAG_SECONDARY,
@@ -195,6 +193,55 @@ def EquiposTable(equipos: List[Equipo], on_action: Callable, sort_by: str, sort_
     )
 
 
+def get_tipo_asignacion(equipo: Dict) -> tuple[str, str, str]:
+    """
+    Determina el tipo de asignación de un equipo para la tabla/tarjeta principal.
+
+    Args:
+        equipo: Diccionario con información del equipo de la vista principal
+
+    Returns:
+        tuple[str, str, str]: (texto_estado, clase_css, tooltip)
+
+    Estados posibles:
+        - 'N/A': Equipo sin asignación
+        - 'Programado': Asignado vía programación (EsProgramado=1)
+        - 'Reservado': Reservado manualmente (Reservado=1) - NOTA: Requiere que el SP devuelva este campo
+        - 'Dinámico': Asignado por balanceador (ni programado ni reservado)
+
+    NOTA: Actualmente el SP ListarEquipos no devuelve el campo 'Reservado'.
+          Cuando se agregue, actualizar esta función para detectar correctamente el estado Reservado.
+    """
+    robot_asignado = equipo.get("RobotAsignado")
+
+    # Si no tiene robot asignado
+    if not robot_asignado or robot_asignado == "N/A":
+        return ("N/A", TAG_SECONDARY, "Sin asignación")
+
+    # Orden de prioridad (consistente con los modales)
+    if equipo.get("EsProgramado"):
+        return (
+            "Programado",
+            "tag-programado",
+            f"Asignado vía programación a {robot_asignado}",
+        )
+
+    # NOTA: Cuando el SP ListarEquipos devuelva 'Reservado', agregar esta verificación:
+    # if equipo.get("Reservado"):
+    #     return (
+    #         "Reservado",
+    #         "tag-reservado",
+    #         f"Reservado manualmente para {robot_asignado}",
+    #     )
+
+    # Si tiene robot pero no es programado (y no tenemos info de Reservado) → Dinámico
+    return (
+        "Dinámico",
+        "tag-dinamico",
+        f"Asignado dinámicamente a {robot_asignado} por el balanceador",
+    )
+
+
 @component
 def EquipoRow(equipo: Equipo, on_action: Callable):
     """
@@ -257,14 +304,19 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
                 equipo.get("RobotAsignado", "N/A"),
             )
         ),
-        # --- Opcional: Mostrar el estado de la asignación ---
+        # --- Mostrar el estado de la asignación ---
         html.td(
-            html.span(
-                {"class_name": STATUS_EJECUCION_PROGRAMADO if is_programado else STATUS_EJECUCION_DEMANDA},
-                "Programado" if is_programado else "Dinámico",
+            (
+                html.span(
+                    {
+                        "class_name": get_tipo_asignacion(equipo)[1],
+                        "title": get_tipo_asignacion(equipo)[2],
+                    },
+                    get_tipo_asignacion(equipo)[0],
+                )
+                if equipo.get("RobotAsignado") not in [None, "N/A"]
+                else get_tipo_asignacion(equipo)[0]
             )
-            if equipo.get("RobotAsignado") not in [None, "N/A"]
-            else "N/A"
         ),
         html.td(
             html.span({"class_name": TAG_SECONDARY if equipo.get("Pool") == "N/A" else TAG}, equipo.get("Pool", "N/A"))
@@ -309,15 +361,17 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
             ),
             html.p(
                 "Tipo Asig.: ",
-                html.span(
-                    {
-                        "title": balanceo_title,
-                        "class_name": STATUS_EJECUCION_PROGRAMADO if is_programado else STATUS_EJECUCION_DEMANDA,
-                    },
-                    "Programado" if is_programado else "Dinámico",
-                )
-                if equipo.get("RobotAsignado") not in [None, "N/A"]
-                else "N/A",
+                (
+                    html.span(
+                        {
+                            "class_name": get_tipo_asignacion(equipo)[1],
+                            "title": get_tipo_asignacion(equipo)[2],
+                        },
+                        get_tipo_asignacion(equipo)[0],
+                    )
+                    if equipo.get("RobotAsignado") not in [None, "N/A"]
+                    else get_tipo_asignacion(equipo)[0]
+                ),
             ),
             html.p(
                 "Pool: ",
@@ -347,6 +401,8 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
                             "role": "switch",
                             "checked": equipo["PermiteBalanceoDinamico"],
                             "on_change": event(handle_toggle_balanceo),
+                            "disabled": balanceo_disabled,
+                            "title": balanceo_title,
                         }
                     ),
                     "Balanceo",
