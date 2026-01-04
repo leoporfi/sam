@@ -38,9 +38,7 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
         set_is_loading(True)
         try:
             await on_save(form_data)
-            notification_ctx["show_notification"](
-                f"Pool {'actualizado' if is_edit_mode else 'creado'} con éxito.", "success"
-            )
+            notification_ctx["show_notification"](f"Pool {'actualizado' if is_edit_mode else 'creado'} con éxito.", "success")
             on_close()
         except asyncio.CancelledError:
             raise
