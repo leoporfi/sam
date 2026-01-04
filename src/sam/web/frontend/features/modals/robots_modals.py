@@ -1025,23 +1025,74 @@ def DeviceList(
                 current_ids.remove(device_id)
         on_selection_change(current_ids)
 
-    def get_estado(device: Dict) -> tuple[str, str]:
+    def get_estado(device: Dict) -> tuple[str, str, str]:
         """
-        Determina el estado del equipo para mostrar en la etiqueta.
-        - Programado: Tiene una asignación programada (EsProgramado = 1)
-        - Libre: No tiene ninguna asignación (completamente disponible)
-        - Reservado: Asignado manualmente (solo en lista de asignados)
-        - Dinámico: Asignado por el balanceador (solo en lista de asignados)
+        Determina el estado de un equipo según las reglas de negocio de SAM.
+
+        Args:
+            device: Diccionario con información del equipo, debe incluir:
+                    - EsProgramado (bool): Flag de asignación programada
+                    - Reservado (bool): Flag de reserva manual
+                    - RobotId (int, opcional): ID del robot asignado (para detectar dinámico)
+
+        Returns:
+            tuple[str, str, str]: (texto_estado, clase_css, tooltip)
+                - texto_estado: 'Programado', 'Reservado', 'Dinámico', o 'Libre'
+                - clase_css: Nombre de clase CSS para aplicar estilos
+                - tooltip: Texto descriptivo para mostrar al hacer hover
+
+        Reglas de Negocio (evaluadas en orden de prioridad):
+            1. Programado: EsProgramado=1 (compartible entre robots)
+            2. Reservado: Reservado=1 (no compartible, asignación manual)
+            3. Dinámico: tiene asignación (RobotId presente) pero no es programado ni reservado
+            4. Libre: sin ninguna asignación (solo en lista 'Disponibles')
         """
-        # Verificar si el dispositivo tiene información de estado
-        if "EsProgramado" in device:
-            if device.get("EsProgramado"):
-                return ("Programado", "tag-programado")
-        if "Reservado" in device:
-            if device.get("Reservado"):
-                return ("Reservado", "tag-reservado")
-        # Si no tiene EsProgramado ni Reservado, o no tiene información de estado, está libre
-        return ("Libre", "tag-libre")
+        # Extraer flags de estado
+        es_programado = device.get("EsProgramado", False)
+        es_reservado = device.get("Reservado", False)
+        # Para detectar asignación: RobotId indica que está asignado a un robot
+        # En lista de "Disponibles", no hay RobotId (no están asignados a este robot)
+        # En lista de "Asignados", sí hay RobotId
+        tiene_asignacion = device.get("RobotId") is not None
+
+        # PRIORIDAD 1: Programado
+        # Equipos con EsProgramado=1 pueden ser compartidos entre múltiples robots/programaciones
+        if es_programado:
+            return (
+                "Programado",
+                "tag-programado",
+                "Compartible entre robots - Asignado vía programación",
+            )
+
+        # PRIORIDAD 2: Reservado
+        # Equipos con Reservado=1 son de uso exclusivo, asignados manualmente
+        # Solo aparece en lista de "Asignados"
+        if es_reservado:
+            return (
+                "Reservado",
+                "tag-reservado",
+                "Reservado manualmente - No compartible",
+            )
+
+        # PRIORIDAD 3: Dinámico
+        # Equipos asignados automáticamente por el balanceador
+        # Se detecta cuando: tiene asignación (RobotId presente) PERO no es programado NI reservado
+        # Solo puede aparecer en lista de "Asignados"
+        if tiene_asignacion and not es_programado and not es_reservado:
+            return (
+                "Dinámico",
+                "tag-dinamico",
+                "Asignado automáticamente por el balanceador",
+            )
+
+        # PRIORIDAD 4: Libre (estado por defecto)
+        # Equipos sin ninguna asignación activa
+        # Aparece en lista de "Disponibles" cuando no tienen EsProgramado=1
+        return (
+            "Libre",
+            "tag-libre",
+            "Disponible para asignación",
+        )
 
     # Verificar si hay información de estado disponible
     # Siempre mostrar la columna de estado si:
@@ -1098,7 +1149,15 @@ def DeviceList(
                                 )
                             ),
                             html.td(device["Equipo"]),
-                            html.td(html.span({"class_name": f"tag {get_estado(device)[1]}"}, get_estado(device)[0]))
+                            html.td(
+                                html.span(
+                                    {
+                                        "class_name": f"tag {get_estado(device)[1]}",
+                                        "title": get_estado(device)[2],  # Tooltip
+                                    },
+                                    get_estado(device)[0],  # Texto visible
+                                )
+                            )
                             if has_status_column
                             else None,
                         )

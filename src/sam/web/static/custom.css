@@ -185,11 +185,71 @@ nav ul li a.active {
   color: var(--pico-secondary-inverse);
 }
 
-/* Estados de Equipos */
-.tag-programado { background-color: var(--pico-color-blue-500); color: white; }
-.tag-reservado  { background-color: var(--pico-color-orange-500); color: white; }
-.tag-dinamico   { background-color: var(--pico-color-green-500); color: white; }
-.tag-libre      { background-color: var(--pico-color-slate-400); color: white; }
+/* Estados de Equipos - SAM */
+/* Colores según reglas de negocio: Programado (azul), Reservado (ámbar), Dinámico (violeta), Libre (verde) */
+.tag-programado {
+    background-color: var(--pico-color-azure-500, #0ea5e9);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: inline-block;
+    white-space: nowrap;
+    transition: opacity 0.2s ease;
+}
+
+.tag-programado:hover {
+    opacity: 0.9;
+}
+
+.tag-reservado {
+    background-color: var(--pico-color-orange-500, #f59e0b);
+    color:  white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: inline-block;
+    white-space: nowrap;
+    transition: opacity 0.2s ease;
+}
+
+.tag-reservado:hover {
+    opacity: 0.9;
+}
+
+.tag-dinamico {
+    background-color: var(--pico-color-violet-500, #8b5cf6);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: inline-block;
+    white-space: nowrap;
+    transition: opacity 0.2s ease;
+}
+
+.tag-dinamico:hover {
+    opacity: 0.9;
+}
+
+.tag-libre {
+    background-color: var(--pico-color-green-500, #10b981);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: inline-block;
+    white-space: nowrap;
+    transition: opacity 0.2s ease;
+}
+
+.tag-libre:hover {
+    opacity: 0.9;
+}
 
 /* Tipos de Ejecución */
 .tag-ejecucion-programado { background-color: var(--pico-color-pink-550); color: white; }
