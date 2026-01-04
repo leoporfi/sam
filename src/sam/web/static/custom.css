@@ -204,8 +204,8 @@ nav ul li a.active {
 }
 
 .tag-reservado {
-    background-color: var(--pico-color-amber-500, #f59e0b);
-    color: var(--pico-color-grey-900, #1a1a1a);
+    background-color: var(--pico-color-orange-500, #f59e0b);
+    color:  white;
     padding: 0.25rem 0.75rem;
     border-radius: 0.25rem;
     font-size: 0.875rem;
