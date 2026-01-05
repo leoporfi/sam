@@ -628,8 +628,20 @@ def get_callbacks_dashboard(
     try:
         from datetime import datetime
 
-        fecha_inicio_dt = datetime.fromisoformat(fecha_inicio) if fecha_inicio else None
-        fecha_fin_dt = datetime.fromisoformat(fecha_fin) if fecha_fin else None
+        # Parsear fechas si se proporcionan
+        fecha_inicio_dt = None
+        fecha_fin_dt = None
+        if fecha_inicio:
+            try:
+                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace("Z", "+00:00"))
+            except ValueError:
+                # Intentar formato alternativo
+                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio)
+        if fecha_fin:
+            try:
+                fecha_fin_dt = datetime.fromisoformat(fecha_fin.replace("Z", "+00:00"))
+            except ValueError:
+                fecha_fin_dt = datetime.fromisoformat(fecha_fin)
 
         return db_service.get_callbacks_dashboard(
             db=db,

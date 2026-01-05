@@ -999,6 +999,8 @@ def ejecutar_sp_multiple_result_sets(db: DatabaseConnector, sp_name: str, params
 
     Nota: Los parámetros se pasan con nombres (@ParamName = ?) para mayor claridad.
     """
+    import pyodbc
+
     try:
         with db.obtener_cursor() as cursor:
             # Construir la llamada al SP con parámetros nombrados
@@ -1007,6 +1009,7 @@ def ejecutar_sp_multiple_result_sets(db: DatabaseConnector, sp_name: str, params
 
             for key, value in params.items():
                 # Solo incluir parámetros que no son None (el SP usa sus defaults)
+                # Esto evita problemas de tipo cuando pyodbc intenta inferir el tipo de None
                 if value is not None:
                     param_placeholders.append(f"@{key} = ?")
                     # Convertir booleanos a int para parámetros BIT de SQL Server
@@ -1015,9 +1018,10 @@ def ejecutar_sp_multiple_result_sets(db: DatabaseConnector, sp_name: str, params
                     else:
                         param_values.append(value)
 
-            # Si no hay parámetros, llamar sin ellos
+            # Construir la llamada al SP
             if param_placeholders:
-                sp_call = f"{{CALL {sp_name}({', '.join(param_placeholders)})}}"
+                # Usar EXEC en lugar de CALL para mejor compatibilidad con parámetros nombrados
+                sp_call = f"EXEC {sp_name} {', '.join(param_placeholders)}"
                 cursor.execute(sp_call, *param_values)
             else:
                 sp_call = f"{{CALL {sp_name}}}"
@@ -1057,13 +1061,13 @@ def get_callbacks_dashboard(
     incluir_detalle_horario: bool = True,
 ) -> Dict:
     """Obtiene el dashboard de análisis de callbacks."""
-    # El SP espera parámetros nombrados, todos opcionales
-    # Pasamos todos los parámetros, incluso si son None (el SP maneja los defaults)
+    # El SP espera parámetros en este orden: @FechaInicio, @FechaFin, @RobotId, @IncluirDetalleHorario
+    # Pasamos todos los parámetros, incluso None, para mantener el orden correcto
     params = {
         "FechaInicio": fecha_inicio,
         "FechaFin": fecha_fin,
         "RobotId": robot_id,
-        "IncluirDetalleHorario": incluir_detalle_horario,  # Se convertirá a BIT en ejecutar_sp_multiple_result_sets
+        "IncluirDetalleHorario": incluir_detalle_horario,
     }
 
     result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.ObtenerDashboardCallbacks", params)
