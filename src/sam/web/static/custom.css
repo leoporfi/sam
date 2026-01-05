@@ -543,7 +543,11 @@ dialog header h2,
 .status-dashboard .card,
 .callbacks-dashboard .card,
 .balanceador-dashboard .card {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  /* Sombra 3D con múltiples capas para efecto de profundidad */
+  box-shadow: 
+    0 4px 6px rgba(0, 0, 0, 0.1),
+    0 10px 20px rgba(0, 0, 0, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.06);
   transition: box-shadow 0.3s ease, transform 0.2s ease;
   border: 1px solid var(--pico-card-border-color);
   border-radius: var(--pico-border-radius);
@@ -554,40 +558,73 @@ dialog header h2,
 [data-theme="dark"] .status-dashboard .card,
 [data-theme="dark"] .callbacks-dashboard .card,
 [data-theme="dark"] .balanceador-dashboard .card {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  /* Sombra 3D más pronunciada para tema oscuro */
+  box-shadow: 
+    0 4px 6px rgba(0, 0, 0, 0.4),
+    0 10px 20px rgba(0, 0, 0, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .status-dashboard .card:hover,
 .callbacks-dashboard .card:hover,
 .balanceador-dashboard .card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  transform: translateY(-2px);
+  /* Sombra 3D más pronunciada al hacer hover */
+  box-shadow: 
+    0 8px 12px rgba(0, 0, 0, 0.15),
+    0 16px 32px rgba(0, 0, 0, 0.12),
+    0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
 }
 
 [data-theme="dark"] .status-dashboard .card:hover,
 [data-theme="dark"] .callbacks-dashboard .card:hover,
 [data-theme="dark"] .balanceador-dashboard .card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  /* Sombra 3D más pronunciada en hover para tema oscuro */
+  box-shadow: 
+    0 8px 12px rgba(0, 0, 0, 0.5),
+    0 16px 32px rgba(0, 0, 0, 0.4),
+    0 4px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .robot-card, .pool-card {
   margin-bottom: 0;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  transition: box-shadow 0.3s ease;
+  /* Sombra 3D con múltiples capas */
+  box-shadow: 
+    0 3px 5px rgba(0, 0, 0, 0.08),
+    0 6px 12px rgba(0, 0, 0, 0.06),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
 }
 
 [data-theme="dark"] .robot-card,
 [data-theme="dark"] .pool-card {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  /* Sombra 3D más pronunciada para tema oscuro */
+  box-shadow: 
+    0 3px 5px rgba(0, 0, 0, 0.3),
+    0 6px 12px rgba(0, 0, 0, 0.25),
+    0 1px 3px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .robot-card:hover, .pool-card:hover {
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+  /* Sombra 3D más pronunciada al hacer hover */
+  box-shadow: 
+    0 6px 10px rgba(0, 0, 0, 0.12),
+    0 12px 24px rgba(0, 0, 0, 0.1),
+    0 2px 6px rgba(0, 0, 0, 0.08);
+  transform: translateY(-3px);
 }
 
 [data-theme="dark"] .robot-card:hover,
 [data-theme="dark"] .pool-card:hover {
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+  /* Sombra 3D más pronunciada en hover para tema oscuro */
+  box-shadow: 
+    0 6px 10px rgba(0, 0, 0, 0.4),
+    0 12px 24px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .robot-card-header {
   border-bottom: 1px solid var(--pico-card-border-color);
