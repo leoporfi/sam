@@ -141,6 +141,20 @@ def CallbacksDashboard():
             },
             "Analiza el rendimiento del sistema de finalización de ejecuciones. Compara callbacks exitosos (notificaciones automáticas) vs conciliador (verificación periódica). Muestra latencia, tasas de éxito y casos problemáticos. Útil para identificar problemas de comunicación o configuración.",
         ),
+        html.p(
+            {
+                "style": {
+                    "color": "var(--pico-color-yellow-600)",
+                    "margin-bottom": "1rem",
+                    "font-size": "0.85rem",
+                    "padding": "0.5rem",
+                    "background-color": "var(--pico-color-yellow-50)",
+                    "border-left": "3px solid var(--pico-color-yellow-500)",
+                    "border-radius": "4px",
+                }
+            },
+            "ℹ️ Datos disponibles: Incluye ejecuciones de las últimas 24 horas (tabla actual) y datos históricos hasta 15 días. El mantenimiento diario mueve datos antiguos a las 5am. Los datos más antiguos de 15 días se purgan automáticamente.",
+        ),
         # Filtros de fecha
         html.div(
             {

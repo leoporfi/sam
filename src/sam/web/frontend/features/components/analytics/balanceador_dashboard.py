@@ -149,6 +149,20 @@ def BalanceadorDashboard():
             },
             "Monitorea la actividad del balanceador automático de recursos. Muestra asignaciones y desasignaciones de equipos a robots, análisis por robot, y detección de thrashing (cambios excesivos). Ayuda a optimizar la distribución de recursos y detectar patrones problemáticos.",
         ),
+        html.p(
+            {
+                "style": {
+                    "color": "var(--pico-color-green-600)",
+                    "margin-bottom": "1rem",
+                    "font-size": "0.85rem",
+                    "padding": "0.5rem",
+                    "background-color": "var(--pico-color-green-50)",
+                    "border-left": "3px solid var(--pico-color-green-500)",
+                    "border-radius": "4px",
+                }
+            },
+            "ℹ️ Datos históricos: Este dashboard consulta la tabla HistoricoBalanceo que mantiene un registro completo de todas las acciones del balanceador. No hay límite de tiempo para estos datos.",
+        ),
         # Filtros de fecha
         html.div(
             {

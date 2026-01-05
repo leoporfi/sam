@@ -116,6 +116,20 @@ def StatusDashboard():
             },
             "Vista en tiempo real del estado operativo de SAM. Muestra ejecuciones activas, estado de robots (online/offline/programados) y disponibilidad de equipos. Se actualiza automáticamente cada 30 segundos.",
         ),
+        html.p(
+            {
+                "style": {
+                    "color": "var(--pico-color-blue-600)",
+                    "margin-bottom": "1rem",
+                    "font-size": "0.85rem",
+                    "padding": "0.5rem",
+                    "background-color": "var(--pico-color-blue-50)",
+                    "border-left": "3px solid var(--pico-color-blue-500)",
+                    "border-radius": "4px",
+                }
+            },
+            "ℹ️ Datos en tiempo real: Solo muestra ejecuciones activas de la tabla actual. Los datos históricos no se incluyen en este dashboard.",
+        ),
         html.div(
             {
                 "class_name": "status-cards",
