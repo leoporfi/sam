@@ -949,13 +949,31 @@ def get_system_status(db: DatabaseConnector) -> Dict:
     ejecuciones = db.ejecutar_consulta(query_ejecuciones, es_select=True)
     result["ejecuciones"] = ejecuciones[0] if ejecuciones else {}
 
-    # Robots
+    # Robots - con distinción de programados
+    # Usamos subconsultas para evitar el error de agregación sobre EXISTS
     query_robots = """
         SELECT
             COUNT(*) AS TotalRobots,
             SUM(CASE WHEN Activo = 1 THEN 1 ELSE 0 END) AS RobotsActivos,
-            SUM(CASE WHEN EsOnline = 1 THEN 1 ELSE 0 END) AS RobotsOnline
-        FROM dbo.Robots
+            SUM(CASE WHEN EsOnline = 1 THEN 1 ELSE 0 END) AS RobotsOnline,
+            SUM(CASE WHEN EsOnline = 0 THEN 1 ELSE 0 END) AS RobotsOffline,
+            (
+                SELECT COUNT(DISTINCT p.RobotId)
+                FROM dbo.Programaciones p
+                WHERE p.Activo = 1
+            ) AS RobotsProgramados,
+            SUM(CASE WHEN Activo = 1 AND EsOnline = 1 THEN 1 ELSE 0 END) AS RobotsActivosOnline,
+            (
+                SELECT COUNT(DISTINCT r2.RobotId)
+                FROM dbo.Robots r2
+                WHERE r2.Activo = 1
+                    AND r2.EsOnline = 0
+                    AND EXISTS (
+                        SELECT 1 FROM dbo.Programaciones p2
+                        WHERE p2.RobotId = r2.RobotId AND p2.Activo = 1
+                    )
+            ) AS RobotsActivosProgramados
+        FROM dbo.Robots r
     """
     robots = db.ejecutar_consulta(query_robots, es_select=True)
     result["robots"] = robots[0] if robots else {}
@@ -978,17 +996,24 @@ def ejecutar_sp_multiple_result_sets(db: DatabaseConnector, sp_name: str, params
     """
     Ejecuta un stored procedure que retorna múltiples result sets.
     Retorna una lista de listas, donde cada lista interna es un result set.
+
+    Nota: Los parámetros se pasan con nombres (@ParamName = ?) para mayor claridad.
     """
     try:
         with db.obtener_cursor() as cursor:
-            # Construir la llamada al SP con parámetros
+            # Construir la llamada al SP con parámetros nombrados
             param_placeholders = []
             param_values = []
 
             for key, value in params.items():
+                # Solo incluir parámetros que no son None (el SP usa sus defaults)
                 if value is not None:
                     param_placeholders.append(f"@{key} = ?")
-                    param_values.append(value)
+                    # Convertir booleanos a int para parámetros BIT de SQL Server
+                    if isinstance(value, bool):
+                        param_values.append(1 if value else 0)
+                    else:
+                        param_values.append(value)
 
             # Si no hay parámetros, llamar sin ellos
             if param_placeholders:
@@ -1032,14 +1057,14 @@ def get_callbacks_dashboard(
     incluir_detalle_horario: bool = True,
 ) -> Dict:
     """Obtiene el dashboard de análisis de callbacks."""
-    params = {}
-    if fecha_inicio:
-        params["FechaInicio"] = fecha_inicio
-    if fecha_fin:
-        params["FechaFin"] = fecha_fin
-    if robot_id:
-        params["RobotId"] = robot_id
-    params["IncluirDetalleHorario"] = 1 if incluir_detalle_horario else 0
+    # El SP espera parámetros nombrados, todos opcionales
+    # Pasamos todos los parámetros, incluso si son None (el SP maneja los defaults)
+    params = {
+        "FechaInicio": fecha_inicio,
+        "FechaFin": fecha_fin,
+        "RobotId": robot_id,
+        "IncluirDetalleHorario": incluir_detalle_horario,  # Se convertirá a BIT en ejecutar_sp_multiple_result_sets
+    }
 
     result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.ObtenerDashboardCallbacks", params)
 

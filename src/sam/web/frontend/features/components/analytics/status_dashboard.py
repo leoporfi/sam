@@ -31,6 +31,10 @@ def StatusDashboard():
         finally:
             set_loading(False)
 
+    def handle_refresh(event=None):
+        """Wrapper para manejar el click del botón de actualizar."""
+        asyncio.create_task(fetch_status())
+
     @use_effect(dependencies=[])
     def load_data():
         # Crear tarea asíncrona para cargar datos
@@ -45,7 +49,7 @@ def StatusDashboard():
             {"class_name": "status-dashboard error", "style": {"color": "var(--pico-color-red-600)"}},
             html.h3("Error"),
             html.p(error),
-            html.button({"on_click": lambda e: fetch_status()}, "Reintentar"),
+            html.button({"on_click": handle_refresh}, "Reintentar"),
         )
 
     if not status_data:
@@ -61,7 +65,11 @@ def StatusDashboard():
         html.header(
             html.h2("Estado Actual del Sistema"),
             html.button(
-                {"on_click": lambda e: fetch_status(), "class_name": "secondary", "style": {"margin-left": "auto"}},
+                {
+                    "on_click": handle_refresh,
+                    "class_name": "secondary",
+                    "style": {"margin-left": "auto"},
+                },
                 "🔄 Actualizar",
             ),
         ),
@@ -89,7 +97,7 @@ def StatusDashboard():
                     f"{ejecuciones.get('EquiposOcupados', 0)} equipos ocupados",
                 ),
             ),
-            # Card Robots
+            # Card Robots - Mejorada con distinción de programados
             html.article(
                 {"class_name": "card"},
                 html.header(html.h3("Robots")),
@@ -98,9 +106,28 @@ def StatusDashboard():
                     f"{robots.get('RobotsOnline', 0)} / {robots.get('TotalRobots', 0)}",
                 ),
                 html.div({"class_name": "metric-label"}, "Online / Total"),
+                html.div(
+                    {
+                        "style": {
+                            "display": "grid",
+                            "grid-template-columns": "1fr 1fr",
+                            "gap": "0.5rem",
+                            "margin-top": "0.5rem",
+                            "font-size": "0.9rem",
+                        }
+                    },
+                    html.div(
+                        {"style": {"color": "var(--pico-color-green-600)"}},
+                        f"🟢 {robots.get('RobotsActivosOnline', 0)} activos online",
+                    ),
+                    html.div(
+                        {"style": {"color": "var(--pico-color-blue-600)"}},
+                        f"📅 {robots.get('RobotsActivosProgramados', 0)} programados",
+                    ),
+                ),
                 html.footer(
                     {"style": {"font-size": "0.8rem", "color": "var(--pico-muted-color)"}},
-                    f"{robots.get('RobotsActivos', 0)} activos",
+                    f"{robots.get('RobotsActivos', 0)} activos • {robots.get('RobotsOffline', 0)} offline",
                 ),
             ),
             # Card Equipos

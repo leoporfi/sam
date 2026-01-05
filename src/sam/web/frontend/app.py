@@ -9,7 +9,7 @@ from reactpy_router import browser_router, route
 from sam.web.frontend.api.api_client import APIClient, get_api_client
 
 # Componentes de analítica
-from .features.components.analytics.status_dashboard import StatusDashboard
+from .features.components.analytics import BalanceadorDashboard, CallbacksDashboard, StatusDashboard
 
 # Componentes de páginas
 from .features.components.equipo_list import EquiposControls, EquiposDashboard
@@ -638,7 +638,21 @@ def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
         equipos_state=equipos_state,
         children=html._(
             html.header(html.h1("Analítica y Dashboards")),
-            StatusDashboard(),
+            html.div(
+                {
+                    "style": {
+                        "display": "grid",
+                        "grid-template-columns": "1fr",
+                        "gap": "2rem",
+                        "margin-top": "1rem",
+                    }
+                },
+                StatusDashboard(),
+                html.hr(),
+                CallbacksDashboard(),
+                html.hr(),
+                BalanceadorDashboard(),
+            ),
         ),
     )
 
