@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-01-05
+
+### Fixed
+- **Lanzador - Alertas por correo para errores HTTP 500**: Corregido el problema donde los errores HTTP 500 del servidor A360 no generaban alertas por correo electrónico. Ahora el sistema envía alertas críticas automáticamente cuando ocurren errores del servidor (5xx), incluyendo información detallada del robot, equipo, usuario y mensaje de error completo. Se implementó control de alertas para evitar spam en el mismo ciclo de despliegue.
+
 ## [1.3.1] - 2026-01-05
 
 ### Fixed
