@@ -302,8 +302,8 @@ def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state)
                 {"class_name": "container"},
                 html.nav(
                     html.ul(
-                        html.li(html.strong("SAM")),
-                        html.li(link({"to": "/", "data-route": "/"}, "Robots")),
+                        html.li(link({"to": "/", "data-route": "/"}, html.strong("SAM"))),
+                        html.li(link({"to": "/robots", "data-route": "/robots"}, "Robots")),
                         html.li(link({"to": "/equipos", "data-route": "/equipos"}, "Equipos")),
                         html.li(link({"to": "/programaciones", "data-route": "/programaciones"}, "Programaciones")),
                         html.li(link({"to": "/pools", "data-route": "/pools"}, "Pools")),

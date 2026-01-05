@@ -88,6 +88,16 @@ def StatusDashboard():
                 "🔄 Actualizar",
             ),
         ),
+        html.p(
+            {
+                "style": {
+                    "color": "var(--pico-muted-color)",
+                    "margin-bottom": "1rem",
+                    "font-size": "0.95rem",
+                }
+            },
+            "Vista en tiempo real del estado operativo de SAM. Muestra ejecuciones activas, estado de robots (online/offline/programados) y disponibilidad de equipos. Se actualiza automáticamente cada 30 segundos.",
+        ),
         html.div(
             {
                 "class_name": "status-cards",
@@ -102,6 +112,10 @@ def StatusDashboard():
             html.article(
                 {"class_name": "card"},
                 html.header(html.h3("Ejecuciones Activas")),
+                html.p(
+                    {"style": {"font-size": "0.85rem", "color": "var(--pico-muted-color)", "margin-bottom": "0.5rem"}},
+                    "Ejecuciones en curso en este momento",
+                ),
                 html.div(
                     {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
                     ejecuciones.get("TotalActivas", 0),
@@ -149,6 +163,10 @@ def StatusDashboard():
             html.article(
                 {"class_name": "card"},
                 html.header(html.h3("Equipos")),
+                html.p(
+                    {"style": {"font-size": "0.85rem", "color": "var(--pico-muted-color)", "margin-bottom": "0.5rem"}},
+                    "Equipos disponibles y configuración de balanceo dinámico",
+                ),
                 html.div(
                     {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
                     f"{equipos.get('EquiposActivos', 0)} / {equipos.get('TotalEquipos', 0)}",

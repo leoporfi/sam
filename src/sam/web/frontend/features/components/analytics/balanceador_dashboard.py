@@ -111,11 +111,21 @@ def BalanceadorDashboard():
     return html.div(
         {"class_name": "balanceador-dashboard"},
         html.header(
-            html.h2("Dashboard de Balanceador"),
+            html.h2("Análisis del Balanceador de Recursos"),
             html.button(
                 {"on_click": handle_refresh, "class_name": "secondary", "style": {"margin-left": "auto"}},
                 "🔄 Actualizar",
             ),
+        ),
+        html.p(
+            {
+                "style": {
+                    "color": "var(--pico-muted-color)",
+                    "margin-bottom": "1rem",
+                    "font-size": "0.95rem",
+                }
+            },
+            "Monitorea la actividad del balanceador automático de recursos. Muestra asignaciones y desasignaciones de equipos a robots, análisis por robot, y detección de thrashing (cambios excesivos). Ayuda a optimizar la distribución de recursos y detectar patrones problemáticos.",
         ),
         # Filtros de fecha
         html.div(

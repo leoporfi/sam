@@ -103,11 +103,21 @@ def CallbacksDashboard():
     return html.div(
         {"class_name": "callbacks-dashboard"},
         html.header(
-            html.h2("Dashboard de Callbacks"),
+            html.h2("Análisis de Callbacks y Conciliador"),
             html.button(
                 {"on_click": handle_refresh, "class_name": "secondary", "style": {"margin-left": "auto"}},
                 "🔄 Actualizar",
             ),
+        ),
+        html.p(
+            {
+                "style": {
+                    "color": "var(--pico-muted-color)",
+                    "margin-bottom": "1rem",
+                    "font-size": "0.95rem",
+                }
+            },
+            "Analiza el rendimiento del sistema de finalización de ejecuciones. Compara callbacks exitosos (notificaciones automáticas) vs conciliador (verificación periódica). Muestra latencia, tasas de éxito y casos problemáticos. Útil para identificar problemas de comunicación o configuración.",
         ),
         # Filtros de fecha
         html.div(

@@ -627,7 +627,7 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
 
 @component
 def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
-    """Página de analítica con dashboards."""
+    """Página principal de analítica con dashboards."""
     robots_state = use_robots()
     equipos_state = use_equipos()
 
@@ -637,14 +637,26 @@ def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
         robots_state=robots_state,
         equipos_state=equipos_state,
         children=html._(
-            html.header(html.h1("Analítica y Dashboards")),
+            html.header(
+                html.h1("Dashboard de Analítica SAM"),
+                html.p(
+                    {
+                        "style": {
+                            "color": "var(--pico-muted-color)",
+                            "font-size": "1.1rem",
+                            "margin-top": "0.5rem",
+                        }
+                    },
+                    "Visualización en tiempo real del estado del sistema, rendimiento de callbacks y actividad del balanceador de recursos.",
+                ),
+            ),
             html.div(
                 {
                     "style": {
                         "display": "grid",
                         "grid-template-columns": "1fr",
                         "gap": "2rem",
-                        "margin-top": "1rem",
+                        "margin-top": "2rem",
                     }
                 },
                 StatusDashboard(),
@@ -730,12 +742,12 @@ def App():
                         "key": f"router-theme-{is_dark}",
                     },
                     browser_router(
-                        route("/", RobotsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("/", AnalyticsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("/robots", RobotsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/equipos", EquiposPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/programaciones", SchedulesPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/mapeos", MappingsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
-                        route("/analytics", AnalyticsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                     ),
                 ),
