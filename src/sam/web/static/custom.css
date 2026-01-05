@@ -539,8 +539,54 @@ dialog header h2,
   gap: 1rem;
 }
 
+/* === Sombras y mejoras visuales para tarjetas de analítica === */
+.status-dashboard .card,
+.callbacks-dashboard .card,
+.balanceador-dashboard .card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+  border: 1px solid var(--pico-card-border-color);
+  border-radius: var(--pico-border-radius);
+  background-color: var(--pico-card-background-color);
+}
+
+[data-theme="dark"] .status-dashboard .card,
+[data-theme="dark"] .callbacks-dashboard .card,
+[data-theme="dark"] .balanceador-dashboard .card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.status-dashboard .card:hover,
+.callbacks-dashboard .card:hover,
+.balanceador-dashboard .card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+[data-theme="dark"] .status-dashboard .card:hover,
+[data-theme="dark"] .callbacks-dashboard .card:hover,
+[data-theme="dark"] .balanceador-dashboard .card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
 .robot-card, .pool-card {
   margin-bottom: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.3s ease;
+}
+
+[data-theme="dark"] .robot-card,
+[data-theme="dark"] .pool-card {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.robot-card:hover, .pool-card:hover {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="dark"] .robot-card:hover,
+[data-theme="dark"] .pool-card:hover {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
 }
 .robot-card-header {
   border-bottom: 1px solid var(--pico-card-border-color);
