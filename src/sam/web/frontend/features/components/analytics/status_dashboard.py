@@ -39,7 +39,22 @@ def StatusDashboard():
     def load_data():
         # Crear tarea asíncrona para cargar datos
         task = asyncio.create_task(fetch_status())
-        return lambda: task.cancel() if not task.done() else None
+
+        # Configurar actualización automática cada 30 segundos
+        async def periodic_update():
+            while True:
+                await asyncio.sleep(30)
+                await fetch_status()
+
+        update_task = asyncio.create_task(periodic_update())
+
+        def cleanup():
+            if not task.done():
+                task.cancel()
+            if not update_task.done():
+                update_task.cancel()
+
+        return cleanup
 
     if loading and not status_data:
         return html.div({"class_name": "status-dashboard loading"}, html.p("Cargando estado del sistema..."))

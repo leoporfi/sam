@@ -8,6 +8,8 @@ from reactpy import component, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
 
+from .chart_components import LineChart
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,8 +66,33 @@ def CallbacksDashboard():
         return html.div({"class_name": "callbacks-dashboard"}, html.p("No hay datos disponibles"))
 
     metricas = dashboard_data.get("metricas_generales", {})
-    # tendencia = dashboard_data.get("tendencia_diaria", [])  # Para futuros gráficos
+    tendencia = dashboard_data.get("tendencia_diaria", [])
     casos_problematicos = dashboard_data.get("casos_problematicos", [])
+
+    # Preparar datos para gráfico de tendencia diaria
+    tendencia_labels = []
+    tendencia_callbacks = []
+    tendencia_conciliador = []
+    tendencia_latencia = []
+
+    if tendencia:
+        for item in tendencia:
+            fecha_str = item.get("Fecha", "")
+            if fecha_str:
+                # Formatear fecha para mostrar
+                try:
+                    fecha_obj = datetime.fromisoformat(fecha_str) if isinstance(fecha_str, str) else fecha_str
+                    tendencia_labels.append(
+                        fecha_obj.strftime("%d/%m") if hasattr(fecha_obj, "strftime") else str(fecha_str)[:10]
+                    )
+                except (ValueError, AttributeError):
+                    tendencia_labels.append(str(fecha_str)[:10])
+            else:
+                tendencia_labels.append("N/A")
+
+            tendencia_callbacks.append(item.get("CallbacksExitosos", 0))
+            tendencia_conciliador.append(item.get("ConciliadorExitosos", 0))
+            tendencia_latencia.append(item.get("LatenciaPromedioMinutos", 0))
 
     # Calcular fechas por defecto (últimos 7 días)
     hoy = datetime.now()
@@ -183,6 +210,33 @@ def CallbacksDashboard():
                     f"{metricas.get('ConciliadorExitosos', 0)} exitosos / {metricas.get('ConciliadorAgotados', 0)} agotados",
                 ),
             ),
+        ),
+        # Gráfico de tendencia diaria
+        html.div(
+            {"class_name": "chart-container", "style": {"margin-top": "2rem"}},
+            html.h3("Tendencia Diaria"),
+            LineChart(
+                chart_id="callbacks-tendencia-chart",
+                title="Callbacks vs Conciliador por Día",
+                labels=tendencia_labels if tendencia_labels else ["Sin datos"],
+                datasets=[
+                    {
+                        "label": "Callbacks Exitosos",
+                        "data": tendencia_callbacks if tendencia_callbacks else [0],
+                        "borderColor": "rgb(75, 192, 192)",
+                        "backgroundColor": "rgba(75, 192, 192, 0.2)",
+                    },
+                    {
+                        "label": "Conciliador Exitosos",
+                        "data": tendencia_conciliador if tendencia_conciliador else [0],
+                        "borderColor": "rgb(255, 99, 132)",
+                        "backgroundColor": "rgba(255, 99, 132, 0.2)",
+                    },
+                ],
+                height="300px",
+            )
+            if tendencia
+            else html.p("No hay datos de tendencia disponibles"),
         ),
         # Tabla de casos problemáticos
         html.div(

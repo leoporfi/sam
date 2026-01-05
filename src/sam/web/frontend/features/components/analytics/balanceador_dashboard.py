@@ -8,6 +8,8 @@ from reactpy import component, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
 
+from .chart_components import BarChart
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,9 +66,41 @@ def BalanceadorDashboard():
         return html.div({"class_name": "balanceador-dashboard"}, html.p("No hay datos disponibles"))
 
     metricas = dashboard_data.get("metricas_generales", {})
-    # resumen_diario = dashboard_data.get("resumen_diario", [])  # Para futuros gráficos
+    resumen_diario = dashboard_data.get("resumen_diario", [])
     analisis_robots = dashboard_data.get("analisis_robots", [])
     estado_actual = dashboard_data.get("estado_actual", {})
+
+    # Preparar datos para gráfico de resumen diario
+    resumen_labels = []
+    resumen_asignaciones = []
+    resumen_desasignaciones = []
+
+    if resumen_diario:
+        for item in resumen_diario:
+            fecha_str = item.get("Fecha", "")
+            if fecha_str:
+                try:
+                    fecha_obj = datetime.fromisoformat(fecha_str) if isinstance(fecha_str, str) else fecha_str
+                    resumen_labels.append(
+                        fecha_obj.strftime("%d/%m") if hasattr(fecha_obj, "strftime") else str(fecha_str)[:10]
+                    )
+                except (ValueError, AttributeError):
+                    resumen_labels.append(str(fecha_str)[:10])
+            else:
+                resumen_labels.append("N/A")
+
+            resumen_asignaciones.append(item.get("Asignaciones", 0))
+            resumen_desasignaciones.append(item.get("Desasignaciones", 0))
+
+    # Preparar datos para gráfico de análisis por robot (top 10)
+    robots_labels = []
+    robots_acciones = []
+
+    if analisis_robots:
+        top_robots = sorted(analisis_robots, key=lambda x: x.get("TotalAcciones", 0), reverse=True)[:10]
+        for robot in top_robots:
+            robots_labels.append(robot.get("RobotNombre", "N/A")[:20])  # Limitar longitud
+            robots_acciones.append(robot.get("TotalAcciones", 0))
 
     # Calcular fechas por defecto (últimos 30 días)
     hoy = datetime.now()
@@ -216,6 +250,51 @@ def BalanceadorDashboard():
                     ),
                 ),
             ),
+        ),
+        # Gráfico de resumen diario
+        html.div(
+            {"class_name": "chart-container", "style": {"margin-top": "2rem"}},
+            html.h3("Resumen Diario de Acciones"),
+            BarChart(
+                chart_id="balanceador-resumen-chart",
+                title="Asignaciones vs Desasignaciones por Día",
+                labels=resumen_labels if resumen_labels else ["Sin datos"],
+                datasets=[
+                    {
+                        "label": "Asignaciones",
+                        "data": resumen_asignaciones if resumen_asignaciones else [0],
+                        "backgroundColor": "rgba(75, 192, 192, 0.6)",
+                    },
+                    {
+                        "label": "Desasignaciones",
+                        "data": resumen_desasignaciones if resumen_desasignaciones else [0],
+                        "backgroundColor": "rgba(255, 99, 132, 0.6)",
+                    },
+                ],
+                height="300px",
+            )
+            if resumen_diario
+            else html.p("No hay datos de resumen diario disponibles"),
+        ),
+        # Gráfico de análisis por robot
+        html.div(
+            {"class_name": "chart-container", "style": {"margin-top": "2rem"}},
+            html.h3("Top 10 Robots por Actividad"),
+            BarChart(
+                chart_id="balanceador-robots-chart",
+                title="Total de Acciones por Robot",
+                labels=robots_labels if robots_labels else ["Sin datos"],
+                datasets=[
+                    {
+                        "label": "Total Acciones",
+                        "data": robots_acciones if robots_acciones else [0],
+                        "backgroundColor": "rgba(54, 162, 235, 0.6)",
+                    }
+                ],
+                height="300px",
+            )
+            if analisis_robots
+            else html.p("No hay datos de análisis por robot disponibles"),
         ),
         # Tabla de análisis por robot
         html.div(

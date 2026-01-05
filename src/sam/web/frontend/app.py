@@ -769,4 +769,10 @@ head = html.head(
     html.link({"rel": "stylesheet", "href": "/static/css/all.min.css"}),
     html.link({"rel": "stylesheet", "href": "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"}),
     html.link({"rel": "stylesheet", "href": "/static/custom.css"}),
+    # Chart.js para gráficos
+    html.script(
+        {
+            "src": "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js",
+        }
+    ),
 )
