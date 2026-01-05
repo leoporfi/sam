@@ -548,6 +548,7 @@ dialog header h2,
   border: 1px solid var(--pico-card-border-color);
   border-radius: var(--pico-border-radius);
   background-color: var(--pico-card-background-color);
+  padding: 1.25rem;
 }
 
 [data-theme="dark"] .status-dashboard .card,
