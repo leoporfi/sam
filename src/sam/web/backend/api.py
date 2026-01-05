@@ -684,3 +684,65 @@ def get_balanceador_dashboard(
     except Exception as e:
         logger.error(f"Error obteniendo dashboard de balanceador: {e}", exc_info=True)
         _handle_endpoint_errors("get_balanceador_dashboard", e, "Analytics")
+
+
+@router.get("/api/analytics/tiempos-ejecucion", tags=["Analytics"])
+def get_tiempos_ejecucion_dashboard(
+    excluir_porcentaje_inferior: Optional[float] = Query(
+        None, description="Percentil inferior a excluir (0.0-1.0, default: 0.15)"
+    ),
+    excluir_porcentaje_superior: Optional[float] = Query(
+        None, description="Percentil superior a excluir (0.0-1.0, default: 0.85)"
+    ),
+    incluir_solo_completadas: bool = Query(True, description="Solo ejecuciones completadas"),
+    meses_hacia_atras: Optional[int] = Query(None, description="Meses hacia atrás para el análisis (default: 1)"),
+    db: DatabaseConnector = Depends(get_db),
+):
+    """
+    Obtiene el dashboard de análisis de tiempos de ejecución por robot.
+
+    Considera:
+    - FechaInicioReal (inicio real reportado por A360) cuando está disponible
+    - Número de repeticiones del robot (extraído de Parametros JSON)
+    - Datos históricos (Ejecuciones_Historico)
+    - Calcula tiempo por repetición (tiempo total / número de repeticiones)
+    - Calcula latencia (delay entre disparo e inicio real)
+    """
+    try:
+        # Validar percentiles si se proporcionan
+        if excluir_porcentaje_inferior is not None and (
+            excluir_porcentaje_inferior < 0 or excluir_porcentaje_inferior >= 1
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="excluir_porcentaje_inferior debe estar entre 0.0 y 1.0",
+            )
+        if excluir_porcentaje_superior is not None and (
+            excluir_porcentaje_superior <= 0 or excluir_porcentaje_superior > 1
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="excluir_porcentaje_superior debe estar entre 0.0 y 1.0",
+            )
+        if (
+            excluir_porcentaje_inferior is not None
+            and excluir_porcentaje_superior is not None
+            and excluir_porcentaje_inferior >= excluir_porcentaje_superior
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="excluir_porcentaje_inferior debe ser menor que excluir_porcentaje_superior",
+            )
+
+        return db_service.get_tiempos_ejecucion_dashboard(
+            db=db,
+            excluir_porcentaje_inferior=excluir_porcentaje_inferior,
+            excluir_porcentaje_superior=excluir_porcentaje_superior,
+            incluir_solo_completadas=incluir_solo_completadas,
+            meses_hacia_atras=meses_hacia_atras,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error obteniendo dashboard de tiempos de ejecución: {e}", exc_info=True)
+        _handle_endpoint_errors("get_tiempos_ejecucion_dashboard", e, "Analytics")

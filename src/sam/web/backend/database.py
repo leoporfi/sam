@@ -1120,6 +1120,48 @@ def get_balanceador_dashboard(
     }
 
 
+def get_tiempos_ejecucion_dashboard(
+    db: DatabaseConnector,
+    excluir_porcentaje_inferior: Optional[float] = None,
+    excluir_porcentaje_superior: Optional[float] = None,
+    incluir_solo_completadas: bool = True,
+    meses_hacia_atras: Optional[int] = None,
+) -> List[Dict]:
+    """
+    Obtiene el dashboard de análisis de tiempos de ejecución por robot.
+
+    Considera:
+    - FechaInicioReal (inicio real reportado por A360) cuando está disponible
+    - Número de repeticiones del robot (extraído de Parametros JSON)
+    - Datos históricos (Ejecuciones_Historico)
+    - Calcula tiempo por repetición (tiempo total / número de repeticiones)
+    - Calcula latencia (delay entre disparo e inicio real)
+
+    Args:
+        excluir_porcentaje_inferior: Percentil inferior a excluir (default: 0.15)
+        excluir_porcentaje_superior: Percentil superior a excluir (default: 0.85)
+        incluir_solo_completadas: Solo ejecuciones completadas (default: True)
+        meses_hacia_atras: Meses hacia atrás para el análisis (default: 1)
+
+    Returns:
+        Lista de diccionarios con métricas por robot
+    """
+    params = {}
+    if excluir_porcentaje_inferior is not None:
+        params["ExcluirPorcentajeInferior"] = excluir_porcentaje_inferior
+    if excluir_porcentaje_superior is not None:
+        params["ExcluirPorcentajeSuperior"] = excluir_porcentaje_superior
+    if incluir_solo_completadas is not None:
+        params["IncluirSoloCompletadas"] = incluir_solo_completadas
+    if meses_hacia_atras is not None:
+        params["MesesHaciaAtras"] = meses_hacia_atras
+
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.AnalisisTiemposEjecucionRobots", params)
+
+    # El SP retorna un solo result set
+    return result_sets[0] if result_sets and len(result_sets) > 0 else []
+
+
 # --- LÓGICA CORE DE RESOLUCIÓN ---
 
 

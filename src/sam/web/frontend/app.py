@@ -9,7 +9,12 @@ from reactpy_router import browser_router, route
 from sam.web.frontend.api.api_client import APIClient, get_api_client
 
 # Componentes de analítica
-from .features.components.analytics import BalanceadorDashboard, CallbacksDashboard, StatusDashboard
+from .features.components.analytics import (
+    BalanceadorDashboard,
+    CallbacksDashboard,
+    StatusDashboard,
+    TiemposEjecucionDashboard,
+)
 
 # Componentes de páginas
 from .features.components.equipo_list import EquiposControls, EquiposDashboard
@@ -664,6 +669,8 @@ def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
                 CallbacksDashboard(),
                 html.hr(),
                 BalanceadorDashboard(),
+                html.hr(),
+                TiemposEjecucionDashboard(),
             ),
         ),
     )
