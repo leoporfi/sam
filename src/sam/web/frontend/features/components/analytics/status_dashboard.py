@@ -78,14 +78,27 @@ def StatusDashboard():
     return html.div(
         {"class_name": "status-dashboard"},
         html.header(
+            {
+                "style": {
+                    "display": "flex",
+                    "align-items": "center",
+                    "gap": "0.5rem",
+                }
+            },
             html.h2("Estado Actual del Sistema"),
             html.button(
                 {
                     "on_click": handle_refresh,
                     "class_name": "secondary",
-                    "style": {"margin-left": "auto"},
+                    "style": {
+                        "padding": "0.25rem 0.5rem",
+                        "min-width": "auto",
+                        "font-size": "1rem",
+                    },
+                    "title": "Actualizar",
+                    "aria-label": "Actualizar estado del sistema",
                 },
-                "🔄 Actualizar",
+                html.i({"class_name": "fa-solid fa-rotate"}),
             ),
         ),
         html.p(

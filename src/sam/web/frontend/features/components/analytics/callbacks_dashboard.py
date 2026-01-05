@@ -103,10 +103,27 @@ def CallbacksDashboard():
     return html.div(
         {"class_name": "callbacks-dashboard"},
         html.header(
+            {
+                "style": {
+                    "display": "flex",
+                    "align-items": "center",
+                    "gap": "0.5rem",
+                }
+            },
             html.h2("Análisis de Callbacks y Conciliador"),
             html.button(
-                {"on_click": handle_refresh, "class_name": "secondary", "style": {"margin-left": "auto"}},
-                "🔄 Actualizar",
+                {
+                    "on_click": handle_refresh,
+                    "class_name": "secondary",
+                    "style": {
+                        "padding": "0.25rem 0.5rem",
+                        "min-width": "auto",
+                        "font-size": "1rem",
+                    },
+                    "title": "Actualizar",
+                    "aria-label": "Actualizar dashboard de callbacks",
+                },
+                html.i({"class_name": "fa-solid fa-rotate"}),
             ),
         ),
         html.p(
@@ -159,7 +176,15 @@ def CallbacksDashboard():
                     }
                 ),
             ),
-            html.button({"on_click": handle_refresh, "type": "button"}, "Aplicar Filtros"),
+            html.button(
+                {
+                    "on_click": handle_refresh,
+                    "type": "button",
+                    "title": "Aplicar filtros y actualizar",
+                },
+                html.i({"class_name": "fa-solid fa-filter"}),
+                " Aplicar",
+            ),
         ),
         # Métricas principales
         html.div(
