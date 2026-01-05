@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-01-05
+
+### Fixed
+- **Interfaz Web - Búsqueda con Enter en lugar de debounce**: Corregido el problema donde las letras se borraban mientras el usuario escribía en los campos de búsqueda. Se eliminó el debounce automático y se implementó búsqueda manual con Enter. Ahora los usuarios pueden escribir sin interferencias y la búsqueda se ejecuta solo al presionar Enter, mejorando significativamente la experiencia de usuario. Se aplicó a las páginas de Robots y Equipos.
+
+### Changed
+- **Interfaz Web - Comportamiento de búsqueda**: Cambiado de búsqueda automática con debounce (300ms) a búsqueda manual con Enter. Los campos de búsqueda ahora muestran el placeholder "(Presiona Enter)" para indicar el nuevo comportamiento.
+
 ## [1.3.2] - 2026-01-05
 
 ### Fixed

@@ -40,11 +40,11 @@ def RobotsControls(
     on_create_robot: Callable[[], Any],
     search_term: str,
     on_search_change: Callable[[str], Any],
+    on_search_execute: Callable[[], Any],
     active_filter: str,
     on_active_change: Callable[[str], Any],
     online_filter: str,
     on_online_change: Callable[[str], Any],
-    is_searching: bool,
     # Nuevos parámetros para sincronización de equipos
     is_syncing_equipos: bool = False,
     on_sync_equipos: Optional[Callable[[], Any]] = None,
@@ -76,10 +76,10 @@ def RobotsControls(
                     {
                         "type": "search",
                         "name": "search-robot",
-                        "placeholder": "Buscar robots por nombre...",
+                        "placeholder": "Buscar robots por nombre... (Presiona Enter)",
                         "value": search_term,
-                        "on_change": lambda event: on_search_change(event["target"]["value"].strip()),
-                        "aria-busy": str(is_searching).lower(),
+                        "on_change": lambda event: on_search_change(event["target"]["value"]),
+                        "on_key_down": lambda event: on_search_execute() if event.get("key") == "Enter" else None,
                         "class_name": SEARCH_INPUT,
                     }
                 ),
@@ -272,7 +272,9 @@ def RobotRow(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
                         "checked": robot["EsOnline"],
                         "on_change": event(handle_toggle_online),
                         "disabled": is_programado,  # Deshabilitar si está programado
-                        "title": "No se puede marcar como Online si tiene programaciones" if is_programado else "Marcar como Online/Offline",
+                        "title": "No se puede marcar como Online si tiene programaciones"
+                        if is_programado
+                        else "Marcar como Online/Offline",
                         "aria-label": f"Marcar Online/Offline robot {robot['Robot']}",
                     }
                 )

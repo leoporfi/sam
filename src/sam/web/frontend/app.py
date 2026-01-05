@@ -3,7 +3,7 @@ import asyncio
 import uuid
 
 # app.py - SECCIÓN DE IMPORTS
-from reactpy import component, html, use_context, use_effect, use_location, use_memo, use_state
+from reactpy import component, html, use_context, use_effect, use_location, use_memo, use_ref, use_state
 from reactpy_router import browser_router, route
 
 from sam.web.frontend.api.api_client import APIClient, get_api_client
@@ -47,16 +47,24 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
     robots_state = use_robots()
     equipos_state = use_equipos()
 
-    search_input, set_search_input = use_state(robots_state["filters"].get("name") or "")
-    debounced_search = use_debounced_value(search_input, 300)
+    # Inicializar search_input con string vacío, sincronizar con filtros solo una vez al montar
+    search_input, set_search_input = use_state("")
+    initialized = use_ref(False)
 
-    @use_effect(dependencies=[debounced_search])
-    def sync_search_with_filters():
-        if debounced_search == robots_state["filters"].get("name"):
-            return
-        robots_state["set_filters"](lambda prev_filters: {**prev_filters, "name": debounced_search or None})
+    @use_effect(dependencies=[])
+    def init_search_from_filters():
+        if not initialized.current:
+            initial_value = robots_state["filters"].get("name") or ""
+            if initial_value:
+                set_search_input(initial_value)
+            initialized.current = True
 
-    is_searching = debounced_search != search_input
+    def handle_search_execute():
+        """Ejecuta la búsqueda cuando el usuario presiona Enter."""
+        search_value = search_input.strip() if search_input else None
+        if search_value != robots_state["filters"].get("name"):
+            robots_state["set_filters"](lambda prev_filters: {**prev_filters, "name": search_value})
+
     selected_robot, set_selected_robot = use_state(None)
     modal_view, set_modal_view = use_state(None)
 
@@ -114,13 +122,13 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
         on_create_robot=handle_create_robot,
         search_term=search_input,
         on_search_change=set_search_input,
+        on_search_execute=handle_search_execute,
         active_filter="all" if robots_filters.get("active") is None else str(robots_filters.get("active")).lower(),
         on_active_change=lambda value: robots_state["set_filters"](
             lambda prev: {**prev, "active": None if value == "all" else value == "true"}
         ),
         online_filter=online_filter_value,
         on_online_change=handle_online_change,
-        is_searching=is_searching,
         is_syncing_equipos=equipos_state.get("is_syncing", False),
         on_sync_equipos=equipos_state.get("trigger_sync"),
     )
@@ -299,31 +307,28 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
         """Callback llamado por el modal tras guardar con éxito."""
         await equipos_state["refresh"]()
 
-    search_input, set_search_input = use_state(equipos_state["filters"].get("name") or "")
-    debounced_search = use_debounced_value(search_input, 300)
+    # Inicializar search_input con string vacío, sincronizar con filtros solo una vez al montar
+    search_input, set_search_input = use_state("")
+    initialized_equipos = use_ref(False)
 
-    @use_effect(dependencies=[debounced_search])
-    def sync_search_with_filters():
-        async def do_sync():
-            await asyncio.sleep(0.05)
-            if debounced_search == equipos_state["filters"].get("name"):
-                return
-            equipos_state["set_filters"](lambda prev: {**prev, "name": debounced_search or None})
+    @use_effect(dependencies=[])
+    def init_search_from_filters_equipos():
+        if not initialized_equipos.current:
+            initial_value = equipos_state["filters"].get("name") or ""
+            if initial_value:
+                set_search_input(initial_value)
+            initialized_equipos.current = True
 
-        task = asyncio.create_task(do_sync())
-
-        def cleanup():
-            if not task.done():
-                task.cancel()
-
-        return cleanup
-
-    is_searching = debounced_search != search_input
+    def handle_search_execute_equipos():
+        """Ejecuta la búsqueda cuando el usuario presiona Enter."""
+        search_value = search_input.strip() if search_input else None
+        if search_value != equipos_state["filters"].get("name"):
+            equipos_state["set_filters"](lambda prev: {**prev, "name": search_value})
 
     page_controls = EquiposControls(
         search=search_input,
         on_search=set_search_input,
-        is_searching=is_searching,
+        on_search_execute=handle_search_execute_equipos,
         active_filter="all"
         if equipos_state["filters"].get("active") is None
         else str(equipos_state["filters"].get("active")).lower(),

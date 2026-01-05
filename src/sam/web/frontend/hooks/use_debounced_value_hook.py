@@ -41,7 +41,8 @@ def use_debounced_value(value, delay: int):
         task_ref.current = asyncio.create_task(do_debounce())
 
         def cleanup():
-            is_mounted.current = False
+            # NO establecer is_mounted.current = False aquí, solo cancelar la tarea
+            # El estado de montaje se maneja en el efecto de lifecycle
             if task_ref.current and not task_ref.current.done():
                 task_ref.current.cancel()
 

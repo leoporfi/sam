@@ -36,11 +36,11 @@ from ...shared.styles import (
 def EquiposControls(
     search: str,
     on_search: Callable,
+    on_search_execute: Callable,
     active_filter: str,
     on_active: Callable,
     balanceable_filter: str,
     on_balanceable: Callable,
-    is_searching: bool,
     on_create_equipo: Callable,
 ):
     """Controles para el dashboard de Equipos (título, filtros)."""
@@ -69,10 +69,10 @@ def EquiposControls(
                     {
                         "type": "search",
                         "name": "search-device",
-                        "placeholder": "Buscar equipos por nombre...",
+                        "placeholder": "Buscar equipos por nombre... (Presiona Enter)",
                         "value": search,
-                        "on_change": lambda event: on_search(event["target"]["value"].strip()),
-                        "aria-busy": str(is_searching).lower(),
+                        "on_change": lambda event: on_search(event["target"]["value"]),
+                        "on_key_down": lambda event: on_search_execute() if event.get("key") == "Enter" else None,
                         "class_name": SEARCH_INPUT,
                     }
                 ),
