@@ -51,6 +51,8 @@ class Desplegador:
 
         # Control para no spamear alertas de error 400 en el mismo ciclo
         self._equipos_alertados_400 = set()
+        # Control para no spamear alertas de error 500 en el mismo ciclo
+        self._equipos_alertados_500 = set()
 
     async def desplegar_robots_pendientes(self) -> List[Dict[str, Any]]:
         """
@@ -352,8 +354,46 @@ class Desplegador:
 
                         break
 
+                elif status_code >= 500:
+                    # ERRORES DEL SERVIDOR (5xx) - Error crítico del servidor A360
+                    detected_error_type = f"{status_code}_server_error"
+                    logger.error(
+                        f"Error HTTP {status_code} (Server Error) Robot {robot_id} ({robot_nombre}) Equipo {equipo_id} ({equipo_nombre}): {response_text}"
+                    )
+
+                    # Enviar alerta para errores del servidor (solo la primera vez por equipo en el ciclo)
+                    equipo_alertado_key = f"{status_code}_{equipo_id}"
+                    if equipo_alertado_key not in self._equipos_alertados_500:
+                        logger.warning(
+                            f"Enviando alerta por error {status_code} del servidor para equipo {equipo_id} ({equipo_nombre})"
+                        )
+                        alert_sent = self._notificador.send_alert(
+                            subject=f"[SAM CRÍTICO] Error {status_code} del Servidor A360 - Robot '{robot_nombre}'",
+                            message=(
+                                f"Error del servidor A360 ({status_code} Server Error) al desplegar robot:\n\n"
+                                f"🤖 Robot: {robot_nombre} (ID: {robot_id})\n"
+                                f"💻 Equipo: {equipo_nombre} (ID: {equipo_id})\n"
+                                f"👤 Usuario: {user_nombre} (ID: {user_id})\n\n"
+                                f"📋 Mensaje de error del servidor:\n{response_text_full}\n\n"
+                                f"⚠️ Acción requerida:\n"
+                                f"   - Verificar el estado del servidor A360\n"
+                                f"   - Revisar si hay problemas conocidos en A360 Control Room\n"
+                                f"   - El sistema reintentará en el próximo ciclo"
+                            ),
+                            is_critical=True,
+                        )
+                        if alert_sent:
+                            self._equipos_alertados_500.add(equipo_alertado_key)
+                        else:
+                            logger.error(
+                                f"Fallo al enviar alerta de error {status_code} para equipo {equipo_id} ({equipo_nombre})"
+                            )
+
+                    # No reintentar errores del servidor, esperar al próximo ciclo
+                    break
                 else:
-                    # OTROS ERRORES HTTP
+                    # OTROS ERRORES HTTP (401, 403, 404, etc.)
+                    detected_error_type = f"{status_code}_http_error"
                     logger.error(
                         f"Error HTTP {status_code} Robot {robot_id} ({robot_nombre}) Equipo {equipo_id} ({equipo_nombre}): {response_text}"
                     )
