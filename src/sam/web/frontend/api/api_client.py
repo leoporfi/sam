@@ -37,7 +37,9 @@ class APIClient:
         self._client = None
 
     async def __aenter__(self):
-        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=30.0, headers={"Content-Type": "application/json"})
+        self._client = httpx.AsyncClient(
+            base_url=self.base_url, timeout=30.0, headers={"Content-Type": "application/json"}
+        )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -47,7 +49,9 @@ class APIClient:
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
             # if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self.base_url, timeout=30.0, headers={"Content-Type": "application/json"})
+            self._client = httpx.AsyncClient(
+                base_url=self.base_url, timeout=30.0, headers={"Content-Type": "application/json"}
+            )
         return self._client
 
     async def _request(

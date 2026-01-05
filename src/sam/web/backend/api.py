@@ -113,7 +113,9 @@ async def trigger_sync_robots(
     async with app_state.sync_lock:
         # Comprobar si ya hay una tarea corriendo
         if app_state.sync_status["robots"] == "running":
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya hay una sincronización de robots en curso.")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Ya hay una sincronización de robots en curso."
+            )
 
         # Usamos el wrapper, no la tarea directa
         background_tasks.add_task(run_robot_sync_task, db, aa_client, app_state)
@@ -132,7 +134,9 @@ async def trigger_sync_equipos(
     app_state = request.app.state
     async with app_state.sync_lock:
         if app_state.sync_status["equipos"] == "running":
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya hay una sincronización de equipos en curso.")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Ya hay una sincronización de equipos en curso."
+            )
 
         # Usamos el wrapper de equipos
         background_tasks.add_task(run_equipo_sync_task, db, aa_client, app_state)
@@ -248,7 +252,9 @@ def get_schedules(
 ):
     """Listado paginado de programaciones con filtros."""
     try:
-        return db_service.get_schedules_paginated(db, robot_id=robot_id, tipo=tipo, activo=activo, search=search, page=page, size=size)
+        return db_service.get_schedules_paginated(
+            db, robot_id=robot_id, tipo=tipo, activo=activo, search=search, page=page, size=size
+        )
     except Exception as e:
         _handle_endpoint_errors("get_schedules", e, "Programaciones")
 
@@ -261,7 +267,9 @@ def get_robot_schedules(robot_id: int, db: DatabaseConnector = Depends(get_db)):
         _handle_endpoint_errors("get_robot_schedules", e, "Programaciones", robot_id)
 
 
-@router.delete("/api/schedules/{programacion_id}/robot/{robot_id}", tags=["Programaciones"], status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/api/schedules/{programacion_id}/robot/{robot_id}", tags=["Programaciones"], status_code=status.HTTP_204_NO_CONTENT
+)
 def delete_schedule(programacion_id: int, robot_id: int, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.delete_schedule(db, programacion_id, robot_id)
@@ -338,7 +346,9 @@ def get_schedule_devices(schedule_id: int, db: DatabaseConnector = Depends(get_d
 
 
 @router.put("/api/schedules/{schedule_id}/devices", tags=["Programaciones"])
-def update_schedule_devices(schedule_id: int, equipo_ids: List[int] = Body(...), db: DatabaseConnector = Depends(get_db)):
+def update_schedule_devices(
+    schedule_id: int, equipo_ids: List[int] = Body(...), db: DatabaseConnector = Depends(get_db)
+):
     try:
         db_service.update_schedule_devices_db(db, schedule_id, equipo_ids)
         return {"message": "Asignaciones actualizadas"}
@@ -431,9 +441,13 @@ def get_robot_assignments(robot_id: int, db: DatabaseConnector = Depends(get_db)
 
 
 @router.post("/api/robots/{robot_id}/asignaciones", tags=["Asignaciones"])
-def update_robot_assignments(robot_id: int, update_data: AssignmentUpdateRequest, db: DatabaseConnector = Depends(get_db)):
+def update_robot_assignments(
+    robot_id: int, update_data: AssignmentUpdateRequest, db: DatabaseConnector = Depends(get_db)
+):
     try:
-        result = db_service.update_asignaciones_robot(db, robot_id, update_data.asignar_equipo_ids, update_data.desasignar_equipo_ids)
+        result = db_service.update_asignaciones_robot(
+            db, robot_id, update_data.asignar_equipo_ids, update_data.desasignar_equipo_ids
+        )
         return {"message": "Asignaciones actualizadas.", "detail": result}
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
