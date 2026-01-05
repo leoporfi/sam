@@ -106,19 +106,24 @@ def CallbacksDashboard():
             {
                 "style": {
                     "display": "flex",
-                    "align-items": "center",
-                    "gap": "0.5rem",
+                    "align-items": "baseline",
+                    "gap": "0.75rem",
+                    "flex-wrap": "wrap",
                 }
             },
-            html.h2("Análisis de Callbacks y Conciliador"),
+            html.h2({"style": {"margin": "0", "flex": "1"}}, "Análisis de Callbacks y Conciliador"),
             html.button(
                 {
                     "on_click": handle_refresh,
                     "class_name": "secondary",
                     "style": {
-                        "padding": "0.25rem 0.5rem",
+                        "padding": "0.375rem 0.5rem",
                         "min-width": "auto",
-                        "font-size": "1rem",
+                        "font-size": "0.9rem",
+                        "line-height": "1",
+                        "display": "flex",
+                        "align-items": "center",
+                        "justify-content": "center",
                     },
                     "title": "Actualizar",
                     "aria-label": "Actualizar dashboard de callbacks",
