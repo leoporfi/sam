@@ -220,26 +220,24 @@ class Desplegador:
 
                         # Enviar email inmediatamente con el mensaje de error completo
                         logger.error(
-                            f"Error 412 - Problema con Robot {robot_id} ({robot_nombre}) - "
-                            f"No compatible targets. Error: {response_text_full}"
+                            f"Error 412 - Problema con Robot {robot_id} ({robot_nombre}) - No compatible targets. Error: {response_text_full}"
                         )
-                        try:
-                            self._notificador.send_alert(
-                                subject=f"[SAM CRÍTICO] Robot '{robot_nombre}' sin Compatible Targets",
-                                message=(
-                                    f"Error al desplegar robot (Error 412 - Problema con el robot, NO con el device):\n\n"
-                                    f"🤖 Robot: {robot_nombre} (ID: {robot_id})\n"
-                                    f"💻 Equipo: {equipo_nombre} (ID: {equipo_id})\n"
-                                    f"👤 Usuario: {user_nombre} (ID: {user_id})\n\n"
-                                    f"📋 Mensaje de error completo:\n{response_text_full}\n\n"
-                                    f"⚠️ Acción requerida:\n"
-                                    f"   - Revisar la configuración del robot '{robot_nombre}' en A360\n"
-                                    f"   - Verificar que tenga al menos un Compatible Target configurado"
-                                ),
-                                is_critical=True,
-                            )
-                        except Exception as mail_e:
-                            logger.error(f"Fallo al enviar alerta de error de robot: {mail_e}")
+                        alert_sent = self._notificador.send_alert(
+                            subject=f"[SAM CRÍTICO] Robot '{robot_nombre}' sin Compatible Targets",
+                            message=(
+                                f"Error al desplegar robot (Error 412 - Problema con el robot, NO con el device):\n\n"
+                                f"🤖 Robot: {robot_nombre} (ID: {robot_id})\n"
+                                f"💻 Equipo: {equipo_nombre} (ID: {equipo_id})\n"
+                                f"👤 Usuario: {user_nombre} (ID: {user_id})\n\n"
+                                f"📋 Mensaje de error completo:\n{response_text_full}\n\n"
+                                f"⚠️ Acción requerida:\n"
+                                f"   - Revisar la configuración del robot '{robot_nombre}' en A360\n"
+                                f"   - Verificar que tenga al menos un Compatible Target configurado"
+                            ),
+                            is_critical=True,
+                        )
+                        if not alert_sent:
+                            logger.error(f"Fallo al enviar alerta de error de robot {robot_id} ({robot_nombre})")
 
                         # No reintentar, es un error permanente del robot
                         break
@@ -317,25 +315,27 @@ class Desplegador:
                             logger.debug(
                                 f"Intentando enviar alerta para error 400 en equipo {equipo_id} ({equipo_nombre})"
                             )
-                            try:
-                                self._notificador.send_alert(
-                                    subject=f"[SAM CRÍTICO] Error 400 - Robot '{robot_nombre}' en Equipo '{equipo_nombre}'",
-                                    message=(
-                                        f"Error de Configuración (400 Bad Request) al desplegar:\n\n"
-                                        f"🤖 Robot: {robot_nombre} (ID: {robot_id})\n"
-                                        f"💻 Equipo: {equipo_nombre} (ID: {equipo_id})\n"
-                                        f"👤 Usuario: {user_nombre} (ID: {user_id})\n\n"
-                                        f"📋 Causa del error:\n{response_text}\n\n"
-                                        f"⚠️ Acción requerida:\n"
-                                        f"   1. Verificar que el usuario '{user_nombre}' tenga permisos sobre el robot '{robot_nombre}'\n"
-                                        f"   2. Confirmar que haya licencias disponibles en A360\n"
-                                        f"   3. Validar que el robot exista en el Control Room"
-                                    ),
-                                    is_critical=True,
-                                )
+                            alert_sent = self._notificador.send_alert(
+                                subject=f"[SAM CRÍTICO] Error 400 - Robot '{robot_nombre}' en Equipo '{equipo_nombre}'",
+                                message=(
+                                    f"Error de Configuración (400 Bad Request) al desplegar:\n\n"
+                                    f"🤖 Robot: {robot_nombre} (ID: {robot_id})\n"
+                                    f"💻 Equipo: {equipo_nombre} (ID: {equipo_id})\n"
+                                    f"👤 Usuario: {user_nombre} (ID: {user_id})\n\n"
+                                    f"📋 Causa del error:\n{response_text}\n\n"
+                                    f"⚠️ Acción requerida:\n"
+                                    f"   1. Verificar que el usuario '{user_nombre}' tenga permisos sobre el robot '{robot_nombre}'\n"
+                                    f"   2. Confirmar que haya licencias disponibles en A360\n"
+                                    f"   3. Validar que el robot exista en el Control Room"
+                                ),
+                                is_critical=True,
+                            )
+                            if alert_sent:
                                 self._equipos_alertados_400.add(equipo_alertado_key)
-                            except Exception as mail_e:
-                                logger.error(f"Fallo al enviar alerta: {mail_e}")
+                            else:
+                                logger.error(
+                                    f"Fallo al enviar alerta de error 400 para equipo {equipo_id} ({equipo_nombre})"
+                                )
 
                         # Desactivar asignación problemática
                         try:
@@ -345,8 +345,7 @@ class Desplegador:
                                 es_select=False,
                             )
                             logger.debug(
-                                f"Asignación desactivada: Robot {robot_id} ({robot_nombre}) - "
-                                f"Equipo {equipo_id} ({equipo_nombre})"
+                                f"Asignación desactivada: Robot {robot_id} ({robot_nombre}) - Equipo {equipo_id} ({equipo_nombre})"
                             )
                         except Exception as db_e:
                             logger.error(f"Error al desactivar asignación: {db_e}")
@@ -356,8 +355,7 @@ class Desplegador:
                 else:
                     # OTROS ERRORES HTTP
                     logger.error(
-                        f"Error HTTP {status_code} Robot {robot_id} ({robot_nombre}) "
-                        f"Equipo {equipo_id} ({equipo_nombre}): {response_text}"
+                        f"Error HTTP {status_code} Robot {robot_id} ({robot_nombre}) Equipo {equipo_id} ({equipo_nombre}): {response_text}"
                     )
                     break
 
@@ -373,8 +371,7 @@ class Desplegador:
                     continue
                 else:
                     logger.error(
-                        f"Error de Red persistente Robot {robot_id} ({robot_nombre}) "
-                        f"Equipo {equipo_id} ({equipo_nombre}). Fallo definitivo."
+                        f"Error de Red persistente Robot {robot_id} ({robot_nombre}) Equipo {equipo_id} ({equipo_nombre}). Fallo definitivo."
                     )
                     break
 
@@ -388,13 +385,13 @@ class Desplegador:
 
         # Fallo después de todos los intentos
         logger.error(
-            f"Fallo definitivo Robot {robot_id} ({robot_nombre}) "
-            f"Equipo {equipo_id} ({equipo_nombre}) después de {intento} intentos."
+            f"Fallo definitivo Robot {robot_id} ({robot_nombre}) Equipo {equipo_id} ({equipo_nombre}) después de {intento} intentos."
         )
         return {
             "status": "fallido",
             "robot_id": robot_id,
             "equipo_id": equipo_id,  # <--- IMPORTANTE: Necesario para la alerta
+            "equipo_nombre": equipo_nombre,  # <--- Agregar nombre del equipo para mejor contexto
             "error_type": detected_error_type,  # <--- IMPORTANTE: Pasa "412" si ocurrió
         }
 

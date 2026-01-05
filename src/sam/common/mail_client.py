@@ -1,5 +1,6 @@
 # SAM/src/common/mail_client.py
 import datetime
+import html
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -78,17 +79,31 @@ class EmailAlertClient:
             prefix = "[CRÍTICO]" if is_critical else "[ALERTA]"
             msg["Subject"] = f"{self.service_name} {prefix} {subject}"  # Añadir identificador del servicio
 
+            # Escapar HTML en subject y message para prevenir inyección
+            subject_escaped = html.escape(subject)
+            message_escaped = html.escape(message)
+
+            # Obtener timestamp formateado
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
             # Usar preformateado para el cuerpo del mensaje si es texto plano, o asegurar que el HTML sea seguro.
             body_html = f"""
             <html>
-            <head></head>
-            <body>
-                <p><b>Servicio:</b> {self.service_name}</p>
-                <p><b>Asunto:</b> {subject}</p>
-                <hr>
-                <pre style="font-family: Consolas, 'Courier New', monospace; white-space: pre-wrap;">{message}</pre>
-                <hr>
-                <p><small>Este es un mensaje generado automáticamente.</small></p>
+            <head>
+                <meta charset="utf-8">
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <div style="background-color: #f4f4f4; padding: 20px; border-radius: 5px;">
+                    <h2 style="color: #d32f2f; margin-top: 0;">{subject_escaped}</h2>
+                    <p><b>Servicio:</b> {html.escape(self.service_name)}</p>
+                    <p><b>Fecha y Hora:</b> {timestamp}</p>
+                    <hr style="border: 1px solid #ddd;">
+                    <div style="background-color: #fff; padding: 15px; border-left: 4px solid #d32f2f; margin: 15px 0;">
+                        <pre style="font-family: Consolas, 'Courier New', monospace; white-space: pre-wrap; margin: 0;">{message_escaped}</pre>
+                    </div>
+                    <hr style="border: 1px solid #ddd;">
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 0;">Este es un mensaje generado automáticamente por el sistema SAM.</p>
+                </div>
             </body>
             </html>
             """

@@ -104,10 +104,18 @@ class LanzadorService:
                 logger.debug(f"Ciclo de {cycle_name} completado.")
             except Exception as e:
                 logger.critical(f"Error fatal en el ciclo de {cycle_name}: {e}", exc_info=True)
-                self._notificador.send_alert(
+                import traceback
+
+                error_trace = traceback.format_exc()
+                alert_sent = self._notificador.send_alert(
                     subject=f"Error Crítico en Ciclo de {cycle_name}",
-                    message=f"Se ha producido un error irrecuperable en el ciclo de {cycle_name}.\n\nError: {e}",
+                    message=(
+                        f"Se ha producido un error irrecuperable en el ciclo de {cycle_name}.\n\nError: {e}\n\nStack Trace:\n{error_trace}"
+                    ),
+                    is_critical=True,
                 )
+                if not alert_sent:
+                    logger.error(f"No se pudo enviar la alerta de error crítico en ciclo de {cycle_name}")
             try:
                 # Espera el intervalo o hasta que se active el evento de cierre
                 await asyncio.wait_for(self._shutdown_event.wait(), timeout=interval)
@@ -146,18 +154,22 @@ class LanzadorService:
                     logger.warning(
                         f"Equipo {equipo_id} ha alcanzado {contador} fallos consecutivos (412). Enviando alerta..."
                     )
-                    try:
-                        self._notificador.send_alert(
-                            subject="[SAM] Dispositivo Offline Persistente",
-                            message=(
-                                f"El EquipoId {equipo_id} ha fallado {contador} despliegues consecutivos.\n\n"
-                                f"Error: 412 Precondition Failed (Dispositivo offline/ocupado)\n\n"
-                                f"Acción requerida: Verificar conectividad y estado del Bot Runner en A360."
-                            ),
-                        )
+                    equipo_nombre = resultado.get("equipo_nombre", "N/A")
+                    alert_sent = self._notificador.send_alert(
+                        subject="[SAM] Dispositivo Offline Persistente",
+                        message=(
+                            f"El Equipo '{equipo_nombre}' (ID: {equipo_id}) ha fallado {contador} despliegues consecutivos.\n\n"
+                            f"Error: 412 Precondition Failed (Dispositivo offline/ocupado)\n\n"
+                            f"Acción requerida: Verificar conectividad y estado del Bot Runner en A360."
+                        ),
+                        is_critical=True,
+                    )
+                    if alert_sent:
                         self._equipos_alertados.add(equipo_id)
-                    except Exception as e:
-                        logger.error(f"Error al enviar alerta para equipo {equipo_id}: {e}")
+                    else:
+                        logger.error(
+                            f"No se pudo enviar la alerta para equipo {equipo_id}. Se reintentará en el próximo umbral."
+                        )
 
     async def _run_sync_cycle(self, interval: int):
         await self._run_generic_cycle(self._sincronizador, "sincronizar_entidades", interval, "Sincronización")

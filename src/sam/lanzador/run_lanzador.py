@@ -228,7 +228,20 @@ async def _main_async() -> None:
     except Exception as e:
         logging.critical(f"Error crítico no controlado en _main_async: {e}", exc_info=True)
         if _notificador:
-            _notificador.send_alert(f"Error Crítico en {_service_name.upper()}", f"Error: {e}")
+            import traceback
+
+            error_trace = traceback.format_exc()
+            alert_sent = _notificador.send_alert(
+                subject=f"Error Crítico en {_service_name.upper()}",
+                message=(
+                    f"Se ha producido un error crítico no controlado en el servicio {_service_name.upper()}.\n\n"
+                    f"Error: {e}\n\n"
+                    f"Stack Trace:\n{error_trace}"
+                ),
+                is_critical=True,
+            )
+            if not alert_sent:
+                logging.error("No se pudo enviar la alerta de error crítico no controlado")
         sys.exit(1)
     finally:
         await _cleanup_resources()
