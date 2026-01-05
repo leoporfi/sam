@@ -1,7 +1,10 @@
 # web/backend/database.py
 import asyncio
 import logging
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import pyodbc
 
 from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.database import DatabaseConnector
@@ -921,6 +924,160 @@ def create_mapping(db: DatabaseConnector, data: dict):
 
 def delete_mapping(db: DatabaseConnector, mapeo_id: int):
     db.ejecutar_consulta("DELETE FROM dbo.MapeoRobots WHERE MapeoId = ?", (mapeo_id,), es_select=False)
+
+
+# --- ANALÍTICA ---
+
+
+def get_system_status(db: DatabaseConnector) -> Dict:
+    """Obtiene el estado actual del sistema en tiempo real."""
+    result = {}
+
+    # Estado del balanceador
+    query_balanceador = "SELECT * FROM dbo.EstadoBalanceadorTiempoReal"
+    estado_balanceador = db.ejecutar_consulta(query_balanceador, es_select=True)
+    result["balanceador"] = estado_balanceador[0] if estado_balanceador else {}
+
+    # Ejecuciones activas
+    query_ejecuciones = """
+        SELECT
+            COUNT(*) AS TotalActivas,
+            COUNT(DISTINCT RobotId) AS RobotsActivos,
+            COUNT(DISTINCT EquipoId) AS EquiposOcupados
+        FROM dbo.EjecucionesActivas
+    """
+    ejecuciones = db.ejecutar_consulta(query_ejecuciones, es_select=True)
+    result["ejecuciones"] = ejecuciones[0] if ejecuciones else {}
+
+    # Robots
+    query_robots = """
+        SELECT
+            COUNT(*) AS TotalRobots,
+            SUM(CASE WHEN Activo = 1 THEN 1 ELSE 0 END) AS RobotsActivos,
+            SUM(CASE WHEN EsOnline = 1 THEN 1 ELSE 0 END) AS RobotsOnline
+        FROM dbo.Robots
+    """
+    robots = db.ejecutar_consulta(query_robots, es_select=True)
+    result["robots"] = robots[0] if robots else {}
+
+    # Equipos
+    query_equipos = """
+        SELECT
+            COUNT(*) AS TotalEquipos,
+            SUM(CASE WHEN Activo_SAM = 1 THEN 1 ELSE 0 END) AS EquiposActivos,
+            SUM(CASE WHEN PermiteBalanceoDinamico = 1 THEN 1 ELSE 0 END) AS EquiposBalanceables
+        FROM dbo.Equipos
+    """
+    equipos = db.ejecutar_consulta(query_equipos, es_select=True)
+    result["equipos"] = equipos[0] if equipos else {}
+
+    return result
+
+
+def ejecutar_sp_multiple_result_sets(db: DatabaseConnector, sp_name: str, params: Dict[str, Any]) -> List[List[Dict]]:
+    """
+    Ejecuta un stored procedure que retorna múltiples result sets.
+    Retorna una lista de listas, donde cada lista interna es un result set.
+    """
+    try:
+        with db.obtener_cursor() as cursor:
+            # Construir la llamada al SP con parámetros
+            param_placeholders = []
+            param_values = []
+
+            for key, value in params.items():
+                if value is not None:
+                    param_placeholders.append(f"@{key} = ?")
+                    param_values.append(value)
+
+            # Si no hay parámetros, llamar sin ellos
+            if param_placeholders:
+                sp_call = f"{{CALL {sp_name}({', '.join(param_placeholders)})}}"
+                cursor.execute(sp_call, *param_values)
+            else:
+                sp_call = f"{{CALL {sp_name}}}"
+                cursor.execute(sp_call)
+
+            # Recoger todos los result sets
+            result_sets = []
+            while True:
+                try:
+                    if cursor.description:
+                        columns = [column[0] for column in cursor.description]
+                        rows = cursor.fetchall()
+                        result_set = [dict(zip(columns, row)) for row in rows]
+                        result_sets.append(result_set)
+                    else:
+                        # Result set sin columnas (puede ser un mensaje o resultado vacío)
+                        result_sets.append([])
+
+                    # Intentar obtener el siguiente result set
+                    if not cursor.nextset():
+                        break
+                except (pyodbc.ProgrammingError, AttributeError):
+                    # No hay más result sets o cursor no tiene nextset
+                    break
+
+            return result_sets
+    except Exception as e:
+        logger.error(f"Error ejecutando SP {sp_name}: {e}", exc_info=True)
+        raise
+
+
+def get_callbacks_dashboard(
+    db: DatabaseConnector,
+    fecha_inicio: Optional[datetime] = None,
+    fecha_fin: Optional[datetime] = None,
+    robot_id: Optional[int] = None,
+    incluir_detalle_horario: bool = True,
+) -> Dict:
+    """Obtiene el dashboard de análisis de callbacks."""
+    params = {}
+    if fecha_inicio:
+        params["FechaInicio"] = fecha_inicio
+    if fecha_fin:
+        params["FechaFin"] = fecha_fin
+    if robot_id:
+        params["RobotId"] = robot_id
+    params["IncluirDetalleHorario"] = 1 if incluir_detalle_horario else 0
+
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.ObtenerDashboardCallbacks", params)
+
+    return {
+        "metricas_generales": result_sets[0][0] if result_sets and len(result_sets) > 0 and result_sets[0] else {},
+        "rendimiento_distribucion": result_sets[1] if len(result_sets) > 1 else [],
+        "analisis_por_robot": result_sets[2] if len(result_sets) > 2 else [],
+        "tendencia_diaria": result_sets[3] if len(result_sets) > 3 else [],
+        "patron_horario": result_sets[4] if len(result_sets) > 4 and incluir_detalle_horario else [],
+        "casos_problematicos": result_sets[5] if len(result_sets) > 5 else [],
+    }
+
+
+def get_balanceador_dashboard(
+    db: DatabaseConnector,
+    fecha_inicio: Optional[datetime] = None,
+    fecha_fin: Optional[datetime] = None,
+    pool_id: Optional[int] = None,
+) -> Dict:
+    """Obtiene el dashboard de análisis del balanceador."""
+    params = {}
+    if fecha_inicio:
+        params["FechaInicio"] = fecha_inicio
+    if fecha_fin:
+        params["FechaFin"] = fecha_fin
+    if pool_id:
+        params["PoolId"] = pool_id
+
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.ObtenerDashboardBalanceador", params)
+
+    return {
+        "metricas_generales": result_sets[0][0] if result_sets and len(result_sets) > 0 and result_sets[0] else {},
+        "trazabilidad": result_sets[1] if len(result_sets) > 1 else [],
+        "resumen_diario": result_sets[2] if len(result_sets) > 2 else [],
+        "analisis_robots": result_sets[3] if len(result_sets) > 3 else [],
+        "estado_actual": result_sets[4][0] if len(result_sets) > 4 and result_sets[4] else {},
+        "thrashing_events": result_sets[5][0] if len(result_sets) > 5 and result_sets[5] else {},
+    }
 
 
 # --- LÓGICA CORE DE RESOLUCIÓN ---

@@ -113,7 +113,9 @@ async def trigger_sync_robots(
     async with app_state.sync_lock:
         # Comprobar si ya hay una tarea corriendo
         if app_state.sync_status["robots"] == "running":
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya hay una sincronización de robots en curso.")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Ya hay una sincronización de robots en curso."
+            )
 
         # Usamos el wrapper, no la tarea directa
         background_tasks.add_task(run_robot_sync_task, db, aa_client, app_state)
@@ -132,7 +134,9 @@ async def trigger_sync_equipos(
     app_state = request.app.state
     async with app_state.sync_lock:
         if app_state.sync_status["equipos"] == "running":
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya hay una sincronización de equipos en curso.")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Ya hay una sincronización de equipos en curso."
+            )
 
         # Usamos el wrapper de equipos
         background_tasks.add_task(run_equipo_sync_task, db, aa_client, app_state)
@@ -248,7 +252,9 @@ def get_schedules(
 ):
     """Listado paginado de programaciones con filtros."""
     try:
-        return db_service.get_schedules_paginated(db, robot_id=robot_id, tipo=tipo, activo=activo, search=search, page=page, size=size)
+        return db_service.get_schedules_paginated(
+            db, robot_id=robot_id, tipo=tipo, activo=activo, search=search, page=page, size=size
+        )
     except Exception as e:
         _handle_endpoint_errors("get_schedules", e, "Programaciones")
 
@@ -261,7 +267,9 @@ def get_robot_schedules(robot_id: int, db: DatabaseConnector = Depends(get_db)):
         _handle_endpoint_errors("get_robot_schedules", e, "Programaciones", robot_id)
 
 
-@router.delete("/api/schedules/{programacion_id}/robot/{robot_id}", tags=["Programaciones"], status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/api/schedules/{programacion_id}/robot/{robot_id}", tags=["Programaciones"], status_code=status.HTTP_204_NO_CONTENT
+)
 def delete_schedule(programacion_id: int, robot_id: int, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.delete_schedule(db, programacion_id, robot_id)
@@ -338,7 +346,9 @@ def get_schedule_devices(schedule_id: int, db: DatabaseConnector = Depends(get_d
 
 
 @router.put("/api/schedules/{schedule_id}/devices", tags=["Programaciones"])
-def update_schedule_devices(schedule_id: int, equipo_ids: List[int] = Body(...), db: DatabaseConnector = Depends(get_db)):
+def update_schedule_devices(
+    schedule_id: int, equipo_ids: List[int] = Body(...), db: DatabaseConnector = Depends(get_db)
+):
     try:
         db_service.update_schedule_devices_db(db, schedule_id, equipo_ids)
         return {"message": "Asignaciones actualizadas"}
@@ -431,9 +441,13 @@ def get_robot_assignments(robot_id: int, db: DatabaseConnector = Depends(get_db)
 
 
 @router.post("/api/robots/{robot_id}/asignaciones", tags=["Asignaciones"])
-def update_robot_assignments(robot_id: int, update_data: AssignmentUpdateRequest, db: DatabaseConnector = Depends(get_db)):
+def update_robot_assignments(
+    robot_id: int, update_data: AssignmentUpdateRequest, db: DatabaseConnector = Depends(get_db)
+):
     try:
-        result = db_service.update_asignaciones_robot(db, robot_id, update_data.asignar_equipo_ids, update_data.desasignar_equipo_ids)
+        result = db_service.update_asignaciones_robot(
+            db, robot_id, update_data.asignar_equipo_ids, update_data.desasignar_equipo_ids
+        )
         return {"message": "Asignaciones actualizadas.", "detail": result}
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
@@ -579,3 +593,82 @@ def delete_mapping_endpoint(mapeo_id: int, db: DatabaseConnector = Depends(get_d
         return {"message": "Mapeo eliminado"}
     except Exception as e:
         _handle_endpoint_errors("delete_mapping", e, "Mapeos", mapeo_id)
+
+
+# --- Endpoints de Analítica ---
+
+
+@router.get("/api/analytics/status", tags=["Analytics"])
+def get_system_status(db: DatabaseConnector = Depends(get_db)):
+    """
+    Obtiene el estado actual del sistema en tiempo real.
+    """
+    try:
+        from datetime import datetime
+
+        status_data = db_service.get_system_status(db)
+        status_data["timestamp"] = datetime.now().isoformat()
+        return status_data
+    except Exception as e:
+        logger.error(f"Error obteniendo estado del sistema: {e}", exc_info=True)
+        _handle_endpoint_errors("get_system_status", e, "Analytics")
+
+
+@router.get("/api/analytics/callbacks", tags=["Analytics"])
+def get_callbacks_dashboard(
+    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DDTHH:mm:ss)"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DDTHH:mm:ss)"),
+    robot_id: Optional[int] = Query(None, description="ID del robot para filtrar"),
+    incluir_detalle_horario: bool = Query(True, description="Incluir análisis por hora"),
+    db: DatabaseConnector = Depends(get_db),
+):
+    """
+    Obtiene el dashboard de análisis de callbacks.
+    """
+    try:
+        from datetime import datetime
+
+        fecha_inicio_dt = datetime.fromisoformat(fecha_inicio) if fecha_inicio else None
+        fecha_fin_dt = datetime.fromisoformat(fecha_fin) if fecha_fin else None
+
+        return db_service.get_callbacks_dashboard(
+            db=db,
+            fecha_inicio=fecha_inicio_dt,
+            fecha_fin=fecha_fin_dt,
+            robot_id=robot_id,
+            incluir_detalle_horario=incluir_detalle_horario,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Formato de fecha inválido: {ve}")
+    except Exception as e:
+        logger.error(f"Error obteniendo dashboard de callbacks: {e}", exc_info=True)
+        _handle_endpoint_errors("get_callbacks_dashboard", e, "Analytics")
+
+
+@router.get("/api/analytics/balanceador", tags=["Analytics"])
+def get_balanceador_dashboard(
+    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DDTHH:mm:ss)"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DDTHH:mm:ss)"),
+    pool_id: Optional[int] = Query(None, description="ID del pool para filtrar"),
+    db: DatabaseConnector = Depends(get_db),
+):
+    """
+    Obtiene el dashboard de análisis del balanceador.
+    """
+    try:
+        from datetime import datetime
+
+        fecha_inicio_dt = datetime.fromisoformat(fecha_inicio) if fecha_inicio else None
+        fecha_fin_dt = datetime.fromisoformat(fecha_fin) if fecha_fin else None
+
+        return db_service.get_balanceador_dashboard(
+            db=db,
+            fecha_inicio=fecha_inicio_dt,
+            fecha_fin=fecha_fin_dt,
+            pool_id=pool_id,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Formato de fecha inválido: {ve}")
+    except Exception as e:
+        logger.error(f"Error obteniendo dashboard de balanceador: {e}", exc_info=True)
+        _handle_endpoint_errors("get_balanceador_dashboard", e, "Analytics")

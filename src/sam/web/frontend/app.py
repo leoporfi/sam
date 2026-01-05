@@ -8,6 +8,9 @@ from reactpy_router import browser_router, route
 
 from sam.web.frontend.api.api_client import APIClient, get_api_client
 
+# Componentes de analítica
+from .features.components.analytics.status_dashboard import StatusDashboard
+
 # Componentes de páginas
 from .features.components.equipo_list import EquiposControls, EquiposDashboard
 from .features.components.mappings_page import MappingsPage
@@ -623,6 +626,24 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
 
 
 @component
+def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
+    """Página de analítica con dashboards."""
+    robots_state = use_robots()
+    equipos_state = use_equipos()
+
+    return PageWithLayout(
+        theme_is_dark=theme_is_dark,
+        on_theme_toggle=on_theme_toggle,
+        robots_state=robots_state,
+        equipos_state=equipos_state,
+        children=html._(
+            html.header(html.h1("Analítica y Dashboards")),
+            StatusDashboard(),
+        ),
+    )
+
+
+@component
 def NotFoundPage(theme_is_dark: bool, on_theme_toggle):
     """Página para rutas no encontradas."""
     robots_state = use_robots()
@@ -700,6 +721,7 @@ def App():
                         route("/programaciones", SchedulesPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/mapeos", MappingsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("/analytics", AnalyticsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                     ),
                 ),
