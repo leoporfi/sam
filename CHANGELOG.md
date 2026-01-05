@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-01-05
+
+### Fixed
+- **Interfaz Web - Limpieza de tareas asíncronas**: Corregido el manejo de limpieza de tareas asíncronas en `use_debounced_value_hook` para evitar el error "Task was destroyed but it is pending" cuando los componentes se desmontan. Se implementó rastreo de estado de montaje y limpieza adecuada de tareas para prevenir condiciones de carrera y errores de hook stack inválido.
+
 ## [1.3.0] - 2026-01-05
 
 ### Added
