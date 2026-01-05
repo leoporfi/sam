@@ -933,8 +933,19 @@ def get_system_status(db: DatabaseConnector) -> Dict:
     """Obtiene el estado actual del sistema en tiempo real."""
     result = {}
 
-    # Estado del balanceador
-    query_balanceador = "SELECT * FROM dbo.EstadoBalanceadorTiempoReal"
+    # Estado del balanceador - Resumen agregado
+    query_balanceador = """
+        SELECT
+            COUNT(*) AS TotalRobots,
+            SUM(CASE WHEN EstadoActual = 'Online' THEN 1 ELSE 0 END) AS RobotsOnline,
+            SUM(CASE WHEN EstadoActual = 'Programado' THEN 1 ELSE 0 END) AS RobotsProgramados,
+            SUM(CASE WHEN EstadoBalanceo = 'Necesita más equipos' THEN 1 ELSE 0 END) AS RobotsNecesitanEquipos,
+            SUM(CASE WHEN EstadoBalanceo = 'Exceso de equipos' THEN 1 ELSE 0 END) AS RobotsConExcesoEquipos,
+            SUM(CASE WHEN EstadoBalanceo = 'Balanceado' THEN 1 ELSE 0 END) AS RobotsBalanceados,
+            AVG(CAST(EquiposAsignados AS FLOAT)) AS PromedioEquiposAsignados,
+            SUM(EjecucionesActivas) AS TotalEjecucionesActivas
+        FROM dbo.EstadoBalanceadorTiempoReal
+    """
     estado_balanceador = db.ejecutar_consulta(query_balanceador, es_select=True)
     result["balanceador"] = estado_balanceador[0] if estado_balanceador else {}
 
