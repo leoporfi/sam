@@ -13,7 +13,10 @@ from .features.components.analytics import (
     BalanceadorDashboard,
     CallbacksDashboard,
     StatusDashboard,
+    TasasExitoDashboard,
+    TemporalPatternsDashboard,
     TiemposEjecucionDashboard,
+    UtilizationDashboard,
 )
 
 # Componentes de páginas
@@ -671,6 +674,12 @@ def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
                 BalanceadorDashboard(),
                 html.hr(),
                 TiemposEjecucionDashboard(),
+                html.hr(),
+                UtilizationDashboard(),
+                html.hr(),
+                TemporalPatternsDashboard(),
+                html.hr(),
+                TasasExitoDashboard(),
             ),
         ),
     )

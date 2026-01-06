@@ -182,3 +182,115 @@ def BarChart(chart_id: str, title: str, labels: list, datasets: list, height: st
             chart_script,
         ),
     )
+
+
+@component
+def PieChart(chart_id: str, title: str, labels: list, datasets: list, height: str = "300px"):
+    """
+    Componente de gráfico de torta (pie) usando Chart.js.
+
+    Args:
+        chart_id: ID único para el canvas
+        title: Título del gráfico
+        labels: Lista de etiquetas
+        datasets: Lista de datasets, cada uno es un dict con:
+            - data: Lista de valores
+            - backgroundColor: Lista de colores para cada segmento
+    """
+    script_key = use_state(str(uuid.uuid4()))
+
+    # Preparar datasets con valores por defecto
+    prepared_datasets = []
+    for ds in datasets:
+        prepared_datasets.append(
+            {
+                "data": ds.get("data", []),
+                "backgroundColor": ds.get(
+                    "backgroundColor",
+                    [
+                        "rgba(255, 99, 132, 0.7)",
+                        "rgba(54, 162, 235, 0.7)",
+                        "rgba(255, 206, 86, 0.7)",
+                        "rgba(75, 192, 192, 0.7)",
+                        "rgba(153, 102, 255, 0.7)",
+                    ],
+                ),
+            }
+        )
+
+    # Para Pie Chart, no necesitamos escalas en Y
+    labels_json = json.dumps(labels)
+    datasets_json = json.dumps(prepared_datasets)
+    title_escaped = _escape_js_string(title)
+
+    chart_script = f"""
+(function() {{
+    function initChart() {{
+        if (typeof Chart === 'undefined') {{
+            setTimeout(initChart, 100);
+            return;
+        }}
+
+        const canvas = document.getElementById('{chart_id}');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+
+        // Destruir gráfico anterior si existe
+        if (canvas._chartInstance) {{
+            canvas._chartInstance.destroy();
+        }}
+
+        const chartConfig = {{
+            type: 'pie',
+            data: {{
+                labels: {labels_json},
+                datasets: {datasets_json}
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {{
+                    title: {{
+                        display: true,
+                        text: {title_escaped}
+                    }},
+                    legend: {{
+                        display: true,
+                        position: 'right'
+                    }}
+                }}
+            }}
+        }};
+
+        canvas._chartInstance = new Chart(ctx, chartConfig);
+    }}
+
+    if (document.readyState === 'loading') {{
+        document.addEventListener('DOMContentLoaded', initChart);
+    }} else {{
+        initChart();
+    }}
+}})();
+"""
+
+    @use_effect(dependencies=[labels, datasets, title])
+    def update_chart():
+        """Actualiza el gráfico cuando cambian los datos."""
+        script_key[1](str(uuid.uuid4()))
+
+    return html.div(
+        {"style": {"position": "relative", "height": height, "width": "100%", "margin": "1rem 0"}},
+        html.canvas(
+            {
+                "id": chart_id,
+                "style": {"max-width": "100%", "height": height},
+            }
+        ),
+        html.script(
+            {
+                "key": script_key[0],
+            },
+            chart_script,
+        ),
+    )

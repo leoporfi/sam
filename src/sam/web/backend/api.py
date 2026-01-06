@@ -762,3 +762,124 @@ def get_recent_executions(
     except Exception as e:
         logger.error(f"Error obteniendo ejecuciones recientes: {e}", exc_info=True)
         _handle_endpoint_errors("get_recent_executions", e, "Analytics")
+
+
+@router.get("/api/analytics/utilizacion", tags=["Analytics"])
+def get_utilization_analysis(
+    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DDTHH:mm:ss)"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DDTHH:mm:ss)"),
+    dias_hacia_atras: Optional[int] = Query(30, description="Días hacia atrás si no se especifican fechas"),
+    db: DatabaseConnector = Depends(get_db),
+):
+    """
+    Obtiene el análisis de utilización de recursos.
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        fecha_inicio_dt = None
+        fecha_fin_dt = None
+
+        if fecha_inicio:
+            try:
+                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace("Z", "+00:00"))
+            except ValueError:
+                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio)
+
+        if fecha_fin:
+            try:
+                fecha_fin_dt = datetime.fromisoformat(fecha_fin.replace("Z", "+00:00"))
+            except ValueError:
+                fecha_fin_dt = datetime.fromisoformat(fecha_fin)
+
+        # Si no hay fechas, usar dias_hacia_atras
+        if not fecha_inicio_dt and not fecha_fin_dt and dias_hacia_atras:
+            fecha_fin_dt = datetime.now()
+            fecha_inicio_dt = fecha_fin_dt - timedelta(days=dias_hacia_atras)
+
+        return db_service.get_utilization_analysis(
+            db=db,
+            fecha_inicio=fecha_inicio_dt,
+            fecha_fin=fecha_fin_dt,
+        )
+    except Exception as e:
+        logger.error(f"Error obteniendo análisis de utilización: {e}", exc_info=True)
+        _handle_endpoint_errors("get_utilization_analysis", e, "Analytics")
+
+
+@router.get("/api/analytics/patrones-temporales", tags=["Analytics"])
+def get_temporal_patterns(
+    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DDTHH:mm:ss)"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DDTHH:mm:ss)"),
+    robot_id: Optional[int] = Query(None, description="ID del robot para filtrar"),
+    db: DatabaseConnector = Depends(get_db),
+):
+    """
+    Obtiene el análisis de patrones temporales (heatmap).
+    """
+    try:
+        from datetime import datetime
+
+        fecha_inicio_dt = None
+        fecha_fin_dt = None
+
+        if fecha_inicio:
+            try:
+                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace("Z", "+00:00"))
+            except ValueError:
+                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio)
+
+        if fecha_fin:
+            try:
+                fecha_fin_dt = datetime.fromisoformat(fecha_fin.replace("Z", "+00:00"))
+            except ValueError:
+                fecha_fin_dt = datetime.fromisoformat(fecha_fin)
+
+        return db_service.get_temporal_patterns(
+            db=db,
+            fecha_inicio=fecha_inicio_dt,
+            fecha_fin=fecha_fin_dt,
+            robot_id=robot_id,
+        )
+    except Exception as e:
+        logger.error(f"Error obteniendo patrones temporales: {e}", exc_info=True)
+        _handle_endpoint_errors("get_temporal_patterns", e, "Analytics")
+
+
+@router.get("/api/analytics/tasas-exito", tags=["Analytics"])
+def get_success_analysis(
+    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DDTHH:mm:ss)"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DDTHH:mm:ss)"),
+    robot_id: Optional[int] = Query(None, description="ID del robot para filtrar"),
+    db: DatabaseConnector = Depends(get_db),
+):
+    """
+    Obtiene el análisis de tasas de éxito y errores.
+    """
+    try:
+        from datetime import datetime
+
+        fecha_inicio_dt = None
+        fecha_fin_dt = None
+
+        if fecha_inicio:
+            try:
+                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace("Z", "+00:00"))
+            except ValueError:
+                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio)
+
+        if fecha_fin:
+            try:
+                fecha_fin_dt = datetime.fromisoformat(fecha_fin.replace("Z", "+00:00"))
+            except ValueError:
+                fecha_fin_dt = datetime.fromisoformat(fecha_fin)
+
+        return db_service.get_success_analysis(
+            db=db,
+            fecha_inicio=fecha_inicio_dt,
+            fecha_fin=fecha_fin_dt,
+            robot_id=robot_id,
+        )
+    except Exception as e:
+        logger.error(f"Error obteniendo tasas de éxito: {e}", exc_info=True)
+        _handle_endpoint_errors("get_success_analysis", e, "Analytics")

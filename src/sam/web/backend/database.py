@@ -1231,3 +1231,82 @@ def get_recent_executions(db: DatabaseConnector, limit: int = 50, critical_only:
     except Exception as e:
         logger.error(f"Error obteniendo ejecuciones recientes: {e}", exc_info=True)
         return []
+
+
+def get_utilization_analysis(
+    db: DatabaseConnector,
+    fecha_inicio: Optional[datetime] = None,
+    fecha_fin: Optional[datetime] = None,
+) -> List[Dict]:
+    """
+    Obtiene el análisis de utilización de recursos.
+    Llama al SP dbo.AnalisisUtilizacionRecursos.
+    """
+    params = {}
+    if fecha_inicio:
+        params["FechaInicio"] = fecha_inicio
+    if fecha_fin:
+        params["FechaFin"] = fecha_fin
+
+    # El SP retorna un solo result set
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.AnalisisUtilizacionRecursos", params)
+    return result_sets[0] if result_sets and len(result_sets) > 0 else []
+
+
+def get_temporal_patterns(
+    db: DatabaseConnector,
+    fecha_inicio: Optional[datetime] = None,
+    fecha_fin: Optional[datetime] = None,
+    robot_id: Optional[int] = None,
+) -> List[Dict]:
+    """
+    Obtiene el análisis de patrones temporales (heatmap).
+    Llama al SP dbo.AnalisisPatronesTemporales.
+    """
+    params = {}
+    if fecha_inicio:
+        params["FechaInicio"] = fecha_inicio
+    if fecha_fin:
+        params["FechaFin"] = fecha_fin
+    if robot_id:
+        params["RobotId"] = robot_id
+
+    # El SP retorna un solo result set
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.AnalisisPatronesTemporales", params)
+    return result_sets[0] if result_sets and len(result_sets) > 0 else []
+
+
+def get_success_analysis(
+    db: DatabaseConnector,
+    fecha_inicio: Optional[datetime] = None,
+    fecha_fin: Optional[datetime] = None,
+    robot_id: Optional[int] = None,
+) -> Dict[str, List[Dict]]:
+    """
+    Obtiene el análisis de tasas de éxito y errores.
+    Llama al SP dbo.AnalisisTasasExito.
+    Retorna un diccionario con 3 listas: "resumen_estados", "top_errores", "detalle_robots".
+    """
+    params = {}
+    if fecha_inicio:
+        params["FechaInicio"] = fecha_inicio
+    if fecha_fin:
+        params["FechaFin"] = fecha_fin
+    if robot_id:
+        params["RobotId"] = robot_id
+
+    # El SP retorna 3 result sets
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.AnalisisTasasExito", params)
+
+    if not result_sets or len(result_sets) < 3:
+        return {
+            "resumen_estados": [],
+            "top_errores": [],
+            "detalle_robots": [],
+        }
+
+    return {
+        "resumen_estados": result_sets[0],
+        "top_errores": result_sets[1],
+        "detalle_robots": result_sets[2],
+    }

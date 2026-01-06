@@ -162,3 +162,22 @@ def format_schedule_details(schedule: Dict) -> str:
             detalles.append(f"[Cíclico: {', '.join(ciclico_info)}]")
 
     return " | ".join(detalles) if detalles else "-"
+
+
+def format_minutes_to_hhmmss(minutes: Union[float, int, None]) -> str:
+    """
+    Convierte una cantidad de minutos a formato HH:MM:SS.
+    Ejemplo: 1.5 -> 00:01:30
+    """
+    if minutes is None:
+        return "-"
+
+    try:
+        total_seconds = int(float(minutes) * 60)
+        hours = total_seconds // 3600
+        minutes_rem = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        return f"{hours:02d}:{minutes_rem:02d}:{seconds:02d}"
+    except (ValueError, TypeError):
+        return "-"

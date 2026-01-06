@@ -3,7 +3,6 @@ Script de prueba para crear una programación cíclica con ventanas
 Usar desde Python o adaptar para Postman/curl
 """
 
-
 import requests
 
 # Configuración

@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from reactpy import component, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.common_components import LoadingOverlay
+from sam.web.frontend.shared.formatters import format_minutes_to_hhmmss
 
 from .chart_components import LineChart
 
@@ -46,7 +48,7 @@ def CallbacksDashboard():
         """Wrapper para manejar el click del botón de actualizar."""
         asyncio.create_task(fetch_dashboard())
 
-    @use_effect(dependencies=[fecha_inicio, fecha_fin])
+    @use_effect(dependencies=[])
     def load_data():
         task = asyncio.create_task(fetch_dashboard())
         return lambda: task.cancel() if not task.done() else None
@@ -101,7 +103,8 @@ def CallbacksDashboard():
     fecha_fin_default = fecha_fin or hoy
 
     return html.div(
-        {"class_name": "callbacks-dashboard"},
+        {"class_name": "callbacks-dashboard", "style": {"position": "relative"}},
+        LoadingOverlay(is_loading=loading),
         html.header(
             {
                 "class_name": "dashboard-header",
@@ -194,11 +197,11 @@ def CallbacksDashboard():
                 html.header(html.h3("Latencia Promedio")),
                 html.div(
                     {"class_name": "metric-value"},
-                    f"{(metricas.get('LatenciaPromedioMinutos') or 0):.1f} min",
+                    f"{format_minutes_to_hhmmss(metricas.get('LatenciaPromedioMinutos'))}",
                 ),
                 html.div(
                     {"class_name": "metric-label"},
-                    f"Max: {(metricas.get('LatenciaMaximaMinutos') or 0):.1f} min",
+                    f"Max: {format_minutes_to_hhmmss(metricas.get('LatenciaMaximaMinutos'))}",
                 ),
             ),
             html.article(
@@ -264,7 +267,7 @@ def CallbacksDashboard():
                         html.th("Deployment ID"),
                         html.th("Robot"),
                         html.th("Estado"),
-                        html.th("Latencia (min)"),
+                        html.th("Latencia (HH:MM:SS)"),
                         html.th("Tipo Problema"),
                     )
                 ),
@@ -274,7 +277,7 @@ def CallbacksDashboard():
                             html.td(caso.get("DeploymentId", "")),
                             html.td(caso.get("RobotNombre", "")),
                             html.td(caso.get("Estado", "")),
-                            html.td(f"{(caso.get('LatenciaActualizacionMinutos') or 0):.1f}"),
+                            html.td(format_minutes_to_hhmmss(caso.get("LatenciaActualizacionMinutos"))),
                             html.td(caso.get("TipoProblema", "")),
                         )
                         for caso in casos_problematicos[:10]

@@ -1,11 +1,14 @@
 # sam/web/frontend/features/components/analytics/tiempos_ejecucion_dashboard.py
 
+
 import asyncio
 import logging
 
 from reactpy import component, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.common_components import LoadingOverlay
+from sam.web.frontend.shared.formatters import format_minutes_to_hhmmss
 
 from .chart_components import BarChart
 
@@ -44,7 +47,7 @@ def TiemposEjecucionDashboard():
         """Wrapper para manejar el click del botón de actualizar."""
         asyncio.create_task(fetch_dashboard())
 
-    @use_effect(dependencies=[meses_hacia_atras, incluir_solo_completadas])
+    @use_effect(dependencies=[])
     def load_data():
         task = asyncio.create_task(fetch_dashboard())
         return lambda: task.cancel() if not task.done() else None
@@ -80,7 +83,8 @@ def TiemposEjecucionDashboard():
         latencias.append(item.get("LatenciaPromedioMinutos", 0) if item.get("LatenciaPromedioMinutos") else 0)
 
     return html.div(
-        {"class_name": "tiempos-ejecucion-dashboard"},
+        {"class_name": "tiempos-ejecucion-dashboard", "style": {"position": "relative"}},
+        LoadingOverlay(is_loading=loading),
         html.header(
             {
                 "class_name": "dashboard-header",
@@ -198,10 +202,10 @@ def TiemposEjecucionDashboard():
                     html.tr(
                         html.th("Robot"),
                         html.th("Ejecuciones"),
-                        html.th("Tiempo/Rep (min)"),
-                        html.th("Tiempo Total (min)"),
+                        html.th("Tiempo/Rep (HH:MM:SS)"),
+                        html.th("Tiempo Total (HH:MM:SS)"),
                         html.th("Repeticiones"),
-                        html.th("Latencia (min)"),
+                        html.th("Latencia (HH:MM:SS)"),
                         html.th("Desv. Est. (seg)"),
                     )
                 ),
@@ -210,11 +214,11 @@ def TiemposEjecucionDashboard():
                         html.tr(
                             html.td(item.get("RobotNombre", "N/A")),
                             html.td(str(item.get("EjecucionesAnalizadas", 0))),
-                            html.td(f"{(item.get('TiempoPromedioPorRepeticionMinutos') or 0):.2f}"),
-                            html.td(f"{(item.get('TiempoPromedioTotalMinutos') or 0):.2f}"),
+                            html.td(format_minutes_to_hhmmss(item.get("TiempoPromedioPorRepeticionMinutos"))),
+                            html.td(format_minutes_to_hhmmss(item.get("TiempoPromedioTotalMinutos"))),
                             html.td(f"{(item.get('PromedioRepeticiones') or 1):.1f}"),
                             html.td(
-                                f"{(item.get('LatenciaPromedioMinutos') or 0):.2f}"
+                                format_minutes_to_hhmmss(item.get("LatenciaPromedioMinutos"))
                                 if item.get("LatenciaPromedioMinutos")
                                 else "N/A"
                             ),

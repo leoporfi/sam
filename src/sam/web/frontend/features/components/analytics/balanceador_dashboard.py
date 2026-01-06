@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from reactpy import component, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.common_components import LoadingOverlay
 
 from .chart_components import BarChart
 
@@ -46,7 +47,7 @@ def BalanceadorDashboard():
         """Wrapper para manejar el click del botón de actualizar."""
         asyncio.create_task(fetch_dashboard())
 
-    @use_effect(dependencies=[fecha_inicio, fecha_fin])
+    @use_effect(dependencies=[])
     def load_data():
         task = asyncio.create_task(fetch_dashboard())
         return lambda: task.cancel() if not task.done() else None
@@ -109,7 +110,8 @@ def BalanceadorDashboard():
     fecha_fin_default = fecha_fin or hoy
 
     return html.div(
-        {"class_name": "balanceador-dashboard"},
+        {"class_name": "balanceador-dashboard", "style": {"position": "relative"}},
+        LoadingOverlay(is_loading=loading),
         html.header(
             {
                 "class_name": "dashboard-header",
