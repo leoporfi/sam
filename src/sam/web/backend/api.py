@@ -746,3 +746,19 @@ def get_tiempos_ejecucion_dashboard(
     except Exception as e:
         logger.error(f"Error obteniendo dashboard de tiempos de ejecución: {e}", exc_info=True)
         _handle_endpoint_errors("get_tiempos_ejecucion_dashboard", e, "Analytics")
+
+
+@router.get("/api/analytics/executions", tags=["Analytics"])
+def get_recent_executions(
+    limit: int = Query(50, ge=1, le=200),
+    critical_only: bool = Query(True),
+    db: DatabaseConnector = Depends(get_db),
+):
+    """
+    Obtiene un listado de ejecuciones recientes.
+    """
+    try:
+        return db_service.get_recent_executions(db, limit=limit, critical_only=critical_only)
+    except Exception as e:
+        logger.error(f"Error obteniendo ejecuciones recientes: {e}", exc_info=True)
+        _handle_endpoint_errors("get_recent_executions", e, "Analytics")

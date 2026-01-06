@@ -83,27 +83,13 @@ def TiemposEjecucionDashboard():
         {"class_name": "tiempos-ejecucion-dashboard"},
         html.header(
             {
-                "style": {
-                    "display": "flex",
-                    "align-items": "baseline",
-                    "gap": "0.75rem",
-                    "flex-wrap": "wrap",
-                }
+                "class_name": "dashboard-header",
             },
-            html.h2({"style": {"margin": "0", "flex": "1"}}, "Análisis de Tiempos de Ejecución"),
+            html.h2({"class_name": "dashboard-title"}, "Análisis de Tiempos de Ejecución"),
             html.button(
                 {
                     "on_click": handle_refresh,
-                    "class_name": "secondary",
-                    "style": {
-                        "padding": "0.375rem 0.5rem",
-                        "min-width": "auto",
-                        "font-size": "0.9rem",
-                        "line-height": "1",
-                        "display": "flex",
-                        "align-items": "center",
-                        "justify-content": "center",
-                    },
+                    "class_name": "secondary dashboard-refresh-btn",
                     "title": "Actualizar",
                     "aria-label": "Actualizar dashboard de tiempos de ejecución",
                 },
@@ -112,39 +98,20 @@ def TiemposEjecucionDashboard():
         ),
         html.p(
             {
-                "style": {
-                    "color": "var(--pico-muted-color)",
-                    "margin-bottom": "1rem",
-                    "font-size": "0.95rem",
-                }
+                "class_name": "dashboard-description",
             },
             "Analiza los tiempos de ejecución de robots considerando el número de repeticiones. Muestra tiempo por repetición (tiempo total dividido por número de repeticiones), latencia de inicio (delay entre disparo e inicio real), y métricas estadísticas excluyendo extremos.",
         ),
         html.p(
             {
-                "style": {
-                    "color": "var(--pico-color-blue-600)",
-                    "margin-bottom": "1rem",
-                    "font-size": "0.85rem",
-                    "padding": "0.5rem",
-                    "background-color": "var(--pico-color-blue-50)",
-                    "border-left": "3px solid var(--pico-color-blue-500)",
-                    "border-radius": "4px",
-                }
+                "class_name": "dashboard-alert dashboard-alert-yellow",
             },
-            "ℹ️ Métricas importantes: El tiempo por repetición es el tiempo real de procesamiento de un ticket. La latencia muestra el delay entre que SAM dispara el robot y A360 realmente lo inicia. Los datos incluyen ejecuciones actuales e históricas.",
+            "ℹ️ Métricas importantes: El tiempo por repetición es el tiempo real de procesamiento de un ticket. La latencia muestra el delay entre que SAM dispara el robot y A360 realmente lo inicia. Los datos incluyen ejecuciones actuales e históricas. NOTA: Para mayor precisión, se excluyen los outliers (15% más rápidos y 15% más lentos). Si no se detectan repeticiones en los parámetros, se usa el valor por defecto configurado (LANZADOR_BOT_INPUT_VUELTAS).",
         ),
         # Filtros
         html.div(
             {
-                "class_name": "filters",
-                "style": {
-                    "display": "grid",
-                    "grid-template-columns": "1fr 1fr auto",
-                    "gap": "1rem",
-                    "margin": "1rem 0",
-                    "align-items": "end",
-                },
+                "class_name": "filters dashboard-filters",
             },
             html.div(
                 html.label("Meses hacia atrás:"),
@@ -179,7 +146,7 @@ def TiemposEjecucionDashboard():
         ),
         # Gráfico de tiempo por repetición
         html.div(
-            {"class_name": "chart-container", "style": {"margin-top": "2rem"}},
+            {"class_name": "chart-container"},
             html.h3("Tiempo Promedio por Repetición por Robot"),
             BarChart(
                 chart_id="tiempos-repeticion-chart",
@@ -199,10 +166,10 @@ def TiemposEjecucionDashboard():
         ),
         # Gráfico de latencia
         html.div(
-            {"class_name": "chart-container", "style": {"margin-top": "2rem"}},
+            {"class_name": "chart-container"},
             html.h3("Latencia Promedio de Inicio por Robot"),
             html.p(
-                {"style": {"font-size": "0.85rem", "color": "var(--pico-muted-color)", "margin-bottom": "0.5rem"}},
+                {"class_name": "metric-description"},
                 "Delay entre que SAM dispara el robot y A360 realmente lo inicia (actualizado por Conciliador)",
             ),
             BarChart(
@@ -223,10 +190,10 @@ def TiemposEjecucionDashboard():
         ),
         # Tabla de métricas detalladas
         html.div(
-            {"class_name": "metrics-table", "style": {"margin-top": "2rem"}},
+            {"class_name": "metrics-table"},
             html.h3("Métricas Detalladas por Robot"),
             html.table(
-                {"style": {"width": "100%", "font-size": "0.9rem"}},
+                {"class_name": "dashboard-table"},
                 html.thead(
                     html.tr(
                         html.th("Robot"),
@@ -243,15 +210,15 @@ def TiemposEjecucionDashboard():
                         html.tr(
                             html.td(item.get("RobotNombre", "N/A")),
                             html.td(str(item.get("EjecucionesAnalizadas", 0))),
-                            html.td(f"{item.get('TiempoPromedioPorRepeticionMinutos', 0):.2f}"),
-                            html.td(f"{item.get('TiempoPromedioTotalMinutos', 0):.2f}"),
-                            html.td(f"{item.get('PromedioRepeticiones', 1):.1f}"),
+                            html.td(f"{(item.get('TiempoPromedioPorRepeticionMinutos') or 0):.2f}"),
+                            html.td(f"{(item.get('TiempoPromedioTotalMinutos') or 0):.2f}"),
+                            html.td(f"{(item.get('PromedioRepeticiones') or 1):.1f}"),
                             html.td(
-                                f"{item.get('LatenciaPromedioMinutos', 0):.2f}"
+                                f"{(item.get('LatenciaPromedioMinutos') or 0):.2f}"
                                 if item.get("LatenciaPromedioMinutos")
                                 else "N/A"
                             ),
-                            html.td(f"{item.get('DesviacionEstandarSegundos', 0):.1f}"),
+                            html.td(f"{(item.get('DesviacionEstandarSegundos') or 0):.1f}"),
                         )
                         for item in dashboard_data[:20]  # Top 20
                     ]

@@ -104,27 +104,13 @@ def CallbacksDashboard():
         {"class_name": "callbacks-dashboard"},
         html.header(
             {
-                "style": {
-                    "display": "flex",
-                    "align-items": "baseline",
-                    "gap": "0.75rem",
-                    "flex-wrap": "wrap",
-                }
+                "class_name": "dashboard-header",
             },
-            html.h2({"style": {"margin": "0", "flex": "1"}}, "Análisis de Callbacks y Conciliador"),
+            html.h2({"class_name": "dashboard-title"}, "Análisis de Callbacks y Conciliador"),
             html.button(
                 {
                     "on_click": handle_refresh,
-                    "class_name": "secondary",
-                    "style": {
-                        "padding": "0.375rem 0.5rem",
-                        "min-width": "auto",
-                        "font-size": "0.9rem",
-                        "line-height": "1",
-                        "display": "flex",
-                        "align-items": "center",
-                        "justify-content": "center",
-                    },
+                    "class_name": "secondary dashboard-refresh-btn",
                     "title": "Actualizar",
                     "aria-label": "Actualizar dashboard de callbacks",
                 },
@@ -133,39 +119,20 @@ def CallbacksDashboard():
         ),
         html.p(
             {
-                "style": {
-                    "color": "var(--pico-muted-color)",
-                    "margin-bottom": "1rem",
-                    "font-size": "0.95rem",
-                }
+                "class_name": "dashboard-description",
             },
             "Analiza el rendimiento del sistema de finalización de ejecuciones. Compara callbacks exitosos (notificaciones automáticas) vs conciliador (verificación periódica). Muestra latencia, tasas de éxito y casos problemáticos. Útil para identificar problemas de comunicación o configuración.",
         ),
         html.p(
             {
-                "style": {
-                    "color": "var(--pico-color-yellow-600)",
-                    "margin-bottom": "1rem",
-                    "font-size": "0.85rem",
-                    "padding": "0.5rem",
-                    "background-color": "var(--pico-color-yellow-50)",
-                    "border-left": "3px solid var(--pico-color-yellow-500)",
-                    "border-radius": "4px",
-                }
+                "class_name": "dashboard-alert dashboard-alert-yellow",
             },
             "ℹ️ Datos disponibles: Incluye ejecuciones de las últimas 24 horas (tabla actual) y datos históricos hasta 15 días. El mantenimiento diario mueve datos antiguos a las 5am. Los datos más antiguos de 15 días se purgan automáticamente.",
         ),
         # Filtros de fecha
         html.div(
             {
-                "class_name": "filters",
-                "style": {
-                    "display": "grid",
-                    "grid-template-columns": "1fr 1fr auto",
-                    "gap": "1rem",
-                    "margin": "1rem 0",
-                    "align-items": "end",
-                },
+                "class_name": "filters dashboard-filters",
             },
             html.div(
                 html.label("Fecha Inicio:"),
@@ -208,20 +175,14 @@ def CallbacksDashboard():
         # Métricas principales
         html.div(
             {
-                "class_name": "metrics-grid",
-                "style": {
-                    "display": "grid",
-                    "grid-template-columns": "repeat(auto-fit, minmax(250px, 1fr))",
-                    "gap": "1rem",
-                    "margin-top": "1rem",
-                },
+                "class_name": "metrics-grid dashboard-grid",
             },
             html.article(
                 {"class_name": "card"},
                 html.header(html.h3("Callbacks Exitosos")),
                 html.div(
-                    {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
-                    f"{metricas.get('PorcentajeCallbackExitoso', 0):.1f}%",
+                    {"class_name": "metric-value"},
+                    f"{(metricas.get('PorcentajeCallbackExitoso') or 0):.1f}%",
                 ),
                 html.div(
                     {"class_name": "metric-label"},
@@ -232,20 +193,20 @@ def CallbacksDashboard():
                 {"class_name": "card"},
                 html.header(html.h3("Latencia Promedio")),
                 html.div(
-                    {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
-                    f"{metricas.get('LatenciaPromedioMinutos', 0):.1f} min",
+                    {"class_name": "metric-value"},
+                    f"{(metricas.get('LatenciaPromedioMinutos') or 0):.1f} min",
                 ),
                 html.div(
                     {"class_name": "metric-label"},
-                    f"Max: {metricas.get('LatenciaMaximaMinutos', 0):.1f} min",
+                    f"Max: {(metricas.get('LatenciaMaximaMinutos') or 0):.1f} min",
                 ),
             ),
             html.article(
                 {"class_name": "card"},
                 html.header(html.h3("Tasa de Éxito")),
                 html.div(
-                    {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
-                    f"{metricas.get('PorcentajeExito', 0):.1f}%",
+                    {"class_name": "metric-value"},
+                    f"{(metricas.get('PorcentajeExito') or 0):.1f}%",
                 ),
                 html.div(
                     {"class_name": "metric-label"},
@@ -256,8 +217,8 @@ def CallbacksDashboard():
                 {"class_name": "card"},
                 html.header(html.h3("Conciliador")),
                 html.div(
-                    {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
-                    f"{metricas.get('PorcentajeConciliadorExitoso', 0):.1f}%",
+                    {"class_name": "metric-value"},
+                    f"{(metricas.get('PorcentajeConciliadorExitoso') or 0):.1f}%",
                 ),
                 html.div(
                     {"class_name": "metric-label"},
@@ -267,7 +228,7 @@ def CallbacksDashboard():
         ),
         # Gráfico de tendencia diaria
         html.div(
-            {"class_name": "chart-container", "style": {"margin-top": "2rem"}},
+            {"class_name": "chart-container"},
             html.h3("Tendencia Diaria"),
             LineChart(
                 chart_id="callbacks-tendencia-chart",
@@ -294,7 +255,7 @@ def CallbacksDashboard():
         ),
         # Tabla de casos problemáticos
         html.div(
-            {"class_name": "problematic-cases", "style": {"margin-top": "2rem"}},
+            {"class_name": "problematic-cases metrics-table"},
             html.h3("Casos Problemáticos Recientes"),
             html.table(
                 {"role": "table"},
@@ -313,7 +274,7 @@ def CallbacksDashboard():
                             html.td(caso.get("DeploymentId", "")),
                             html.td(caso.get("RobotNombre", "")),
                             html.td(caso.get("Estado", "")),
-                            html.td(f"{caso.get('LatenciaActualizacionMinutos', 0):.1f}"),
+                            html.td(f"{(caso.get('LatenciaActualizacionMinutos') or 0):.1f}"),
                             html.td(caso.get("TipoProblema", "")),
                         )
                         for caso in casos_problematicos[:10]

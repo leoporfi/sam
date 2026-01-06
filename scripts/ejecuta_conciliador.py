@@ -42,9 +42,9 @@ async def main():
     cfg_aa = ConfigManager.get_aa360_config()
     aa_client = AutomationAnywhereClient(
         cr_url=cfg_aa["cr_url"],
-        cr_user="lporfiri",
-        cr_pwd="",
-        cr_api_key="QBZV@{fS@`39R}tOmGD2cpAP5uCAC2r45JbG4XtG",
+        cr_user=cfg_aa["cr_user"],
+        cr_pwd=cfg_aa["cr_pwd"],
+        cr_api_key=cfg_aa["cr_api_key"],
         cr_api_timeout=cfg_aa["api_timeout_seconds"],
     )
 

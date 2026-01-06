@@ -106,7 +106,7 @@ Permitir al equipo de soporte y administradores configurar el comportamiento del
   - Modo de aislamiento (Estricto/Flexible)
   - Equipos asignados
 
-**Impacto:** Define la estrategia de compartición de recursos entre áreas.
+**Impacto:** Define la estrategia de compartición de equipos entre áreas.
 
 ---
 

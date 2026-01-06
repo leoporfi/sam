@@ -14,8 +14,12 @@ logger = logging.getLogger(__name__)
 def StatusDashboard():
     """Dashboard de estado actual del sistema."""
     status_data, set_status_data = use_state(None)
+    executions_data, set_executions_data = use_state([])
     loading, set_loading = use_state(True)
     error, set_error = use_state(None)
+
+    # Nuevo estado para el filtro
+    critical_only, set_critical_only = use_state(True)
 
     api_client = get_api_client()
 
@@ -23,8 +27,17 @@ def StatusDashboard():
         try:
             set_loading(True)
             set_error(None)
+
+            # 1. Fetch System Status
             data = await api_client.get("/api/analytics/status")
             set_status_data(data)
+
+            # 2. Fetch Recent Executions
+            # Pasamos el filtro critical_only
+            exec_params = {"limit": 50, "critical_only": critical_only}
+            exec_data = await api_client.get("/api/analytics/executions", params=exec_params)
+            set_executions_data(exec_data)
+
         except Exception as e:
             set_error(str(e))
             logger.error(f"Error obteniendo estado: {e}")
@@ -35,7 +48,8 @@ def StatusDashboard():
         """Wrapper para manejar el click del botón de actualizar."""
         asyncio.create_task(fetch_status())
 
-    @use_effect(dependencies=[])
+    # Efecto para cargar datos al inicio y cuando cambia el filtro
+    @use_effect(dependencies=[critical_only])
     def load_data():
         # Crear tarea asíncrona para cargar datos
         task = asyncio.create_task(fetch_status())
@@ -79,83 +93,67 @@ def StatusDashboard():
         {"class_name": "status-dashboard"},
         html.header(
             {
-                "style": {
-                    "display": "flex",
-                    "align-items": "baseline",
-                    "gap": "0.75rem",
-                    "flex-wrap": "wrap",
-                }
+                "class_name": "dashboard-header",
             },
-            html.h2({"style": {"margin": "0", "flex": "1"}}, "Estado Actual del Sistema"),
-            html.button(
-                {
-                    "on_click": handle_refresh,
-                    "class_name": "secondary",
-                    "style": {
-                        "padding": "0.375rem 0.5rem",
-                        "min-width": "auto",
-                        "font-size": "0.9rem",
-                        "line-height": "1",
-                        "display": "flex",
-                        "align-items": "center",
-                        "justify-content": "center",
+            html.h2({"class_name": "dashboard-title"}, "Estado Actual del Sistema"),
+            html.div(
+                {"class_name": "header-actions", "style": {"display": "flex", "gap": "1rem", "align-items": "center"}},
+                # Toggle Switch
+                html.label(
+                    {"style": {"cursor": "pointer", "display": "flex", "align-items": "center", "gap": "0.5rem"}},
+                    html.input(
+                        {
+                            "type": "checkbox",
+                            "role": "switch",
+                            "checked": critical_only,
+                            "on_change": lambda e: set_critical_only(e["target"]["checked"]),
+                        }
+                    ),
+                    "Mostrar solo críticos",
+                ),
+                html.button(
+                    {
+                        "on_click": handle_refresh,
+                        "class_name": "secondary dashboard-refresh-btn",
+                        "title": "Actualizar",
+                        "aria-label": "Actualizar estado del sistema",
                     },
-                    "title": "Actualizar",
-                    "aria-label": "Actualizar estado del sistema",
-                },
-                html.i({"class_name": "fa-solid fa-rotate"}),
+                    html.i({"class_name": "fa-solid fa-rotate"}),
+                ),
             ),
         ),
         html.p(
             {
-                "style": {
-                    "color": "var(--pico-muted-color)",
-                    "margin-bottom": "1rem",
-                    "font-size": "0.95rem",
-                }
+                "class_name": "dashboard-description",
             },
             "Vista en tiempo real del estado operativo de SAM. Muestra ejecuciones activas, estado de robots (online/offline/programados) y disponibilidad de equipos. Se actualiza automáticamente cada 30 segundos.",
         ),
         html.p(
             {
-                "style": {
-                    "color": "var(--pico-color-blue-600)",
-                    "margin-bottom": "1rem",
-                    "font-size": "0.85rem",
-                    "padding": "0.5rem",
-                    "background-color": "var(--pico-color-blue-50)",
-                    "border-left": "3px solid var(--pico-color-blue-500)",
-                    "border-radius": "4px",
-                }
+                "class_name": "dashboard-alert dashboard-alert-yellow",
             },
             "ℹ️ Datos en tiempo real: Solo muestra ejecuciones activas de la tabla actual. Los datos históricos no se incluyen en este dashboard.",
         ),
         html.div(
             {
-                "class_name": "status-cards",
-                "style": {
-                    "display": "grid",
-                    "grid-template-columns": "repeat(auto-fit, minmax(250px, 1fr))",
-                    "gap": "1rem",
-                    "margin-top": "1rem",
-                },
+                "class_name": "status-cards dashboard-grid",
             },
             # Card Ejecuciones
             html.article(
                 {"class_name": "card"},
                 html.header(html.h3("Ejecuciones Activas")),
                 html.p(
-                    {"style": {"font-size": "0.85rem", "color": "var(--pico-muted-color)", "margin-bottom": "0.5rem"}},
+                    {"class_name": "metric-description"},
                     "Ejecuciones en curso en este momento",
                 ),
                 html.div(
-                    {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
+                    {"class_name": "metric-value"},
                     ejecuciones.get("TotalActivas", 0),
                 ),
-                html.div({"class_name": "metric-label"}, f"{ejecuciones.get('RobotsActivos', 0)} robots activos"),
+                html.div({"class_name": "metric-label"}, f"{(ejecuciones.get('RobotsActivos') or 0)} robots activos"),
                 html.footer(
-                    {"style": {"font-size": "0.8rem", "color": "var(--pico-muted-color)"}},
-                    f"{ejecuciones.get('EquiposOcupados', 0)} equipos ocupados",
+                    {"class_name": "metric-footer"},
+                    f"{(ejecuciones.get('EquiposOcupados') or 0)} equipos ocupados",
                 ),
             ),
             # Card Robots - Mejorada con distinción de programados
@@ -163,8 +161,8 @@ def StatusDashboard():
                 {"class_name": "card"},
                 html.header(html.h3("Robots")),
                 html.div(
-                    {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
-                    f"{robots.get('RobotsOnline', 0)} / {robots.get('TotalRobots', 0)}",
+                    {"class_name": "metric-value"},
+                    f"{(robots.get('RobotsOnline') or 0)} / {(robots.get('TotalRobots') or 0)}",
                 ),
                 html.div({"class_name": "metric-label"}, "Online / Total"),
                 html.div(
@@ -178,17 +176,17 @@ def StatusDashboard():
                         }
                     },
                     html.div(
-                        {"style": {"color": "var(--pico-color-green-600)"}},
-                        f"🟢 {robots.get('RobotsActivosOnline', 0)} activos online",
+                        {"class_name": "text-green"},
+                        f"🟢 {(robots.get('RobotsActivosOnline') or 0)} activos online",
                     ),
                     html.div(
-                        {"style": {"color": "var(--pico-color-blue-600)"}},
-                        f"📅 {robots.get('RobotsActivosProgramados', 0)} programados",
+                        {"class_name": "text-blue"},
+                        f"📅 {(robots.get('RobotsActivosProgramados') or 0)} programados",
                     ),
                 ),
                 html.footer(
-                    {"style": {"font-size": "0.8rem", "color": "var(--pico-muted-color)"}},
-                    f"{robots.get('RobotsActivos', 0)} activos • {robots.get('RobotsOffline', 0)} offline",
+                    {"class_name": "metric-footer"},
+                    f"{(robots.get('RobotsActivos') or 0)} activos • {(robots.get('RobotsOffline') or 0)} offline",
                 ),
             ),
             # Card Equipos
@@ -196,29 +194,103 @@ def StatusDashboard():
                 {"class_name": "card"},
                 html.header(html.h3("Equipos")),
                 html.p(
-                    {"style": {"font-size": "0.85rem", "color": "var(--pico-muted-color)", "margin-bottom": "0.5rem"}},
+                    {"class_name": "metric-description"},
                     "Equipos disponibles y configuración de balanceo dinámico",
                 ),
                 html.div(
-                    {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
-                    f"{equipos.get('EquiposActivos', 0)} / {equipos.get('TotalEquipos', 0)}",
+                    {"class_name": "metric-value"},
+                    f"{(equipos.get('EquiposActivos') or 0)} / {(equipos.get('TotalEquipos') or 0)}",
                 ),
                 html.div({"class_name": "metric-label"}, "Activos / Total"),
                 html.footer(
-                    {"style": {"font-size": "0.8rem", "color": "var(--pico-muted-color)"}},
-                    f"{equipos.get('EquiposBalanceables', 0)} balanceables",
+                    {"class_name": "metric-footer"},
+                    f"{(equipos.get('EquiposBalanceables') or 0)} balanceables",
+                ),
+            ),
+        ),
+        # --- TABLA DE EJECUCIONES RECIENTES ---
+        html.div(
+            {"class_name": "recent-executions-section", "style": {"margin-top": "2rem"}},
+            html.h3("Estado de Ejecuciones Recientes"),
+            html.table(
+                {"class_name": "dashboard-table striped"},
+                html.thead(
+                    html.tr(
+                        html.th("Robot"),
+                        html.th("Estado"),
+                        html.th("Fecha Inicio"),
+                        html.th("Mensaje"),
+                        html.th("Origen"),
+                    )
+                ),
+                html.tbody(
+                    *[
+                        html.tr(
+                            html.td(item.get("Robot", "N/A")),
+                            html.td(
+                                {
+                                    "style": {
+                                        "color": "var(--pico-color-red-500)"
+                                        if item.get("Estado") in ["ERROR", "FINISHED_NOT_OK"]
+                                        else "inherit",
+                                        "font-weight": "bold"
+                                        if item.get("Estado") in ["ERROR", "FINISHED_NOT_OK"]
+                                        else "normal",
+                                    }
+                                },
+                                item.get("Estado", "N/A"),
+                            ),
+                            html.td(
+                                str(item.get("FechaInicio", "")).replace("T", " ")[:19]
+                                if item.get("FechaInicio")
+                                else "N/A"
+                            ),
+                            html.td(
+                                {
+                                    "style": {
+                                        "max-width": "300px",
+                                        "overflow": "hidden",
+                                        "text-overflow": "ellipsis",
+                                        "white-space": "nowrap",
+                                    }
+                                },
+                                item.get("MensajeError") or "-",
+                            ),
+                            html.td(
+                                html.span(
+                                    {
+                                        "class_name": "badge",
+                                        "style": {
+                                            "background-color": "var(--pico-color-blue-600)"
+                                            if item.get("Origen") == "Activa"
+                                            else "var(--pico-color-grey-600)",
+                                            "color": "white",
+                                            "padding": "0.2rem 0.5rem",
+                                            "border-radius": "4px",
+                                            "font-size": "0.8rem",
+                                        },
+                                    },
+                                    item.get("Origen", "N/A"),
+                                )
+                            ),
+                        )
+                        for item in executions_data
+                    ]
+                    if executions_data
+                    else [
+                        html.tr(
+                            html.td(
+                                {"colspan": 5, "style": {"text-align": "center"}},
+                                "No hay ejecuciones recientes para mostrar.",
+                            )
+                        )
+                    ]
                 ),
             ),
         ),
         html.footer(
             {
                 "class_name": "last-update",
-                "style": {
-                    "margin-top": "1rem",
-                    "font-size": "0.9rem",
-                    "color": "var(--pico-muted-color)",
-                    "text-align": "center",
-                },
             },
             f"Última actualización: {timestamp}",
         ),

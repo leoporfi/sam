@@ -14,12 +14,14 @@ IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[An
 BEGIN
 EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[AnalisisTiemposEjecucionRobots] AS'
 END
+GO
 
 ALTER PROCEDURE [dbo].[AnalisisTiemposEjecucionRobots]
     @ExcluirPorcentajeInferior DECIMAL(3,2) = 0.15,  -- 15% por defecto
     @ExcluirPorcentajeSuperior DECIMAL(3,2) = 0.85,  -- 85% por defecto
     @IncluirSoloCompletadas BIT = 1,                   -- 1 = Solo completadas, 0 = Todos los estados
-    @MesesHaciaAtras INT = 1
+    @MesesHaciaAtras INT = 1,
+    @DefaultRepeticiones INT = 1                     -- Valor por defecto si no se encuentra en Parametros
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -81,13 +83,11 @@ BEGIN
             eu.Estado,
             eu.Origen,
             -- Extraer número de repeticiones del JSON en Robots.Parametros
-            -- Si no existe o es inválido, usar 1 por defecto
+            -- Si no existe o es inválido, usar el valor por defecto pasado por parámetro
             CASE
                 WHEN r.Parametros IS NOT NULL AND r.Parametros != ''
-                THEN TRY_CAST(
-                    JSON_VALUE(r.Parametros, '$.in_NumRepeticion.number') AS INT
-                )
-                ELSE 1
+                THEN COALESCE(TRY_CAST(JSON_VALUE(r.Parametros, '$.in_NumRepeticion.number') AS INT), @DefaultRepeticiones)
+                ELSE @DefaultRepeticiones
             END AS NumRepeticiones,
             -- Usar FechaInicioReal si está disponible, sino FechaInicio
             COALESCE(eu.FechaInicioReal, eu.FechaInicio) AS FechaInicioCalculada,

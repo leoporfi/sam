@@ -1,0 +1,148 @@
+/* Dashboard Styles */
+
+/* Header */
+.dashboard-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.dashboard-title {
+    margin: 0;
+    flex: 1;
+}
+
+.dashboard-refresh-btn {
+    padding: 0.375rem 0.5rem;
+    min-width: auto;
+    font-size: 0.9rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Description */
+.dashboard-description {
+    color: var(--pico-muted-color);
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}
+
+/* Alerts */
+.dashboard-alert {
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+
+.dashboard-alert-yellow {
+    color: var(--pico-color-yellow-600);
+    background-color: var(--pico-color-yellow-50);
+    border-left: 3px solid var(--pico-color-yellow-500);
+}
+
+/* Filters */
+.dashboard-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+    align-items: end;
+}
+
+/* Grid Layout for Cards */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+/* Metric Cards */
+.metric-card {
+    /* Inherits card styles from PicoCSS or custom.css */
+}
+
+.metric-description {
+    font-size: 0.85rem;
+    color: var(--pico-muted-color);
+    margin-bottom: 0.5rem;
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+.metric-label {
+    /* Often used for secondary info below value */
+}
+
+.metric-footer {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    margin-top: 0.5rem;
+}
+
+/* Tables */
+.dashboard-table-container {
+    overflow-x: auto;
+}
+
+.dashboard-table {
+    width: 100%;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-green {
+    color: var(--pico-color-green-600);
+}
+
+.text-red {
+    color: var(--pico-color-red-600);
+}
+
+.text-blue {
+    color: var(--pico-color-blue-600);
+}
+
+/* Status Specific */
+.status-loading {
+    /* Add specific loading styles if needed */
+}
+
+.status-error {
+    color: var(--pico-color-red-600);
+}
+
+.last-update {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: var(--pico-muted-color);
+    text-align: center;
+}
+
+.chart-container {
+    margin-top: 2rem;
+}
+
+.metrics-table {
+    margin-top: 2rem;
+}
+.status-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+}

@@ -652,7 +652,7 @@ def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
                             "margin-top": "0.5rem",
                         }
                     },
-                    "Visualización en tiempo real del estado del sistema, rendimiento de callbacks y actividad del balanceador de recursos.",
+                    "Visualización en tiempo real del estado del sistema, rendimiento de callbacks y actividad del balanceador de equipos.",
                 ),
             ),
             html.div(
@@ -788,6 +788,7 @@ head = html.head(
     html.link({"rel": "stylesheet", "href": "/static/css/all.min.css"}),
     html.link({"rel": "stylesheet", "href": "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"}),
     html.link({"rel": "stylesheet", "href": "/static/custom.css"}),
+    html.link({"rel": "stylesheet", "href": "/static/css/dashboard.css"}),
     # Chart.js para gráficos
     html.script(
         {
