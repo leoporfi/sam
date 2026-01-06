@@ -17,11 +17,11 @@
 **Título:** Visión General del Sistema
 
 **Contenido:**
-SAM es un orquestador inteligente que optimiza la ejecución de robots RPA en Automation 360, gestionando recursos de forma dinámica y eficiente.
+SAM es un orquestador inteligente que optimiza la ejecución de robots RPA en Automation 360, gestionando equipos (VMs) de forma dinámica y eficiente.
 
 **Componentes principales:**
 - 🎯 **Lanzador**: Motor de ejecución
-- ⚖️ **Balanceador**: Optimizador de recursos
+- ⚖️ **Balanceador**: Optimizador de equipos (VMs)
 - 📞 **Callback**: Notificaciones en tiempo real
 - 🖥️ **Web**: Consola de administración
 
@@ -52,7 +52,7 @@ SAM es un orquestador inteligente que optimiza la ejecución de robots RPA en Au
 ---
 
 ## DIAPOSITIVA 4: Servicio Balanceador - La Inteligencia
-**Título:** Balanceador: Optimización de Recursos
+**Título:** Balanceador: Optimización de Equipos
 
 **¿Qué hace?**
 Ajusta dinámicamente la asignación de equipos según la demanda de trabajo pendiente.

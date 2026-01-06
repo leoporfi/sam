@@ -38,7 +38,9 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
         set_is_loading(True)
         try:
             await on_save(form_data)
-            notification_ctx["show_notification"](f"Pool {'actualizado' if is_edit_mode else 'creado'} con éxito.", "success")
+            notification_ctx["show_notification"](
+                f"Pool {'actualizado' if is_edit_mode else 'creado'} con éxito.", "success"
+            )
             on_close()
         except asyncio.CancelledError:
             raise
@@ -297,7 +299,7 @@ def AssignmentBox(
 
 @component
 def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_selected_ids: Callable):
-    """Renderiza una lista de recursos seleccionables con búsqueda."""
+    """Renderiza una lista de equipos seleccionables con búsqueda."""
     search, set_search = use_state("")
     sorted_items = use_memo(lambda: sorted(items, key=lambda x: x.get("Nombre", "").lower()), [items])
     filtered_items = use_memo(

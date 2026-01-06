@@ -104,7 +104,7 @@ Estas reglas se derivan del análisis de los Stored Procedures (SAM.sql) y la l�
 
 ### **4.3. Reglas del Servicio Balanceador (Inteligencia)**
 
-1. **Regla de Preemption (Robo de Recursos):**
+1. **Regla de Preemption (Robo de Equipos):**
    * Si el Pool está lleno, un robot de **Alta Prioridad** (ej. valor 1\) forzará la desasignación de equipos de un robot de **Baja Prioridad** (ej. valor 10), incluso si este último tiene trabajo pendiente.
 2. **Regla de Cooling (Enfriamiento):**
    * Tras modificar la asignación de un Pool (agregar/quitar equipos), ese Pool entra en estado de "Cooling" (ej. 5 minutos). Durante este tiempo, se ignoran cambios en la demanda para evitar oscilaciones (flapping).

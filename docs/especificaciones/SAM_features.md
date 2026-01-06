@@ -41,18 +41,18 @@ And el servicio actualiza la columna FechaUltimoUNKNOWN con la fecha y hora actu
 And el servicio incrementa IntentosConciliadorFallidos
 And la columna FechaFin para la ejecución 123 DEBE permanecer NULL
 
-### **Feature: Gestión Dinámica de Recursos (Servicio Balanceador)**
+### **Feature: Gestión Dinámica de Equipos (Servicio Balanceador)**
 
 @core @balanceador
 
-Como orquestador táctico, el **Servicio Balanceador** debe asignar y desasignar recursos (VMs) de forma inteligente para optimizar su uso basándose en la carga de trabajo.
+Como orquestador táctico, el **Servicio Balanceador** debe asignar y desasignar equipos (VMs) de forma inteligente para optimizar su uso basándose en la carga de trabajo.
 
 Background:
 Given un conjunto de equipos disponibles para balanceo dinámico
 And un conjunto de robots configurados con prioridades y límites de equipos
 And una carga de trabajo definida por la cantidad de tickets pendientes
-Scenario: Asignación de Recursos por Aumento de Demanda
-Si la carga de trabajo de un robot supera la capacidad actual, el sistema debe asignarle nuevos recursos.
+Scenario: Asignación de Equipos (VMs) por Aumento de Demanda
+Si la carga de trabajo de un robot supera la capacidad actual, el sistema debe asignarle nuevos equipos.
 Given el "Robot_Contable" tiene 100 tickets pendientes
 And su configuración permite un máximo de 5 equipos
 And actualmente tiene solo 1 equipo asignado

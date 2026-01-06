@@ -52,7 +52,7 @@
             {
               "concept": "No Crear, Recibir",
               "explanation": "Una clase o función no debe crear sus propias dependencias (ej. `db = DatabaseConnector()`). En su lugar, debe recibirlas como argumentos en su constructor (`__init__`) o en sus parámetros.",
-              "rationale": "Permite reemplazar dependencias por 'mocks' en las pruebas unitarias, centraliza la gestión de recursos (evitando múltiples conexiones a la BD) y hace las dependencias de una clase explícitas.",
+              "rationale": "Permite reemplazar dependencias por 'mocks' en las pruebas unitarias, centraliza la gestión de equipos (evitando múltiples conexiones a la BD) y hace las dependencias de una clase explícitas.",
               "exampleCode": {
                 "language": "python",
                 "code": "# INCORRECTO\nclass LogicaDeNegocio:\n    def __init__(self):\n        self.db = DatabaseConnector(...)\n\n# CORRECTO\nclass LogicaDeNegocio:\n    def __init__(self, db_connector: DatabaseConnector):\n        self.db_connector = db_connector"

@@ -8,7 +8,7 @@ El **Servicio Balanceador** es el estratega del ecosistema SAM. Mientras el Lanz
 
 Su función principal es monitorear la "Demanda" (cuánto trabajo pendiente tiene cada robot) y ajustar la "Oferta" (cuántos equipos tiene asignados ese robot en su Pool) en tiempo real.
 
-**Analogía Funcional:** Mientras que el Servicio Lanzador actúa como el agente operativo encargado de la ejecución individual de tareas (similar a un conductor asignado a un servicio), el Servicio Balanceador opera como un centro de control logístico. Su función es determinar estratégicamente la asignación óptima de recursos a cada sector, basándose en el análisis en tiempo real del volumen de demanda y la capacidad disponible.
+**Analogía Funcional:** Mientras que el Servicio Lanzador actúa como el agente operativo encargado de la ejecución individual de tareas (similar a un conductor asignado a un servicio), el Servicio Balanceador opera como un centro de control logístico. Su función es determinar estratégicamente la asignación óptima de recursos(equipos) a cada sector, basándose en el análisis en tiempo real del volumen de demanda y la capacidad disponible.
 
 ## **2\. Arquitectura y Componentes**
 
@@ -60,10 +60,10 @@ El mecanismo de **Preemption** asegura que los procesos críticos (Prioridad Alt
 
 ### **D. Aislamiento de Pool Estricto**
 
-Esta configuración define si los recursos de un Pool son exclusivos o compartidos. **Importante:** Este valor se lee de la base de datos (tabla ConfiguracionSistema), lo que permite cambiar la estrategia sin reiniciar el servicio.
+Esta configuración define si los equipos de un Pool son exclusivos o compartidos. **Importante:** Este valor se lee de la base de datos (tabla ConfiguracionSistema), lo que permite cambiar la estrategia sin reiniciar el servicio.
 
 * **Modo Estricto (true):** "Lo mío es mío". Los equipos de un Pool solo atienden a los robots explícitamente asignados a ese Pool. Si el Pool de "Finanzas" está vacío, sus máquinas se quedan ociosas aunque "RRHH" tenga cola de espera.
-* **Modo Flexible (false):** "Solidaridad de recursos". Si un Pool tiene máquinas ociosas (sin tickets pendientes en sus robots asignados), el Balanceador puede tomarlas prestadas temporalmente para asignarlas a robots de otro Pool con alta demanda.
+* **Modo Flexible (false):** "Solidaridad de equipos". Si un Pool tiene máquinas ociosas (sin tickets pendientes en sus robots asignados), el Balanceador puede tomarlas prestadas temporalmente para asignarlas a robots de otro Pool con alta demanda.
 
 ## **4\. Ciclo de Ejecución**
 

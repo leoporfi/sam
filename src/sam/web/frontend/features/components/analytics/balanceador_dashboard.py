@@ -112,27 +112,13 @@ def BalanceadorDashboard():
         {"class_name": "balanceador-dashboard"},
         html.header(
             {
-                "style": {
-                    "display": "flex",
-                    "align-items": "baseline",
-                    "gap": "0.75rem",
-                    "flex-wrap": "wrap",
-                }
+                "class_name": "dashboard-header",
             },
-            html.h2({"style": {"margin": "0", "flex": "1"}}, "Análisis del Balanceador de Recursos"),
+            html.h2({"class_name": "dashboard-title"}, "Análisis del Balanceador de Equipos"),
             html.button(
                 {
                     "on_click": handle_refresh,
-                    "class_name": "secondary",
-                    "style": {
-                        "padding": "0.375rem 0.5rem",
-                        "min-width": "auto",
-                        "font-size": "0.9rem",
-                        "line-height": "1",
-                        "display": "flex",
-                        "align-items": "center",
-                        "justify-content": "center",
-                    },
+                    "class_name": "secondary dashboard-refresh-btn",
                     "title": "Actualizar",
                     "aria-label": "Actualizar dashboard del balanceador",
                 },
@@ -141,39 +127,20 @@ def BalanceadorDashboard():
         ),
         html.p(
             {
-                "style": {
-                    "color": "var(--pico-muted-color)",
-                    "margin-bottom": "1rem",
-                    "font-size": "0.95rem",
-                }
+                "class_name": "dashboard-description",
             },
-            "Monitorea la actividad del balanceador automático de recursos. Muestra asignaciones y desasignaciones de equipos a robots, análisis por robot, y detección de thrashing (cambios excesivos). Ayuda a optimizar la distribución de recursos y detectar patrones problemáticos.",
+            "Monitorea la actividad del balanceador automático de equipos. Muestra asignaciones y desasignaciones de equipos a robots, análisis por robot, y detección de thrashing (cambios excesivos). Ayuda a optimizar la distribución de equipos y detectar patrones problemáticos.",
         ),
         html.p(
             {
-                "style": {
-                    "color": "var(--pico-color-green-600)",
-                    "margin-bottom": "1rem",
-                    "font-size": "0.85rem",
-                    "padding": "0.5rem",
-                    "background-color": "var(--pico-color-green-50)",
-                    "border-left": "3px solid var(--pico-color-green-500)",
-                    "border-radius": "4px",
-                }
+                "class_name": "dashboard-alert dashboard-alert-yellow",
             },
             "ℹ️ Datos históricos: Este dashboard consulta la tabla HistoricoBalanceo que mantiene un registro completo de todas las acciones del balanceador. No hay límite de tiempo para estos datos.",
         ),
         # Filtros de fecha
         html.div(
             {
-                "class_name": "filters",
-                "style": {
-                    "display": "grid",
-                    "grid-template-columns": "1fr 1fr auto",
-                    "gap": "1rem",
-                    "margin": "1rem 0",
-                    "align-items": "end",
-                },
+                "class_name": "filters dashboard-filters",
             },
             html.div(
                 html.label("Fecha Inicio:"),
@@ -216,19 +183,13 @@ def BalanceadorDashboard():
         # Métricas principales
         html.div(
             {
-                "class_name": "metrics-grid",
-                "style": {
-                    "display": "grid",
-                    "grid-template-columns": "repeat(auto-fit, minmax(250px, 1fr))",
-                    "gap": "1rem",
-                    "margin-top": "1rem",
-                },
+                "class_name": "metrics-grid dashboard-grid",
             },
             html.article(
                 {"class_name": "card"},
                 html.header(html.h3("Total Acciones")),
                 html.div(
-                    {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
+                    {"class_name": "metric-value"},
                     metricas.get("TotalAcciones", 0),
                 ),
                 html.div(
@@ -240,20 +201,20 @@ def BalanceadorDashboard():
                 {"class_name": "card"},
                 html.header(html.h3("Robots Afectados")),
                 html.div(
-                    {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
+                    {"class_name": "metric-value"},
                     metricas.get("RobotsAfectados", 0),
                 ),
                 html.div(
                     {"class_name": "metric-label"},
-                    f"Promedio tickets: {metricas.get('PromedioTicketsPendientes', 0):.1f}",
+                    f"Promedio tickets: {(metricas.get('PromedioTicketsPendientes') or 0):.1f}",
                 ),
             ),
             html.article(
                 {"class_name": "card"},
                 html.header(html.h3("Movimiento Neto")),
                 html.div(
-                    {"class_name": "metric-value", "style": {"font-size": "2rem", "font-weight": "bold"}},
-                    f"{metricas.get('PromedioMovimientoNeto', 0):.1f}",
+                    {"class_name": "metric-value"},
+                    f"{(metricas.get('PromedioMovimientoNeto') or 0):.1f}",
                 ),
                 html.div(
                     {"class_name": "metric-label"},
@@ -263,35 +224,27 @@ def BalanceadorDashboard():
         ),
         # Estado actual
         html.div(
-            {"class_name": "estado-actual", "style": {"margin-top": "2rem"}},
+            {"class_name": "estado-actual chart-container"},
             html.h3("Estado Actual del Sistema"),
             html.div(
                 {
-                    "style": {
-                        "display": "grid",
-                        "grid-template-columns": "repeat(auto-fit, minmax(200px, 1fr))",
-                        "gap": "1rem",
-                    }
+                    "class_name": "dashboard-grid",
                 },
                 html.article(
                     {"class_name": "card"},
                     html.header(html.h4("Robots Activos")),
-                    html.div(
-                        {"style": {"font-size": "1.5rem", "font-weight": "bold"}}, estado_actual.get("RobotsActivos", 0)
-                    ),
+                    html.div({"class_name": "status-value"}, estado_actual.get("RobotsActivos", 0)),
                 ),
                 html.article(
                     {"class_name": "card"},
                     html.header(html.h4("Robots Online")),
-                    html.div(
-                        {"style": {"font-size": "1.5rem", "font-weight": "bold"}}, estado_actual.get("RobotsOnline", 0)
-                    ),
+                    html.div({"class_name": "status-value"}, estado_actual.get("RobotsOnline", 0)),
                 ),
                 html.article(
                     {"class_name": "card"},
                     html.header(html.h4("Equipos Activos")),
                     html.div(
-                        {"style": {"font-size": "1.5rem", "font-weight": "bold"}},
+                        {"class_name": "status-value"},
                         estado_actual.get("EquiposActivos", 0),
                     ),
                 ),
@@ -299,7 +252,7 @@ def BalanceadorDashboard():
                     {"class_name": "card"},
                     html.header(html.h4("Ejecuciones Activas")),
                     html.div(
-                        {"style": {"font-size": "1.5rem", "font-weight": "bold"}},
+                        {"class_name": "status-value"},
                         estado_actual.get("EjecucionesActivas", 0),
                     ),
                 ),
@@ -307,7 +260,7 @@ def BalanceadorDashboard():
         ),
         # Gráfico de resumen diario
         html.div(
-            {"class_name": "chart-container", "style": {"margin-top": "2rem"}},
+            {"class_name": "chart-container"},
             html.h3("Resumen Diario de Acciones"),
             BarChart(
                 chart_id="balanceador-resumen-chart",
@@ -332,7 +285,7 @@ def BalanceadorDashboard():
         ),
         # Gráfico de análisis por robot
         html.div(
-            {"class_name": "chart-container", "style": {"margin-top": "2rem"}},
+            {"class_name": "chart-container"},
             html.h3("Top 10 Robots por Actividad"),
             BarChart(
                 chart_id="balanceador-robots-chart",
@@ -352,7 +305,7 @@ def BalanceadorDashboard():
         ),
         # Tabla de análisis por robot
         html.div(
-            {"class_name": "analisis-robots", "style": {"margin-top": "2rem"}},
+            {"class_name": "analisis-robots metrics-table"},
             html.h3("Análisis por Robot"),
             html.table(
                 {"role": "table"},
@@ -373,8 +326,8 @@ def BalanceadorDashboard():
                             html.td(robot.get("TotalAcciones", 0)),
                             html.td(robot.get("Asignaciones", 0)),
                             html.td(robot.get("Desasignaciones", 0)),
-                            html.td(f"{robot.get('PromedioEquiposDespues', 0):.1f}"),
-                            html.td(f"{robot.get('PromedioTickets', 0):.1f}"),
+                            html.td(f"{(robot.get('PromedioEquiposDespues') or 0):.1f}"),
+                            html.td(f"{(robot.get('PromedioTickets') or 0):.1f}"),
                         )
                         for robot in analisis_robots[:10]
                     ]
