@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import pyodbc
 
 from sam.common.a360_client import AutomationAnywhereClient
+from sam.common.config_manager import ConfigManager
 from sam.common.database import DatabaseConnector
 from sam.common.sincronizador_comun import SincronizadorComun
 
@@ -1156,6 +1157,15 @@ def get_tiempos_ejecucion_dashboard(
     if meses_hacia_atras is not None:
         params["MesesHaciaAtras"] = meses_hacia_atras
 
+    # Obtener valor por defecto de repeticiones desde configuración
+    try:
+        cfg_lanzador = ConfigManager.get_lanzador_config()
+        default_repeticiones = int(cfg_lanzador.get("repeticiones", 1))
+    except Exception:
+        default_repeticiones = 1
+
+    params["DefaultRepeticiones"] = default_repeticiones
+
     result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.AnalisisTiemposEjecucionRobots", params)
 
     # El SP retorna un solo result set
@@ -1187,3 +1197,37 @@ def resolver_robot_id(db: DatabaseConnector, nombre_externo: str, proveedor: str
         return row_map[0]["RobotId"]
 
     return None
+
+
+def get_recent_executions(db: DatabaseConnector, limit: int = 50, critical_only: bool = True) -> List[Dict]:
+    """
+    Obtiene las ejecuciones recientes.
+    Si critical_only es True, filtra por estados críticos (ERROR, FINISHED_NOT_OK).
+    """
+    # Definir estados críticos
+    critical_statuses = "'ERROR', 'FINISHED_NOT_OK'"
+
+    # Query corregida usando dbo.Ejecuciones
+    query = f"""
+        SELECT TOP {limit}
+            e.EjecucionId AS Id,
+            r.Robot,
+            e.Estado,
+            e.FechaInicio,
+            e.FechaFin,
+            NULL AS MensajeError, -- Por ahora no tenemos columna de error explícita en esta tabla
+            CASE WHEN e.FechaFin IS NULL THEN 'Activa' ELSE 'Historico' END AS Origen
+        FROM dbo.Ejecuciones e
+        LEFT JOIN dbo.Robots r ON e.RobotId = r.RobotId
+    """
+
+    if critical_only:
+        query += f" WHERE e.Estado IN ({critical_statuses})"
+
+    query += " ORDER BY e.FechaInicio DESC"
+
+    try:
+        return db.ejecutar_consulta(query, es_select=True)
+    except Exception as e:
+        logger.error(f"Error obteniendo ejecuciones recientes: {e}", exc_info=True)
+        return []
