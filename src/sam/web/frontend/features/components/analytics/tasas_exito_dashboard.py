@@ -76,20 +76,24 @@ def TasasExitoDashboard():
     top_errores = dashboard_data.get("top_errores", []) if dashboard_data else []
     detalle_robots = dashboard_data.get("detalle_robots", []) if dashboard_data else []
 
-    # Pie Chart: Estados
+    # Pie Chart: Estados de A360
     pie_labels = [item["Estado"] for item in resumen_estados]
     pie_values = [item["Cantidad"] for item in resumen_estados]
-    # Colores: FINISHED -> Verde, ERROR -> Rojo, FINISHED_NOT_OK -> Naranja, Otros -> Gris
+    # Colores basados en estados de A360:
+    # - Verde: RUN_COMPLETED, COMPLETED
+    # - Rojo: RUN_FAILED, DEPLOY_FAILED
+    # - Naranja: RUN_ABORTED
+    # - Gris: Otros
     pie_colors = []
     for estado in pie_labels:
-        if estado == "FINISHED":
-            pie_colors.append("rgba(46, 204, 113, 0.7)")
-        elif estado == "ERROR":
-            pie_colors.append("rgba(231, 76, 60, 0.7)")
-        elif estado == "FINISHED_NOT_OK":
-            pie_colors.append("rgba(243, 156, 18, 0.7)")
+        if estado in ("RUN_COMPLETED", "COMPLETED"):
+            pie_colors.append("rgba(46, 204, 113, 0.7)")  # Verde
+        elif estado in ("RUN_FAILED", "DEPLOY_FAILED"):
+            pie_colors.append("rgba(231, 76, 60, 0.7)")  # Rojo
+        elif estado == "RUN_ABORTED":
+            pie_colors.append("rgba(243, 156, 18, 0.7)")  # Naranja
         else:
-            pie_colors.append("rgba(149, 165, 166, 0.7)")
+            pie_colors.append("rgba(149, 165, 166, 0.7)")  # Gris
 
     # Bar Chart: Top Errores (Tipos)
     bar_labels = [item["MensajeError"] for item in top_errores]  # MensajeError es alias de Estado en SP
@@ -112,7 +116,7 @@ def TasasExitoDashboard():
         ),
         html.p(
             {"class_name": "dashboard-description"},
-            "Visualiza la proporción de ejecuciones exitosas vs. fallidas y los tipos de errores más frecuentes.",
+            "Analiza el éxito de SAM en lanzar y ejecutar robots. Mide fallos técnicos de Automation Anywhere (despliegue, ejecución, abortos), NO errores de procesamiento de tickets de negocio.",
         ),
         # Filtros
         html.div(
@@ -157,10 +161,10 @@ def TasasExitoDashboard():
             # Pie Chart
             html.div(
                 {"class_name": "chart-container"},
-                html.h3("Distribución de Estados"),
+                html.h3("Distribución de Estados de A360"),
                 PieChart(
                     chart_id="success-pie-chart",
-                    title="Estados de Ejecución",
+                    title="Estados de Ejecución (A360)",
                     labels=pie_labels if pie_labels else ["Sin datos"],
                     datasets=[
                         {
@@ -176,7 +180,7 @@ def TasasExitoDashboard():
             # Bar Chart (Top Errores)
             html.div(
                 {"class_name": "chart-container"},
-                html.h3("Top Tipos de Fallo"),
+                html.h3("Top Tipos de Fallo Técnico (A360)"),
                 BarChart(
                     chart_id="errors-bar-chart",
                     title="Cantidad",
