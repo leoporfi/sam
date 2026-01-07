@@ -13,7 +13,7 @@
 --   ERROR:  RUN_FAILED, DEPLOY_FAILED, RUN_ABORTED
 --   OTROS:  RUNNING, DEPLOYED, QUEUED (se excluyen del análisis)
 -- =============================================
-CREATE OR ALTER PROCEDURE [dbo].[AnalisisTasasExito]
+CREATE OR ALTER PROCEDURE [dbo].[Analisis_TasasExito]
     @FechaInicio DATETIME = NULL,
     @FechaFin DATETIME = NULL,
     @RobotId INT = NULL

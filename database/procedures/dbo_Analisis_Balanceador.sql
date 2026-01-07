@@ -1,17 +1,7 @@
-SET ANSI_NULLS ON
-SET QUOTED_IDENTIFIER ON
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerDashboardBalanceador]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerDashboardBalanceador] AS'
-END
--- =============================================
--- Author:      Sistema SAM
--- Create date: 2025-08-22
--- Description: Genera datos para el dashboard de análisis del balanceador
 --              Proporciona métricas de rendimiento y actividad del sistema
 -- Modified:    2025-10-16 - Corrección de duplicación de robots
 -- =============================================
-ALTER PROCEDURE [dbo].[ObtenerDashboardBalanceador]
+CREATE OR ALTER PROCEDURE [dbo].[Analisis_Balanceador]
     @FechaInicio DATETIME2(0) = NULL,
     @FechaFin DATETIME2(0) = NULL,
     @PoolId INT = NULL

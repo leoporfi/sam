@@ -1,22 +1,4 @@
-SET ANSI_NULLS ON
-SET QUOTED_IDENTIFIER ON
--- =============================================
--- Stored Procedure: AnalisisTiemposEjecucionRobots (MEJORADO)
--- Descripción: Analiza tiempos de ejecución considerando:
---              - FechaInicioReal (inicio real reportado por A360)
---              - Número de repeticiones del robot (en Parametros)
---              - Datos históricos (Ejecuciones_Historico)
--- Autor: Sistema SAM
--- Fecha: 2025-01-XX (Mejora)
--- =============================================
-
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[AnalisisTiemposEjecucionRobots]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[AnalisisTiemposEjecucionRobots] AS'
-END
-GO
-
-ALTER PROCEDURE [dbo].[AnalisisTiemposEjecucionRobots]
+CREATE OR ALTER PROCEDURE [dbo].[Analisis_TiemposEjecucion]
     @ExcluirPorcentajeInferior DECIMAL(3,2) = 0.15,  -- 15% por defecto
     @ExcluirPorcentajeSuperior DECIMAL(3,2) = 0.85,  -- 85% por defecto
     @IncluirSoloCompletadas BIT = 1,                   -- 1 = Solo completadas, 0 = Todos los estados

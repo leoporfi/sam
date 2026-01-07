@@ -1082,7 +1082,7 @@ def get_callbacks_dashboard(
         "IncluirDetalleHorario": incluir_detalle_horario,
     }
 
-    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.ObtenerDashboardCallbacks", params)
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.Analisis_Callbacks", params)
 
     return {
         "metricas_generales": result_sets[0][0] if result_sets and len(result_sets) > 0 and result_sets[0] else {},
@@ -1109,7 +1109,7 @@ def get_balanceador_dashboard(
     if pool_id:
         params["PoolId"] = pool_id
 
-    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.ObtenerDashboardBalanceador", params)
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.Analisis_Balanceador", params)
 
     return {
         "metricas_generales": result_sets[0][0] if result_sets and len(result_sets) > 0 and result_sets[0] else {},
@@ -1166,7 +1166,7 @@ def get_tiempos_ejecucion_dashboard(
 
     params["DefaultRepeticiones"] = default_repeticiones
 
-    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.AnalisisTiemposEjecucionRobots", params)
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.Analisis_TiemposEjecucion", params)
 
     # El SP retorna un solo result set
     return result_sets[0] if result_sets and len(result_sets) > 0 else []
@@ -1249,7 +1249,7 @@ def get_utilization_analysis(
         params["FechaFin"] = fecha_fin
 
     # El SP retorna un solo result set
-    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.AnalisisUtilizacionRecursos", params)
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.Analisis_UtilizacionRecursos", params)
     return result_sets[0] if result_sets and len(result_sets) > 0 else []
 
 
@@ -1272,7 +1272,7 @@ def get_temporal_patterns(
         params["RobotId"] = robot_id
 
     # El SP retorna un solo result set
-    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.AnalisisPatronesTemporales", params)
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.Analisis_PatronesTemporales", params)
     return result_sets[0] if result_sets and len(result_sets) > 0 else []
 
 
@@ -1296,7 +1296,7 @@ def get_success_analysis(
         params["RobotId"] = robot_id
 
     # El SP retorna 3 result sets
-    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.AnalisisTasasExito", params)
+    result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.Analisis_TasasExito", params)
 
     if not result_sets or len(result_sets) < 3:
         return {

@@ -1,11 +1,4 @@
-SET ANSI_NULLS ON
-SET QUOTED_IDENTIFIER ON
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[AnalisisDispersionRobot]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[AnalisisDispersionRobot] AS'
-END
-
-ALTER   PROCEDURE [dbo].[AnalisisDispersionRobot]
+CREATE OR ALTER PROCEDURE [dbo].[Analisis_Dispersion]
     @pRobot VARCHAR(100),
     @pFecha DATE = NULL,
     @pTop   INT  = NULL,

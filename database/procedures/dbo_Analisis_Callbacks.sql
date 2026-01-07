@@ -1,18 +1,8 @@
-SET ANSI_NULLS ON
-SET QUOTED_IDENTIFIER ON
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerDashboardCallbacks]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerDashboardCallbacks] AS'
-END
--- =============================================
--- Stored Procedure: ObtenerDashboardCallbacks
--- Descripción: Genera métricas agregadas sobre el rendimiento del sistema
---              de callbacks vs conciliador basándose en la vista AnalisisRendimientoCallbacks
 -- Autor: Sistema SAM
 -- Fecha: 2025-09-25
 -- =============================================
 
-ALTER PROCEDURE [dbo].[ObtenerDashboardCallbacks]
+CREATE OR ALTER PROCEDURE [dbo].[Analisis_Callbacks]
     @FechaInicio DATETIME2(0) = NULL,
     @FechaFin DATETIME2(0) = NULL,
     @RobotId INT = NULL,

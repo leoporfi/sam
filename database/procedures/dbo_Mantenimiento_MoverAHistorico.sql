@@ -1,13 +1,5 @@
-SET ANSI_NULLS ON
-SET QUOTED_IDENTIFIER ON
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[usp_MoverEjecucionesAHistorico]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[usp_MoverEjecucionesAHistorico] AS'
-END
-
-ALTER   PROCEDURE [dbo].[usp_MoverEjecucionesAHistorico]
-    -- PARÁMETROS PARA MAYOR FLEXIBILIDAD
-    @BatchSizeParam INT = 500,          -- Tamaño de los lotes para mover y purgar
+CREATE OR ALTER PROCEDURE [dbo].[Mantenimiento_MoverAHistorico]
+    @BatchSizeParam INT = 1000,         -- Tamaño del lote para mover/eliminar
     @DiasRetencionMover INT = 1,        -- Mover ejecuciones con más de X días de antigüedad
     @DiasRetencionPurga INT = 15,       -- Purgar del histórico ejecuciones con más de X días de antigüedad
     @MaxIterationsParam INT = 20000     -- Límite de seguridad para evitar bucles infinitos (muy alto por defecto)

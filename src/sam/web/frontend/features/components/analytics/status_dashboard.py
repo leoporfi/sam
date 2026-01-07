@@ -162,9 +162,9 @@ def StatusDashboard():
                 html.header(html.h3("Robots")),
                 html.div(
                     {"class_name": "metric-value"},
-                    f"{(robots.get('RobotsOnline') or 0)} / {(robots.get('TotalRobots') or 0)}",
+                    f"{(robots.get('RobotsActivos') or 0)} / {(robots.get('TotalRobots') or 0)}",
                 ),
-                html.div({"class_name": "metric-label"}, "Online / Total"),
+                html.div({"class_name": "metric-label"}, "Activos / Total"),
                 html.div(
                     {
                         "style": {

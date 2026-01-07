@@ -1,4 +1,4 @@
-CREATE OR ALTER PROCEDURE [dbo].[AnalisisUtilizacionRecursos]
+CREATE OR ALTER PROCEDURE [dbo].[Analisis_UtilizacionRecursos]
     @FechaInicio DATETIME = NULL,
     @FechaFin DATETIME = NULL
 AS
