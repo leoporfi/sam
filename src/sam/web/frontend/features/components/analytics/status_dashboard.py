@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 @component
-def StatusDashboard():
+def StatusDashboard(scroll_to=None):
     """Dashboard de estado actual del sistema."""
     status_data, set_status_data = use_state(None)
     executions_data, set_executions_data = use_state([])
@@ -210,7 +210,11 @@ def StatusDashboard():
         ),
         # --- TABLA DE EJECUCIONES RECIENTES ---
         html.div(
-            {"class_name": "recent-executions-section", "style": {"margin-top": "2rem"}},
+            {
+                "class_name": "recent-executions-section",
+                "style": {"margin-top": "2rem"},
+                "id": "recent-executions",  # ID para anclaje
+            },
             html.h3("Estado de Ejecuciones Recientes"),
             html.table(
                 {"class_name": "dashboard-table striped"},
@@ -322,4 +326,17 @@ def StatusDashboard():
             },
             f"Última actualización: {timestamp}",
         ),
+        # Script para auto-scroll si se solicita
+        html.script(
+            f"""
+            setTimeout(function() {{
+                var el = document.getElementById('{scroll_to}');
+                if(el) {{
+                    el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
+                }}
+            }}, 500);
+            """
+        )
+        if scroll_to
+        else "",
     )

@@ -99,7 +99,9 @@ def TemporalPatternsDashboard():
         rows.append(render_day_row(1, days_map[1], grid[1], max_executions))  # Domingo al final
 
         return html.div(
-            {"class_name": "heatmap-container"}, html.table({"class_name": "heatmap-table"}, html.tbody(rows))
+            {"class_name": "heatmap-container"},
+            html.table({"class_name": "heatmap-table"}, html.tbody(rows)),
+            render_insights(calculate_insights(grid, days_map)),
         )
 
     def render_day_row(day_num, day_name, day_data, max_val):
@@ -133,6 +135,129 @@ def TemporalPatternsDashboard():
             )
 
         return html.tr(cells)
+
+    def calculate_insights(grid, days_map):
+        """Calcula insights automáticos basados en los datos del grid."""
+        if not grid:
+            return None
+
+        # 1. Día Pico
+        day_totals = {day: sum(grid[day][h]["count"] for h in range(24)) for day in grid}
+        peak_day_num = max(day_totals, key=day_totals.get)
+        peak_day_val = day_totals[peak_day_num]
+        peak_day_name = days_map[peak_day_num]
+
+        # 2. Hora Pico
+        hour_totals = {h: sum(grid[d][h]["count"] for d in grid) for h in range(24)}
+        peak_hour = max(hour_totals, key=hour_totals.get)
+        peak_hour_val = hour_totals[peak_hour]
+
+        # También buscamos un día/hora específico muy bajo
+        min_cell_val = float("inf")
+        min_cell_day = 1
+        min_cell_hour = 0
+
+        for d in grid:
+            for h in range(24):
+                val = grid[d][h]["count"]
+                if val < min_cell_val:
+                    min_cell_val = val
+                    min_cell_day = d
+                    min_cell_hour = h
+
+        maintenance_window = f"{days_map[min_cell_day]} {min_cell_hour}:00"
+
+        # 4. Perfil Operativo (Diurno vs Nocturno)
+        # Diurno: 08:00 - 20:00 (12 horas)
+        # Nocturno: 20:00 - 08:00 (12 horas)
+        daytime_sum = sum(hour_totals[h] for h in range(8, 20))
+        nighttime_sum = sum(hour_totals[h] for h in list(range(0, 8)) + list(range(20, 24)))
+        total_sum = daytime_sum + nighttime_sum
+
+        profile = "Equilibrado"
+        if total_sum > 0:
+            day_pct = (daytime_sum / total_sum) * 100
+            if day_pct > 70:
+                profile = "Mayormente Diurno"
+            elif day_pct < 30:
+                profile = "Mayormente Nocturno"
+            else:
+                profile = "Intensivo 24/7"
+
+        return {
+            "peak_day": f"{peak_day_name} ({peak_day_val:,})",
+            "peak_hour": f"{peak_hour}:00 hs ({peak_hour_val:,})",
+            "maintenance": f"{maintenance_window} ({min_cell_val})",
+            "profile": f"{profile} ({int((nighttime_sum / total_sum) * 100) if total_sum > 0 else 0}% nocturno)",
+        }
+
+    def render_insights(insights):
+        if not insights:
+            return None
+
+        return html.div(
+            {"class_name": "insights-container", "style": {"margin-top": "2rem"}},
+            html.h3("🤖 Análisis Inteligente"),
+            html.div(
+                {
+                    "class_name": "insights-grid",
+                    "style": {
+                        "display": "grid",
+                        "grid-template-columns": "repeat(auto-fit, minmax(200px, 1fr))",
+                        "gap": "1rem",
+                    },
+                },
+                # Card Día Pico
+                html.div(
+                    {
+                        "class_name": "insight-card",
+                        "style": "background: var(--pico-card-background-color); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--pico-color-red-500);",
+                    },
+                    html.small({"style": "color: var(--pico-muted-color); text-transform: uppercase;"}, "📅 Día Pico"),
+                    html.div(
+                        {"style": "font-size: 1.2rem; font-weight: bold; margin-top: 0.5rem;"}, insights["peak_day"]
+                    ),
+                ),
+                # Card Hora Pico
+                html.div(
+                    {
+                        "class_name": "insight-card",
+                        "style": "background: var(--pico-card-background-color); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--pico-color-orange-500);",
+                    },
+                    html.small({"style": "color: var(--pico-muted-color); text-transform: uppercase;"}, "⏰ Hora Pico"),
+                    html.div(
+                        {"style": "font-size: 1.2rem; font-weight: bold; margin-top: 0.5rem;"}, insights["peak_hour"]
+                    ),
+                ),
+                # Card Mantenimiento
+                html.div(
+                    {
+                        "class_name": "insight-card",
+                        "style": "background: var(--pico-card-background-color); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--pico-color-green-500);",
+                    },
+                    html.small(
+                        {"style": "color: var(--pico-muted-color); text-transform: uppercase;"},
+                        "🛠️ Ventana Mantenimiento",
+                    ),
+                    html.div(
+                        {"style": "font-size: 1.2rem; font-weight: bold; margin-top: 0.5rem;"}, insights["maintenance"]
+                    ),
+                ),
+                # Card Perfil
+                html.div(
+                    {
+                        "class_name": "insight-card",
+                        "style": "background: var(--pico-card-background-color); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--pico-color-blue-500);",
+                    },
+                    html.small(
+                        {"style": "color: var(--pico-muted-color); text-transform: uppercase;"}, "🌙 Perfil Operativo"
+                    ),
+                    html.div(
+                        {"style": "font-size: 1.2rem; font-weight: bold; margin-top: 0.5rem;"}, insights["profile"]
+                    ),
+                ),
+            ),
+        )
 
     if loading and not dashboard_data:
         return html.div(

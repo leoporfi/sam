@@ -647,8 +647,12 @@ def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
     # Estado para caché de datos del resumen (evita recargas al volver)
     summary_data, set_summary_data = use_state(None)
 
-    def handle_navigate(view_name):
+    # Estado para la navegación con scroll
+    scroll_target, set_scroll_target = use_state(None)
+
+    def handle_navigate(view_name, target_section=None):
         set_current_view(view_name)
+        set_scroll_target(target_section)
 
     def handle_update_summary(new_data):
         set_summary_data(new_data)
@@ -671,7 +675,9 @@ def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
 
         content = None
         if current_view == "status":
-            content = StatusDashboard()
+            content = StatusDashboard(scroll_to=scroll_target)
+            # Limpiar el target después de usarlo (opcional, pero buena práctica para evitar saltos al refrescar)
+            # En este caso simple, lo dejamos así para que el script del componente lo maneje.
         elif current_view == "callbacks":
             content = CallbacksDashboard()
         elif current_view == "balanceador":
@@ -705,7 +711,7 @@ def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
                             "margin-top": "0.5rem",
                         }
                     },
-                    "Visualización en tiempo real del estado del sistema, rendimiento de callbacks y actividad del balanceador de equipos.",
+                    "Visión integral de SAM: Estado en tiempo real, análisis de rendimiento, patrones operativos y métricas de calidad.",
                 ),
             ),
             html.div(

@@ -183,23 +183,28 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
 
     # --- Renderizado de Cards ---
 
-    def render_card(title, icon, content, color_class, target_view, footer=None):
+    def render_card(title, icon, content, color_class, target_view, footer=None, target_section=None):
         return html.article(
             {
                 "class_name": f"summary-card {color_class}",
-                "on_click": lambda e: on_navigate(target_view),
+                "on_click": lambda e: on_navigate(target_view, target_section)
+                if target_section
+                else on_navigate(target_view),
                 "style": {
                     "cursor": "pointer",
                     "transition": "transform 0.2s, box-shadow 0.2s",
                     "position": "relative",
                     "overflow": "hidden",
                 },
-                # Hover effect inline for simplicity, or use CSS class
             },
             html.header(
                 {"style": "display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"},
                 html.h4(
-                    {"style": "margin: 0; font-size: 1rem; text-transform: uppercase; letter-spacing: 1px;"}, title
+                    {
+                        "style": "margin: 0; font-size: 1rem; text-transform: uppercase; letter-spacing: 1px;",
+                        "class_name": "card-title",  # Clase para hover effect
+                    },
+                    title,
                 ),
                 html.i({"class_name": f"fa-solid {icon}", "style": "font-size: 1.5rem; opacity: 0.8;"}),
             ),
@@ -272,6 +277,7 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
                 else "card-green",
                 "status",  # Lleva al status dashboard que tiene la tabla de ejecuciones
                 "Revisar ejecuciones críticas",
+                target_section="recent-executions",  # Scroll automático a la tabla
             ),
             # Card 3: Performance (Tiempos)
             render_card(
@@ -320,5 +326,10 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
                 "patrones",
                 "Ver mapa de calor",
             ),
+        ),
+        html.style(
+            """
+            .summary-card:hover .card-title { text-decoration: underline; color: var(--pico-primary); }
+            """
         ),
     )
