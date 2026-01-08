@@ -87,6 +87,7 @@ def StatusDashboard(scroll_to=None):
     ejecuciones = status_data.get("ejecuciones", {})
     robots = status_data.get("robots", {})
     equipos = status_data.get("equipos", {})
+    programaciones = status_data.get("programaciones", {})
     timestamp = status_data.get("timestamp", "N/A")
 
     return html.div(
@@ -138,7 +139,7 @@ def StatusDashboard(scroll_to=None):
             {
                 "class_name": "status-cards dashboard-grid",
             },
-            # Card Ejecuciones
+            # Card Ejecuciones Activas
             html.article(
                 {"class_name": "card"},
                 html.header(html.h3("Ejecuciones Activas")),
@@ -150,19 +151,23 @@ def StatusDashboard(scroll_to=None):
                     {"class_name": "metric-value"},
                     ejecuciones.get("TotalActivas", 0),
                 ),
-                html.div({"class_name": "metric-label"}, f"{(ejecuciones.get('RobotsActivos') or 0)} robots activos"),
+                html.div({"class_name": "metric-label"}, "Ejecuciones en curso"),
                 html.footer(
                     {"class_name": "metric-footer"},
-                    f"{(ejecuciones.get('EquiposOcupados') or 0)} equipos ocupados",
+                    f"{ejecuciones.get('RobotsActivos', 0)} robots activos • {ejecuciones.get('EquiposOcupados', 0)} equipos ocupados",
                 ),
             ),
-            # Card Robots - Mejorada con distinción de programados
+            # Card Robots
             html.article(
                 {"class_name": "card"},
                 html.header(html.h3("Robots")),
+                html.p(
+                    {"class_name": "metric-description"},
+                    "Estado de robots: cíclicos y programados",
+                ),
                 html.div(
                     {"class_name": "metric-value"},
-                    f"{(robots.get('RobotsActivos') or 0)} / {(robots.get('TotalRobots') or 0)}",
+                    f"{robots.get('RobotsActivos', 0)} / {robots.get('TotalRobots', 0)}",
                 ),
                 html.div({"class_name": "metric-label"}, "Activos / Total"),
                 html.div(
@@ -177,16 +182,12 @@ def StatusDashboard(scroll_to=None):
                     },
                     html.div(
                         {"class_name": "text-green"},
-                        f"🟢 {(robots.get('RobotsActivosOnline') or 0)} activos online",
+                        f"🟢 {robots.get('RobotsOnline', 0)} cíclicos",
                     ),
                     html.div(
                         {"class_name": "text-blue"},
-                        f"📅 {(robots.get('RobotsActivosProgramados') or 0)} programados",
+                        f"📅 {robots.get('RobotsProgramados', 0)} programados",
                     ),
-                ),
-                html.footer(
-                    {"class_name": "metric-footer"},
-                    f"{(robots.get('RobotsActivos') or 0)} activos • {(robots.get('RobotsOffline') or 0)} offline",
                 ),
             ),
             # Card Equipos
@@ -199,13 +200,27 @@ def StatusDashboard(scroll_to=None):
                 ),
                 html.div(
                     {"class_name": "metric-value"},
-                    f"{(equipos.get('EquiposActivos') or 0)} / {(equipos.get('TotalEquipos') or 0)}",
+                    f"{equipos.get('EquiposActivos', 0)} / {equipos.get('TotalEquipos', 0)}",
                 ),
                 html.div({"class_name": "metric-label"}, "Activos / Total"),
                 html.footer(
                     {"class_name": "metric-footer"},
-                    f"{(equipos.get('EquiposBalanceables') or 0)} balanceables",
+                    f"{equipos.get('EquiposBalanceables', 0)} balanceables",
                 ),
+            ),
+            # Card Programaciones
+            html.article(
+                {"class_name": "card"},
+                html.header(html.h3("Programaciones")),
+                html.p(
+                    {"class_name": "metric-description"},
+                    "Programaciones activas en el sistema",
+                ),
+                html.div(
+                    {"class_name": "metric-value"},
+                    programaciones.get("ProgramacionesActivas", 0),
+                ),
+                html.div({"class_name": "metric-label"}, "Programaciones activas"),
             ),
         ),
         # --- TABLA DE EJECUCIONES RECIENTES ---
