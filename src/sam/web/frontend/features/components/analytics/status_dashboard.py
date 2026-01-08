@@ -218,6 +218,7 @@ def StatusDashboard():
                     html.tr(
                         html.th("Robot"),
                         html.th("Estado"),
+                        html.th("Tiempo"),
                         html.th("Fecha Inicio"),
                         html.th("Mensaje"),
                         html.th("Origen"),
@@ -228,17 +229,44 @@ def StatusDashboard():
                         html.tr(
                             html.td(item.get("Robot", "N/A")),
                             html.td(
-                                {
-                                    "style": {
-                                        "color": "var(--pico-color-red-500)"
-                                        if item.get("Estado") in ["ERROR", "FINISHED_NOT_OK"]
-                                        else "inherit",
-                                        "font-weight": "bold"
-                                        if item.get("Estado") in ["ERROR", "FINISHED_NOT_OK"]
-                                        else "normal",
-                                    }
-                                },
-                                item.get("Estado", "N/A"),
+                                html.span(
+                                    {
+                                        "data-tooltip": f"Umbral: {item.get('UmbralUtilizadoMinutos', 0):.1f} min ({item.get('TipoUmbral', 'Fijo')})"
+                                        if item.get("TipoCritico")
+                                        else None,
+                                        "style": {
+                                            "color": "var(--pico-color-red-500)"
+                                            if item.get("TipoCritico") == "Fallo"
+                                            else "var(--pico-color-yellow-500)"
+                                            if item.get("TipoCritico") in ["Demorada", "Huerfana"]
+                                            else "inherit",
+                                            "font-weight": "bold" if item.get("TipoCritico") else "normal",
+                                            "cursor": "help" if item.get("TipoCritico") else "default",
+                                            "display": "flex",
+                                            "align-items": "center",
+                                            "gap": "0.5rem",
+                                        },
+                                    },
+                                    html.i(
+                                        {
+                                            "class_name": "fa-solid fa-circle-xmark"
+                                            if item.get("TipoCritico") == "Fallo"
+                                            else "fa-solid fa-clock"
+                                            if item.get("TipoCritico") == "Demorada"
+                                            else "fa-solid fa-triangle-exclamation"
+                                            if item.get("TipoCritico") == "Huerfana"
+                                            else ""
+                                        }
+                                    )
+                                    if item.get("TipoCritico")
+                                    else "",
+                                    item.get("Estado", "N/A"),
+                                )
+                            ),
+                            html.td(
+                                f"{item.get('TiempoTranscurridoMinutos', 0)} min"
+                                if item.get("TiempoTranscurridoMinutos") is not None
+                                else "-"
                             ),
                             html.td(
                                 str(item.get("FechaInicio", "")).replace("T", " ")[:19]
@@ -280,7 +308,7 @@ def StatusDashboard():
                     else [
                         html.tr(
                             html.td(
-                                {"colspan": 5, "style": {"text-align": "center"}},
+                                {"colspan": 6, "style": {"text-align": "center"}},
                                 "No hay ejecuciones recientes para mostrar.",
                             )
                         )

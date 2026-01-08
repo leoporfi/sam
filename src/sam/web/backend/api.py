@@ -755,10 +755,29 @@ def get_recent_executions(
     db: DatabaseConnector = Depends(get_db),
 ):
     """
-    Obtiene un listado de ejecuciones recientes.
+    Obtiene un listado de ejecuciones recientes con detección inteligente de críticos.
+
+    Incluye:
+    - Fallos: RUN_FAILED, DEPLOY_FAILED, RUN_ABORTED
+    - Demoradas: RUNNING/DEPLOYED que exceden umbral dinámico o fijo
+    - Huérfanas: QUEUED sin DEPLOYED/RUNNING correspondiente
     """
     try:
-        return db_service.get_recent_executions(db, limit=limit, critical_only=critical_only)
+        # Leer configuraciones del sistema
+        umbral_fijo = db_service.get_system_config(db, "UMBRAL_EJECUCION_DEMORADA_MINUTOS")
+        factor_dinamico = db_service.get_system_config(db, "FACTOR_UMBRAL_DINAMICO")
+
+        # Valores por defecto si no existen en la configuración
+        umbral_fijo_minutos = int(umbral_fijo) if umbral_fijo else 25
+        factor_umbral_dinamico = float(factor_dinamico) if factor_dinamico else 1.5
+
+        return db_service.get_recent_executions(
+            db,
+            limit=limit,
+            critical_only=critical_only,
+            umbral_fijo_minutos=umbral_fijo_minutos,
+            factor_umbral_dinamico=factor_umbral_dinamico,
+        )
     except Exception as e:
         logger.error(f"Error obteniendo ejecuciones recientes: {e}", exc_info=True)
         _handle_endpoint_errors("get_recent_executions", e, "Analytics")

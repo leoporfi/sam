@@ -1199,32 +1199,139 @@ def resolver_robot_id(db: DatabaseConnector, nombre_externo: str, proveedor: str
     return None
 
 
-def get_recent_executions(db: DatabaseConnector, limit: int = 50, critical_only: bool = True) -> List[Dict]:
+def get_recent_executions(
+    db: DatabaseConnector,
+    limit: int = 50,
+    critical_only: bool = True,
+    umbral_fijo_minutos: int = 25,
+    factor_umbral_dinamico: float = 1.5,
+) -> List[Dict]:
     """
-    Obtiene las ejecuciones recientes.
-    Si critical_only es True, filtra por estados críticos (ERROR, FINISHED_NOT_OK).
-    """
-    # Definir estados críticos
-    critical_statuses = "'ERROR', 'FINISHED_NOT_OK'"
+    Obtiene las ejecuciones recientes, incluyendo detección inteligente de ejecuciones críticas.
 
-    # Query corregida usando dbo.Ejecuciones
+    Ejecuciones críticas incluyen:
+    1. Fallos: RUN_FAILED, DEPLOY_FAILED, RUN_ABORTED
+    2. Demoradas: RUNNING/DEPLOYED que exceden umbral (dinámico o fijo)
+    3. Huérfanas: QUEUED sin DEPLOYED/RUNNING correspondiente
+
+    Args:
+        limit: Número máximo de ejecuciones a retornar
+        critical_only: Si True, solo retorna ejecuciones críticas
+        umbral_fijo_minutos: Umbral fijo cuando no hay historial del robot
+        factor_umbral_dinamico: Multiplicador del tiempo promedio del robot
+    """
+
+    # Query compleja con CTEs para calcular tiempos promedio y detectar críticos
     query = f"""
+        WITH TiemposPromedio AS (
+            -- Calcular tiempo promedio por robot (solo si tiene suficiente historial)
+            SELECT
+                RobotId,
+                AVG(DATEDIFF(MINUTE, FechaInicio, FechaFin)) AS TiempoPromedioMinutos,
+                COUNT(*) AS CantidadEjecuciones
+            FROM dbo.Ejecuciones
+            WHERE FechaFin IS NOT NULL
+              AND Estado = 'RUN_COMPLETED'
+              AND DATEDIFF(MINUTE, FechaInicio, FechaFin) > 0
+            GROUP BY RobotId
+            HAVING COUNT(*) >= 5
+        )
         SELECT TOP {limit}
             e.EjecucionId AS Id,
             r.Robot,
+            eq.Equipo,
             e.Estado,
             e.FechaInicio,
             e.FechaFin,
-            NULL AS MensajeError, -- Por ahora no tenemos columna de error explícita en esta tabla
+            DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) AS TiempoTranscurridoMinutos,
+            CASE
+                -- Fallos inmediatos
+                WHEN e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED') THEN 'Fallo'
+
+                -- RUNNING o DEPLOYED demorados
+                WHEN e.Estado IN ('RUNNING', 'DEPLOYED') AND (
+                    (tp.TiempoPromedioMinutos IS NOT NULL AND
+                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > tp.TiempoPromedioMinutos * {factor_umbral_dinamico})
+                    OR
+                    (tp.TiempoPromedioMinutos IS NULL AND
+                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > {umbral_fijo_minutos})
+                ) THEN 'Demorada'
+
+                -- QUEUED huérfano (sin DEPLOYED/RUNNING correspondiente)
+                WHEN e.Estado = 'QUEUED'
+                     AND DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > 5
+                     AND NOT EXISTS (
+                        SELECT 1 FROM dbo.Ejecuciones e2
+                        WHERE e2.RobotId = e.RobotId
+                          AND e2.EquipoId = e.EquipoId
+                          AND e2.Estado IN ('DEPLOYED', 'RUNNING')
+                          AND e2.FechaInicio >= e.FechaInicio
+                     ) THEN 'Huerfana'
+
+                ELSE NULL
+            END AS TipoCritico,
+            CASE
+                WHEN tp.TiempoPromedioMinutos IS NOT NULL
+                THEN tp.TiempoPromedioMinutos * {factor_umbral_dinamico}
+                ELSE {umbral_fijo_minutos}
+            END AS UmbralUtilizadoMinutos,
+            CASE
+                WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN 'Dinámico'
+                ELSE 'Fijo'
+            END AS TipoUmbral,
+            tp.TiempoPromedioMinutos AS TiempoPromedioRobotMinutos,
             CASE WHEN e.FechaFin IS NULL THEN 'Activa' ELSE 'Historico' END AS Origen
         FROM dbo.Ejecuciones e
         LEFT JOIN dbo.Robots r ON e.RobotId = r.RobotId
+        LEFT JOIN dbo.Equipos eq ON e.EquipoId = eq.EquipoId
+        LEFT JOIN TiemposPromedio tp ON e.RobotId = tp.RobotId
     """
 
     if critical_only:
-        query += f" WHERE e.Estado IN ({critical_statuses})"
+        query += (
+            """
+        WHERE
+            -- Fallos
+            e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
+            OR (
+                -- RUNNING/DEPLOYED demorados
+                e.Estado IN ('RUNNING', 'DEPLOYED') AND (
+                    (tp.TiempoPromedioMinutos IS NOT NULL AND
+                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > tp.TiempoPromedioMinutos * """
+            + str(factor_umbral_dinamico)
+            + """)
+                    OR
+                    (tp.TiempoPromedioMinutos IS NULL AND
+                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > """
+            + str(umbral_fijo_minutos)
+            + """)
+                )
+            )
+            OR (
+                -- QUEUED huérfanos
+                e.Estado = 'QUEUED'
+                AND DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > 5
+                AND NOT EXISTS (
+                    SELECT 1 FROM dbo.Ejecuciones e2
+                    WHERE e2.RobotId = e.RobotId
+                      AND e2.EquipoId = e.EquipoId
+                      AND e2.Estado IN ('DEPLOYED', 'RUNNING')
+                      AND e2.FechaInicio >= e.FechaInicio
+                )
+            )
+        """
+        )
 
-    query += " ORDER BY e.FechaInicio DESC"
+    query += """
+        ORDER BY
+            CASE
+                WHEN e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED') THEN 1
+                WHEN e.Estado IN ('RUNNING', 'DEPLOYED') THEN 2
+                WHEN e.Estado = 'QUEUED' THEN 3
+                ELSE 4
+            END,
+            e.FechaInicio DESC
+    """
 
     try:
         return db.ejecutar_consulta(query, es_select=True)

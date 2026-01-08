@@ -60,6 +60,11 @@ def TasasExitoDashboard():
     fecha_inicio_default = fecha_inicio or hace_30_dias
     fecha_fin_default = fecha_fin or hoy
 
+    # Estado para Top N
+    top_n, set_top_n = use_state(10)
+    # Estado para Ordenamiento
+    sort_by, set_sort_by = use_state("tasa_asc")  # tasa_asc, errores_desc
+
     if loading and not dashboard_data:
         return html.div({"class_name": "tasas-exito-dashboard loading"}, html.p("Cargando análisis de éxito..."))
 
@@ -75,6 +80,15 @@ def TasasExitoDashboard():
     resumen_estados = dashboard_data.get("resumen_estados", []) if dashboard_data else []
     top_errores = dashboard_data.get("top_errores", []) if dashboard_data else []
     detalle_robots = dashboard_data.get("detalle_robots", []) if dashboard_data else []
+
+    # Ordenar datos según criterio
+    if sort_by == "tasa_asc":
+        detalle_robots.sort(key=lambda x: float(x.get("TasaExito", 100)))
+    elif sort_by == "errores_desc":
+        detalle_robots.sort(key=lambda x: int(x.get("Errores", 0)), reverse=True)
+
+    # Aplicar Top N a detalle_robots
+    detalle_robots_filtered = detalle_robots[:top_n]
 
     # Pie Chart: Estados de A360
     pie_labels = [item["Estado"] for item in resumen_estados]
@@ -95,9 +109,10 @@ def TasasExitoDashboard():
         else:
             pie_colors.append("rgba(149, 165, 166, 0.7)")  # Gris
 
-    # Bar Chart: Top Errores (Tipos)
-    bar_labels = [item["MensajeError"] for item in top_errores]  # MensajeError es alias de Estado en SP
-    bar_values = [item["Cantidad"] for item in top_errores]
+    # Bar Chart: Top Errores (Tipos) - También limitamos este si es necesario, pero ya viene como "top_errores" del backend
+    # Podríamos aplicar el mismo Top N o dejarlo como está. El usuario pidió "tablas", pero para consistencia visual:
+    bar_labels = [item["MensajeError"] for item in top_errores[:top_n]]  # MensajeError es alias de Estado en SP
+    bar_values = [item["Cantidad"] for item in top_errores[:top_n]]
 
     return html.div(
         {"class_name": "tasas-exito-dashboard", "style": {"position": "relative"}},
@@ -149,6 +164,29 @@ def TasasExitoDashboard():
                     }
                 ),
             ),
+            html.div(
+                html.label("Ordenar por:"),
+                html.select(
+                    {
+                        "value": sort_by,
+                        "on_change": lambda e: set_sort_by(e["target"]["value"]),
+                    },
+                    html.option({"value": "tasa_asc"}, "Menor Tasa de Éxito (Crítico)"),
+                    html.option({"value": "errores_desc"}, "Mayor Cantidad de Errores"),
+                ),
+            ),
+            html.div(
+                html.label("Top N:"),
+                html.input(
+                    {
+                        "type": "number",
+                        "min": "1",
+                        "max": "100",
+                        "value": top_n,
+                        "on_change": lambda e: set_top_n(int(e["target"]["value"]) if e["target"]["value"] else 10),
+                    }
+                ),
+            ),
             html.button(
                 {"on_click": handle_refresh, "type": "button"},
                 html.i({"class_name": "fa-solid fa-filter"}),
@@ -180,7 +218,7 @@ def TasasExitoDashboard():
             # Bar Chart (Top Errores)
             html.div(
                 {"class_name": "chart-container"},
-                html.h3("Top Tipos de Fallo Técnico (A360)"),
+                html.h3(f"Top {top_n} Tipos de Fallo Técnico (A360)"),
                 BarChart(
                     chart_id="errors-bar-chart",
                     title="Cantidad",
@@ -201,7 +239,7 @@ def TasasExitoDashboard():
         # Tabla Detalle por Robot
         html.div(
             {"class_name": "metrics-table", "style": {"margin-top": "2rem"}},
-            html.h3("Detalle por Robot"),
+            html.h3(f"Top {top_n} Detalle por Robot"),
             html.table(
                 {"class_name": "dashboard-table"},
                 html.thead(
@@ -236,7 +274,7 @@ def TasasExitoDashboard():
                                 f"{float(item.get('TasaExito', 0)):.2f}%",
                             ),
                         )
-                        for item in detalle_robots
+                        for item in detalle_robots_filtered
                     ]
                 ),
             ),

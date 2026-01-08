@@ -1,0 +1,922 @@
+{
+  "proyecto": "SAM - Sistema de Asignación y Monitoreo",
+  "fecha_analisis": "2025-01-01",
+  "version_modelo": "1.0",
+  "resumen_ejecutivo": {
+    "problema_identificado": "Inconsistencias en la visualización de estados de equipos en los modales de asignación",
+    "impacto": "Los tags de estado no reflejan correctamente las reglas de negocio definidas, causando confusión sobre qué equipos están disponibles/asignados y bajo qué modalidad",
+    "alcance": "3 archivos de componentes frontend afectados",
+    "prioridad": "ALTA - Afecta la experiencia de usuario y la comprensión del estado del sistema"
+  },
+  "reglas_negocio_referencia": {
+    "BR-01": {
+      "nombre": "Estados de Equipos en Asignaciones",
+      "descripcion": "Un equipo puede tener 4 estados mutuamente excluyentes",
+      "estados": [
+        {
+          "nombre": "Programado",
+          "condicion_sql": "EsProgramado = 1",
+          "compartible": true,
+          "descripcion": "Equipo asignado a una programación. Puede ser usado por múltiples robots/programaciones simultáneamente",
+          "color_sugerido": "azul",
+          "clase_css": "tag-programado"
+        },
+        {
+          "nombre": "Reservado",
+          "condicion_sql": "Reservado = 1 AND ProgramacionId IS NULL",
+          "compartible": false,
+          "descripcion": "Equipo reservado manualmente para un robot específico. No puede ser compartido",
+          "color_sugerido": "ámbar/naranja",
+          "clase_css": "tag-reservado"
+        },
+        {
+          "nombre": "Dinámico",
+          "condicion_sql": "EsProgramado = 0 AND Reservado = 0 AND ProgramacionId IS NULL",
+          "compartible": false,
+          "descripcion": "Equipo asignado automáticamente por el servicio balanceador. Asignación temporal",
+          "color_sugerido": "violeta/púrpura",
+          "clase_css": "tag-dinamico"
+        },
+        {
+          "nombre": "Libre",
+          "condicion_sql": "NOT EXISTS IN Asignaciones",
+          "compartible": true,
+          "descripcion": "Equipo sin ninguna asignación. Completamente disponible",
+          "color_sugerido": "verde",
+          "clase_css": "tag-libre"
+        }
+      ]
+    },
+    "BR-02": {
+      "nombre": "Equipos Disponibles para Programación",
+      "descripcion": "Los equipos disponibles incluyen equipos libres Y equipos programados (compartibles)",
+      "condiciones": [
+        "Equipo existe en tabla Equipos",
+        "Equipo.Activo_SAM = 1",
+        "Equipo.Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')",
+        "Equipo NO está Reservado (Reservado = 1)",
+        "Equipo NO está asignado dinámicamente (EsProgramado=0 AND Reservado=0)",
+        "Equipo SÍ PUEDE estar programado en otro robot (EsProgramado=1) - COMPARTIBLE"
+      ]
+    },
+    "BR-03": {
+      "nombre": "Equipos NO Disponibles",
+      "descripcion": "Equipos que no deben aparecer en listas de 'Disponibles'",
+      "condiciones": [
+        "Equipos con Reservado = 1",
+        "Equipos con asignación dinámica (EsProgramado=0 AND Reservado=0)",
+        "Equipos ya asignados AL MISMO robot/programación (para evitar duplicados)"
+      ]
+    }
+  },
+  "problemas_identificados": [
+    {
+      "id": "P-001",
+      "archivo": "src/sam/web/frontend/features/modals/robots_modals.py",
+      "componente": "DeviceList",
+      "linea_aproximada": 876,
+      "severidad": "ALTA",
+      "descripcion": "La función get_estado() no detecta correctamente asignaciones dinámicas",
+      "problema_actual": {
+        "logica": "Solo diferencia entre Programado, Reservado y Libre. Asume que todo lo que no es programado ni reservado está 'Libre', lo cual es incorrecto para equipos con asignación dinámica.",
+        "codigo_actual": "if 'EsProgramado' in device:\n    if device.get('EsProgramado'):\n        return ('Programado', 'tag-programado')\nif 'Reservado' in device:\n    if device.get('Reservado'):\n        return ('Reservado', 'tag-reservado')\nreturn ('Libre', 'tag-libre')"
+      },
+      "impacto": "Los equipos con asignación dinámica se muestran incorrectamente como 'Libre' cuando deberían mostrar 'Dinámico'",
+      "solucion_propuesta": {
+        "descripcion": "Implementar detección de los 4 estados según reglas de negocio con prioridad correcta",
+        "orden_evaluacion": [
+          "1. Verificar si es Programado (EsProgramado=1)",
+          "2. Verificar si es Reservado (Reservado=1)",
+          "3. Verificar si es Dinámico (tiene robot asignado pero no es programado ni reservado)",
+          "4. Por defecto: Libre"
+        ]
+      }
+    },
+    {
+      "id": "P-002",
+      "archivo": "src/sam/web/frontend/features/modals/schedule_modal.py",
+      "componente": "DeviceList",
+      "linea_aproximada": 319,
+      "severidad": "ALTA",
+      "descripcion": "Mismo problema que P-001 - función get_estado() incompleta",
+      "problema_actual": {
+        "logica": "Lógica idéntica al problema P-001. No detecta asignaciones dinámicas.",
+        "codigo_actual": "if item.get('EsProgramado'):\n    return ('Programado', 'tag-programado')\nif item.get('Reservado'):\n    return ('Reservado', 'tag-reservado')\nreturn ('Libre', 'tag-libre')"
+      },
+      "impacto": "Equipos dinámicos se muestran como 'Libre' en el modal de asignación de equipos a programaciones",
+      "solucion_propuesta": {
+        "descripcion": "Aplicar la misma corrección que en P-001 para mantener consistencia"
+      }
+    },
+    {
+      "id": "P-003",
+      "archivo": "src/sam/web/frontend/features/components/equipo_list.py",
+      "componente": "EquipoRow y EquipoCard",
+      "linea_aproximada": "115 (EquipoRow), 203 (EquipoCard)",
+      "severidad": "MEDIA",
+      "descripcion": "No diferencia entre equipos Reservados y Dinámicos",
+      "problema_actual": {
+        "logica": "Solo distingue entre Programado y 'Dinámico' (que asume como default). No verifica el flag Reservado.",
+        "codigo_actual": "is_programado = equipo.get('EsProgramado', False)\n# ...\nhtml.span(\n    {'class_name': STATUS_EJECUCION_PROGRAMADO if is_programado else STATUS_EJECUCION_DEMANDA},\n    'Programado' if is_programado else 'Dinámico'\n)"
+      },
+      "impacto": "Los equipos reservados manualmente se muestran como 'Dinámico', causando confusión sobre su verdadero estado",
+      "solucion_propuesta": {
+        "descripcion": "Agregar verificación del flag Reservado y mostrar 3 estados distintos: Programado, Reservado, Dinámico"
+      }
+    },
+    {
+      "id": "P-004",
+      "archivo": "N/A - Estilos CSS",
+      "componente": "Clases CSS para tags",
+      "linea_aproximada": "N/A",
+      "severidad": "BAJA",
+      "descripcion": "Posible falta de clases CSS para estados nuevos",
+      "problema_actual": {
+        "logica": "Puede que no existan las clases .tag-dinamico y .tag-reservado en los estilos",
+        "clases_requeridas": [
+          ".tag-programado",
+          ".tag-reservado",
+          ".tag-dinamico",
+          ".tag-libre",
+          ".tag-secondary"
+        ]
+      },
+      "impacto": "Los tags pueden no tener estilos visuales diferenciados si las clases no existen",
+      "solucion_propuesta": {
+        "descripcion": "Verificar y agregar clases CSS faltantes con colores distintivos"
+      }
+    }
+  ],
+  "soluciones_detalladas": [
+    {
+      "id": "S-001",
+      "problema_relacionado": "P-001",
+      "archivo": "src/sam/web/frontend/features/modals/robots_modals.py",
+      "tipo_cambio": "MODIFICACION",
+      "ubicacion": {
+        "componente": "DeviceList",
+        "funcion": "get_estado",
+        "linea_aproximada": 876
+      },
+      "codigo_propuesto": "def get_estado(device: Dict) -> tuple[str, str, str]:\n    \"\"\"\n    Determina el estado de un equipo según las reglas de negocio de SAM.\n    \n    Returns:\n        tuple[str, str, str]: (texto_estado, clase_css, tooltip)\n    \n    Reglas (evaluadas en orden de prioridad):\n    1. Programado: EsProgramado=1 (compartible)\n    2. Reservado: Reservado=1 (no compartible)\n    3. Dinámico: tiene robot asignado pero no es programado ni reservado\n    4. Libre: sin ninguna asignación\n    \"\"\"\n    es_programado = device.get('EsProgramado', False)\n    es_reservado = device.get('Reservado', False)\n    tiene_robot = device.get('RobotAsignado') not in [None, 'N/A', '']\n    \n    # PRIORIDAD 1: Programado\n    if es_programado:\n        return ('Programado', 'tag-programado', 'Compartible entre robots')\n    \n    # PRIORIDAD 2: Reservado\n    if es_reservado:\n        return ('Reservado', 'tag-reservado', 'Reservado manualmente - No compartible')\n    \n    # PRIORIDAD 3: Dinámico (tiene robot pero no es programado ni reservado)\n    if tiene_robot and not es_programado and not es_reservado:\n        return ('Dinámico', 'tag-dinamico', 'Asignado por balanceador')\n    \n    # PRIORIDAD 4: Libre\n    return ('Libre', 'tag-libre', 'Disponible para asignación')",
+      "cambios_relacionados": [
+        {
+          "ubicacion": "Renderizado del tag en tabla",
+          "linea_aproximada": 920,
+          "cambio": "Agregar tooltip del resultado de get_estado()[2]",
+          "codigo": "html.td(\n    html.span(\n        {\n            'class_name': f'tag {get_estado(device)[1]}',\n            'title': get_estado(device)[2],  # <-- AGREGAR TOOLTIP\n        },\n        get_estado(device)[0]\n    )\n) if has_status_column else None"
+        }
+      ],
+      "validacion": {
+        "escenarios_prueba": [
+          {
+            "entrada": "{'EquipoId': 1, 'Equipo': 'PC-001', 'EsProgramado': True, 'Reservado': False, 'RobotAsignado': 'Robot1'}",
+            "salida_esperada": "('Programado', 'tag-programado', 'Compartible entre robots')"
+          },
+          {
+            "entrada": "{'EquipoId': 2, 'Equipo': 'PC-002', 'EsProgramado': False, 'Reservado': True, 'RobotAsignado': 'Robot2'}",
+            "salida_esperada": "('Reservado', 'tag-reservado', 'Reservado manualmente - No compartible')"
+          },
+          {
+            "entrada": "{'EquipoId': 3, 'Equipo': 'PC-003', 'EsProgramado': False, 'Reservado': False, 'RobotAsignado': 'Robot3'}",
+            "salida_esperada": "('Dinámico', 'tag-dinamico', 'Asignado por balanceador')"
+          },
+          {
+            "entrada": "{'EquipoId': 4, 'Equipo': 'PC-004', 'EsProgramado': False, 'Reservado': False, 'RobotAsignado': 'N/A'}",
+            "salida_esperada": "('Libre', 'tag-libre', 'Disponible para asignación')"
+          }
+        ]
+      }
+    },
+    {
+      "id": "S-002",
+      "problema_relacionado": "P-002",
+      "archivo": "src/sam/web/frontend/features/modals/schedule_modal.py",
+      "tipo_cambio": "MODIFICACION",
+      "ubicacion": {
+        "componente": "DeviceList",
+        "funcion": "get_estado",
+        "linea_aproximada": 319
+      },
+      "codigo_propuesto": "def get_estado(item: Dict) -> tuple[str, str, str]:\n    \"\"\"\n    Determina el estado de un equipo para el modal de programaciones.\n    Lógica idéntica a robots_modals.py para mantener consistencia.\n    \n    Returns:\n        tuple[str, str, str]: (texto_estado, clase_css, tooltip)\n    \"\"\"\n    es_programado = item.get('EsProgramado', False)\n    es_reservado = item.get('Reservado', False)\n    tiene_robot = item.get('RobotAsignado') not in [None, 'N/A', '']\n    \n    if es_programado:\n        return ('Programado', 'tag-programado', 'Compartible entre programaciones')\n    \n    if es_reservado:\n        return ('Reservado', 'tag-reservado', 'Reservado manualmente - No compartible')\n    \n    if tiene_robot and not es_programado and not es_reservado:\n        return ('Dinámico', 'tag-dinamico', 'Asignado por balanceador')\n    \n    return ('Libre', 'tag-libre', 'Disponible para asignación')",
+      "cambios_relacionados": [
+        {
+          "ubicacion": "Renderizado del tag en tabla",
+          "linea_aproximada": 370,
+          "cambio": "Agregar tooltip (igual que S-001)",
+          "codigo": "html.td(\n    html.span(\n        {\n            'class_name': f'tag {get_estado(item)[1]}',\n            'title': get_estado(item)[2],  # <-- AGREGAR TOOLTIP\n        },\n        get_estado(item)[0]\n    )\n) if has_status_column else None"
+        }
+      ],
+      "nota": "Usar exactamente la misma lógica que S-001 para mantener consistencia entre modales"
+    },
+    {
+      "id": "S-003",
+      "problema_relacionado": "P-003",
+      "archivo": "src/sam/web/frontend/features/components/equipo_list.py",
+      "tipo_cambio": "MODIFICACION",
+      "ubicacion": {
+        "componente": "EquipoRow",
+        "linea_aproximada": 115
+      },
+      "codigo_propuesto": "def get_tipo_asignacion(equipo: Dict) -> tuple[str, str]:\n    \"\"\"\n    Determina el tipo de asignación de un equipo para la tabla principal.\n    \n    Returns:\n        tuple[str, str]: (texto_estado, clase_css)\n    \"\"\"\n    # Si no tiene robot asignado\n    if not equipo.get('RobotAsignado') or equipo.get('RobotAsignado') == 'N/A':\n        return ('N/A', 'tag-secondary')\n    \n    # Orden de prioridad (mismo que los modales)\n    if equipo.get('EsProgramado'):\n        return ('Programado', 'tag-programado')\n    \n    if equipo.get('Reservado'):\n        return ('Reservado', 'tag-reservado')\n    \n    # Si tiene robot pero no es programado ni reservado → Dinámico\n    return ('Dinámico', 'tag-dinamico')\n\n# Aplicar en EquipoRow (línea ~115):\ntipo_text, tipo_class = get_tipo_asignacion(equipo)\nhtml.td(\n    html.span({'class_name': tipo_class}, tipo_text)\n)",
+      "cambios_relacionados": [
+        {
+          "ubicacion": "EquipoCard (vista móvil)",
+          "linea_aproximada": 203,
+          "cambio": "Aplicar la misma función get_tipo_asignacion()",
+          "codigo": "tipo_text, tipo_class = get_tipo_asignacion(equipo)\nhtml.p(\n    'Tipo Asig.: ',\n    html.span(\n        {\n            'class_name': tipo_class,\n            'title': 'Estado de la asignación',\n        },\n        tipo_text\n    )\n)"
+        }
+      ]
+    },
+    {
+      "id": "S-004",
+      "problema_relacionado": "P-004",
+      "archivo": "CSS correspondiente (verificar ubicación en proyecto)",
+      "tipo_cambio": "ADICION",
+      "ubicacion": {
+        "archivo_posible": "src/sam/web/frontend/shared/styles.py o archivo CSS externo",
+        "descripcion": "Agregar clases CSS faltantes para los tags de estado"
+      },
+      "codigo_propuesto_css": "/* Tags de Estado de Equipos - SAM */\n\n.tag-programado {\n    background-color: var(--pico-color-azure-500, #0ea5e9);\n    color: white;\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    font-weight: 500;\n    display: inline-block;\n}\n\n.tag-reservado {\n    background-color: var(--pico-color-amber-500, #f59e0b);\n    color: var(--pico-color-grey-900, #1a1a1a);\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    font-weight: 500;\n    display: inline-block;\n}\n\n.tag-dinamico {\n    background-color: var(--pico-color-violet-500, #8b5cf6);\n    color: white;\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    font-weight: 500;\n    display: inline-block;\n}\n\n.tag-libre {\n    background-color: var(--pico-color-green-500, #10b981);\n    color: white;\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    font-weight: 500;\n    display: inline-block;\n}\n\n.tag-secondary {\n    background-color: var(--pico-muted-border-color);\n    color: var(--pico-muted-color);\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    font-weight: 400;\n    display: inline-block;\n}",
+      "nota": "Si el proyecto usa constantes de Python para estilos (como en styles.py), adaptar estos valores al formato del proyecto"
+    }
+  ],
+  "plan_implementacion": {
+    "orden_recomendado": [
+      {
+        "paso": 1,
+        "accion": "Agregar/verificar clases CSS (S-004)",
+        "razon": "Base visual necesaria antes de implementar lógica",
+        "tiempo_estimado": "15 minutos"
+      },
+      {
+        "paso": 2,
+        "accion": "Modificar robots_modals.py (S-001)",
+        "razon": "Modal más complejo, establece el patrón",
+        "tiempo_estimado": "30 minutos"
+      },
+      {
+        "paso": 3,
+        "accion": "Modificar schedule_modal.py (S-002)",
+        "razon": "Replicar lógica de S-001",
+        "tiempo_estimado": "20 minutos"
+      },
+      {
+        "paso": 4,
+        "accion": "Modificar equipo_list.py (S-003)",
+        "razon": "Vista principal, debe ser consistente con modales",
+        "tiempo_estimado": "25 minutos"
+      },
+      {
+        "paso": 5,
+        "accion": "Testing integral",
+        "razon": "Validar todos los escenarios de prueba",
+        "tiempo_estimado": "45 minutos"
+      }
+    ],
+    "tiempo_total_estimado": "2 horas 15 minutos"
+  },
+  "testing_validacion": {
+    "escenarios_criticos": [
+      {
+        "id": "TEST-001",
+        "nombre": "Modal Asignaciones Robot - Equipos Disponibles",
+        "pasos": [
+          "1. Abrir modal de asignaciones para un robot programado",
+          "2. Verificar lista de 'Equipos Disponibles'",
+          "3. Confirmar que equipos programados en OTROS robots aparecen con tag 'Programado' (azul)",
+          "4. Confirmar que equipos libres aparecen con tag 'Libre' (verde)",
+          "5. Confirmar que equipos reservados NO aparecen en la lista",
+          "6. Confirmar que equipos dinámicos NO aparecen en la lista"
+        ],
+        "resultado_esperado": "Solo equipos libres y programados visibles, con tags correctos"
+      },
+      {
+        "id": "TEST-002",
+        "nombre": "Modal Asignaciones Robot - Equipos Asignados",
+        "pasos": [
+          "1. Abrir modal de asignaciones para un robot",
+          "2. Verificar lista de 'Equipos Asignados'",
+          "3. Confirmar que muestra tags: Programado, Reservado o Dinámico según corresponda",
+          "4. NO debe mostrar tag 'Libre' (inconsistencia lógica)"
+        ],
+        "resultado_esperado": "Tags correctos según tipo de asignación actual"
+      },
+      {
+        "id": "TEST-003",
+        "nombre": "Modal Equipos Programación - Estados",
+        "pasos": [
+          "1. Abrir modal de equipos para una programación",
+          "2. Verificar que equipos programados en OTRAS programaciones muestran tag 'Programado'",
+          "3. Verificar que equipos libres muestran tag 'Libre'",
+          "4. Mover equipos entre listas y verificar persistencia de tags"
+        ],
+        "resultado_esperado": "Tags consistentes durante toda la interacción"
+      },
+      {
+        "id": "TEST-004",
+        "nombre": "Lista Principal Equipos - Columna Tipo Asignación",
+        "pasos": [
+          "1. Ir a página de Equipos",
+          "2. Verificar columna 'Tipo Asig.' para equipos asignados",
+          "3. Confirmar diferenciación entre: Programado, Reservado, Dinámico, N/A",
+          "4. Verificar colores distintivos para cada estado"
+        ],
+        "resultado_esperado": "4 estados claramente diferenciados visualmente"
+      },
+      {
+        "id": "TEST-005",
+        "nombre": "Tooltips Informativos",
+        "pasos": [
+          "1. Hacer hover sobre cada tipo de tag en cualquier modal",
+          "2. Verificar que aparece tooltip explicativo",
+          "3. Confirmar que el texto del tooltip es claro y útil"
+        ],
+        "resultado_esperado": "Tooltips presentes y descriptivos en todos los tags"
+      }
+    ],
+    "datos_prueba": {
+      "equipos_muestra": [
+        {
+          "EquipoId": 1,
+          "Equipo": "PC-PROG-001",
+          "EsProgramado": true,
+          "Reservado": false,
+          "RobotAsignado": "Robot Facturación",
+          "estado_esperado": "Programado"
+        },
+        {
+          "EquipoId": 2,
+          "Equipo": "PC-RESERV-002",
+          "EsProgramado": false,
+          "Reservado": true,
+          "RobotAsignado": "Robot Cobranzas",
+          "estado_esperado": "Reservado"
+        },
+        {
+          "EquipoId": 3,
+          "Equipo": "PC-DIN-003",
+          "EsProgramado": false,
+          "Reservado": false,
+          "RobotAsignado": "Robot Inventario",
+          "estado_esperado": "Dinámico"
+        },
+        {
+          "EquipoId": 4,
+          "Equipo": "PC-LIBRE-004",
+          "EsProgramado": false,
+          "Reservado": false,
+          "RobotAsignado": "N/A",
+          "estado_esperado": "Libre"
+        }
+      ]
+    }
+  },
+  "compatibilidad_regresion": {
+    "areas_afectadas": [
+      {
+        "area": "Modales de Asignación",
+        "componentes": ["robots_modals.py::DeviceList", "schedule_modal.py::DeviceList"],
+        "riesgo": "BAJO",
+        "razon": "Cambios solo afectan visualización, no lógica de negocio backend"
+      },
+      {
+        "area": "Lista Principal de Equipos",
+        "componentes": ["equipo_list.py::EquipoRow", "equipo_list.py::EquipoCard"],
+        "riesgo": "BAJO",
+        "razon": "Mejora de visualización, no cambia funcionalidad"
+      },
+      {
+        "area": "Backend/Base de Datos",
+        "componentes": ["Sin cambios"],
+        "riesgo": "NINGUNO",
+        "razon": "No se modifican queries SQL ni lógica de backend"
+      }
+    ],
+    "pruebas_regresion_requeridas": [
+      "Asignación manual de equipos (reservados)",
+      "Creación/edición de programaciones",
+      "Funcionamiento del balanceador dinámico",
+      "Cambio de estado Activo/EsOnline de robots"
+    ]
+  },
+  "documentacion_adicional": {
+    "diagrama_estados": {
+      "descripcion": "Diagrama de flujo de estados de equipos",
+      "estados": ["Libre", "Programado", "Reservado", "Dinámico"],
+      "transiciones_validas": [
+        "Libre -> Programado (crear programación)",
+        "Libre -> Reservado (asignación manual)",
+        "Libre -> Dinámico (balanceador automático)",
+        "Programado -> Libre (eliminar programación)",
+        "Reservado -> Libre (desasignar manualmente)",
+        "Dinámico -> Libre (balanceador libera equipo)"
+      ],
+      "transiciones_invalidas": [
+        "Programado <-> Reservado (mutuamente excluyentes)",
+        "Programado <-> Dinámico (mutuamente excluyentes)",
+        "Reservado <-> Dinámico (mutuamente excluyentes)"
+      ]
+    },
+    "glosario": {
+      "EsProgramado": "Flag booleano en tabla Asignaciones. Indica que el equipo está asignado a través de una programación (schedule). Valor=1 permite compartir el equipo entre múltiples robots/programaciones.",
+      "Reservado": "Flag booleano en tabla Asignaciones. Indica que el equipo fue reservado manualmente para un robot específico. Valor=1 impide que otros robots usen el equipo.",
+      "Dinámico": "Estado implícito (no es un campo). Se deduce cuando EsProgramado=0, Reservado=0 y existe una asignación. Indica que el balanceador asignó automáticamente el equipo.",
+      "Libre": "Estado implícito. Equipo que NO tiene registros en tabla Asignaciones. Completamente disponible para cualquier asignación.",
+      "Compartible": "Característica de equipos Programados. Pueden ser usados simultáneamente por múltiples robots/programaciones sin conflicto.",
+      "No Compartible": "Característica de equipos Reservados y Dinámicos. Uso exclusivo para un robot específico."
+    }
+  },
+  "notas_implementacion": {
+    "consideraciones_importantes": [
+      "Mantener la misma lógica de get_estado() en TODOS los componentes para consistencia",
+      "Los tooltips son opcionales pero altamente recomendados para mejorar UX",
+      "Verificar que las clases CSS existan antes de usarlas en producción",
+      "Considerar agregar pruebas unitarias para la función get_estado()",
+      "Documentar los cambios en el README o wiki del proyecto"
+    ],
+    "preguntas_pendientes": [
+      "¿El proyecto usa CSS directo o constantes de Python para estilos?",
+      "¿Existe un archivo de constantes para los nombres de clases CSS?",
+      "¿Hay pruebas automatizadas (unit tests) para los componentes de frontend?",
+      "¿Se debe actualizar alguna documentación de usuario/manual?"
+    ]
+  },
+  "metadatos": {
+    "generado_por": "Análisis de Claude (Anthropic)",
+    "formato_version": "1.0",
+    "fecha_creacion": "2025-01-01",
+    "lenguaje_proyecto": "Python (ReactPy)",
+    "framework_frontend": "ReactPy",
+    "framework_backend": "FastAPI",
+    "base_datos": "SQL Server",
+    "ultima_revision": "2025-01-01",
+    "autores": ["Análisis conjunto Usuario-IA"]
+  },
+  "referencias_codigo": {
+    "archivos_analizados": [
+      {
+        "ruta": "src/sam/web/frontend/features/modals/robots_modals.py",
+        "lineas_relevantes": [876, 920],
+        "funciones_afectadas": ["DeviceList", "get_estado"],
+        "proposito": "Modal de asignación de equipos a robots"
+      },
+      {
+        "ruta": "src/sam/web/frontend/features/modals/schedule_modal.py",
+        "lineas_relevantes": [319, 370],
+        "funciones_afectadas": ["DeviceList", "get_estado"],
+        "proposito": "Modal de asignación de equipos a programaciones"
+      },
+      {
+        "ruta": "src/sam/web/frontend/features/components/equipo_list.py",
+        "lineas_relevantes": [115, 203],
+        "funciones_afectadas": ["EquipoRow", "EquipoCard"],
+        "proposito": "Lista principal de equipos (vista tabla y tarjetas)"
+      },
+      {
+        "ruta": "src/sam/web/backend/database.py",
+        "lineas_relevantes": [208, 522],
+        "funciones_afectadas": ["get_available_devices_for_robot_inline", "get_schedule_devices_data"],
+        "proposito": "Queries SQL que retornan los flags EsProgramado y Reservado (NO REQUIERE CAMBIOS)"
+      }
+    ],
+    "tablas_base_datos": [
+      {
+        "nombre": "Asignaciones",
+        "campos_relevantes": [
+          "RobotId",
+          "EquipoId",
+          "ProgramacionId",
+          "EsProgramado",
+          "Reservado",
+          "FechaAsignacion"
+        ],
+        "descripcion": "Tabla pivote que relaciona robots con equipos y programaciones"
+      },
+      {
+        "nombre": "Equipos",
+        "campos_relevantes": [
+          "EquipoId",
+          "Equipo",
+          "Activo_SAM",
+          "Licencia",
+          "PermiteBalanceoDinamico"
+        ],
+        "descripcion": "Catálogo de equipos/dispositivos disponibles"
+      },
+      {
+        "nombre": "Robots",
+        "campos_relevantes": [
+          "RobotId",
+          "Robot",
+          "EsOnline",
+          "Activo"
+        ],
+        "descripcion": "Catálogo de robots/procesos automatizados"
+      },
+      {
+        "nombre": "Programaciones",
+        "campos_relevantes": [
+          "ProgramacionId",
+          "RobotId",
+          "TipoProgramacion",
+          "Activo"
+        ],
+        "descripcion": "Configuración de ejecuciones programadas de robots"
+      }
+    ]
+  },
+  "codigo_completo_propuesto": {
+    "robots_modals_get_estado": {
+      "archivo": "src/sam/web/frontend/features/modals/robots_modals.py",
+      "ubicacion_funcion": "Dentro del componente DeviceList, aproximadamente línea 876",
+      "codigo_completo": "def get_estado(device: Dict) -> tuple[str, str, str]:\n    \"\"\"\n    Determina el estado de un equipo según las reglas de negocio de SAM.\n    \n    Args:\n        device: Diccionario con información del equipo, debe incluir:\n                - EsProgramado (bool): Flag de asignación programada\n                - Reservado (bool): Flag de reserva manual\n                - RobotAsignado (str): Nombre del robot asignado o 'N/A'\n    \n    Returns:\n        tuple[str, str, str]: (texto_estado, clase_css, tooltip)\n            - texto_estado: 'Programado', 'Reservado', 'Dinámico', o 'Libre'\n            - clase_css: Nombre de clase CSS para aplicar estilos\n            - tooltip: Texto descriptivo para mostrar al hacer hover\n    \n    Reglas de Negocio (evaluadas en orden de prioridad):\n        1. Programado: EsProgramado=1 (compartible entre robots)\n        2. Reservado: Reservado=1 (no compartible, asignación manual)\n        3. Dinámico: tiene robot asignado pero no es programado ni reservado\n        4. Libre: sin ninguna asignación (solo en lista 'Disponibles')\n    \n    Ejemplos:\n        >>> get_estado({'EsProgramado': True, 'Reservado': False, 'RobotAsignado': 'Robot1'})\n        ('Programado', 'tag-programado', 'Compartible entre robots')\n        \n        >>> get_estado({'EsProgramado': False, 'Reservado': True, 'RobotAsignado': 'Robot2'})\n        ('Reservado', 'tag-reservado', 'Reservado manualmente - No compartible')\n        \n        >>> get_estado({'EsProgramado': False, 'Reservado': False, 'RobotAsignado': 'Robot3'})\n        ('Dinámico', 'tag-dinamico', 'Asignado por balanceador')\n        \n        >>> get_estado({'EsProgramado': False, 'Reservado': False, 'RobotAsignado': 'N/A'})\n        ('Libre', 'tag-libre', 'Disponible para asignación')\n    \"\"\"\n    # Extraer flags de estado\n    es_programado = device.get('EsProgramado', False)\n    es_reservado = device.get('Reservado', False)\n    robot_asignado = device.get('RobotAsignado', 'N/A')\n    tiene_robot = robot_asignado not in [None, 'N/A', '']\n    \n    # PRIORIDAD 1: Programado\n    # Equipos con EsProgramado=1 pueden ser compartidos entre múltiples robots/programaciones\n    if es_programado:\n        return (\n            'Programado',\n            'tag-programado',\n            'Compartible entre robots - Asignado vía programación'\n        )\n    \n    # PRIORIDAD 2: Reservado\n    # Equipos con Reservado=1 son de uso exclusivo, asignados manualmente\n    if es_reservado:\n        return (\n            'Reservado',\n            'tag-reservado',\n            'Reservado manualmente - No compartible'\n        )\n    \n    # PRIORIDAD 3: Dinámico\n    # Equipos asignados automáticamente por el balanceador\n    # Se detecta cuando: tiene robot asignado PERO no es programado NI reservado\n    if tiene_robot and not es_programado and not es_reservado:\n        return (\n            'Dinámico',\n            'tag-dinamico',\n            'Asignado automáticamente por el balanceador'\n        )\n    \n    # PRIORIDAD 4: Libre (estado por defecto)\n    # Equipos sin ninguna asignación activa\n    return (\n        'Libre',\n        'tag-libre',\n        'Disponible para asignación'\n    )",
+      "integracion_en_componente": "# Usar la función en el renderizado de la tabla:\nhtml.tbody(\n    *[\n        html.tr(\n            {'key': device['EquipoId']},\n            html.td(\n                html.input({\n                    'type': 'checkbox',\n                    'checked': device['EquipoId'] in selected_ids,\n                    'on_change': lambda e, eid=device['EquipoId']: handle_select_one(eid, e['target']['checked']),\n                })\n            ),\n            html.td(device['Equipo']),\n            html.td(\n                html.span(\n                    {\n                        'class_name': f\"tag {get_estado(device)[1]}\",\n                        'title': get_estado(device)[2],  # Tooltip\n                    },\n                    get_estado(device)[0]  # Texto visible\n                )\n            ) if has_status_column else None,\n        )\n        for device in devices\n    ]\n    if devices\n    else [\n        html.tr(\n            html.td(\n                {'colSpan': 3 if has_status_column else 2, 'style': {'text_align': 'center'}},\n                'No hay equipos para mostrar.',\n            )\n        )\n    ]\n)"
+    },
+    "schedule_modal_get_estado": {
+      "archivo": "src/sam/web/frontend/features/modals/schedule_modal.py",
+      "ubicacion_funcion": "Dentro del componente DeviceList, aproximadamente línea 319",
+      "codigo_completo": "def get_estado(item: Dict) -> tuple[str, str, str]:\n    \"\"\"\n    Determina el estado de un equipo para el modal de programaciones.\n    Lógica idéntica a robots_modals.py para mantener consistencia visual.\n    \n    Args:\n        item: Diccionario con información del equipo\n    \n    Returns:\n        tuple[str, str, str]: (texto_estado, clase_css, tooltip)\n    \n    Nota: Esta función debe mantenerse sincronizada con la versión en robots_modals.py\n    \"\"\"\n    es_programado = item.get('EsProgramado', False)\n    es_reservado = item.get('Reservado', False)\n    robot_asignado = item.get('RobotAsignado', 'N/A')\n    tiene_robot = robot_asignado not in [None, 'N/A', '']\n    \n    if es_programado:\n        return (\n            'Programado',\n            'tag-programado',\n            'Compartible entre programaciones - Ya programado en otro lugar'\n        )\n    \n    if es_reservado:\n        return (\n            'Reservado',\n            'tag-reservado',\n            'Reservado manualmente - No compartible'\n        )\n    \n    if tiene_robot and not es_programado and not es_reservado:\n        return (\n            'Dinámico',\n            'tag-dinamico',\n            'Asignado automáticamente por el balanceador'\n        )\n    \n    return (\n        'Libre',\n        'tag-libre',\n        'Disponible para asignación a esta programación'\n    )",
+      "nota_implementacion": "Tooltip ligeramente diferente para contexto de programaciones, pero lógica idéntica"
+    },
+    "equipo_list_get_tipo": {
+      "archivo": "src/sam/web/frontend/features/components/equipo_list.py",
+      "ubicacion": "Agregar función helper antes de EquipoRow (aproximadamente línea 110)",
+      "codigo_completo": "def get_tipo_asignacion(equipo: Dict) -> tuple[str, str, str]:\n    \"\"\"\n    Determina el tipo de asignación de un equipo para la tabla/tarjeta principal.\n    \n    Args:\n        equipo: Diccionario con información del equipo de la vista principal\n    \n    Returns:\n        tuple[str, str, str]: (texto_estado, clase_css, tooltip)\n    \n    Estados posibles:\n        - 'N/A': Equipo sin asignación\n        - 'Programado': Asignado vía programación (EsProgramado=1)\n        - 'Reservado': Reservado manualmente (Reservado=1)\n        - 'Dinámico': Asignado por balanceador (ni programado ni reservado)\n    \"\"\"\n    robot_asignado = equipo.get('RobotAsignado')\n    \n    # Si no tiene robot asignado\n    if not robot_asignado or robot_asignado == 'N/A':\n        return ('N/A', 'tag-secondary', 'Sin asignación')\n    \n    # Orden de prioridad (consistente con los modales)\n    if equipo.get('EsProgramado'):\n        return (\n            'Programado',\n            'tag-programado',\n            f'Asignado vía programación a {robot_asignado}'\n        )\n    \n    if equipo.get('Reservado'):\n        return (\n            'Reservado',\n            'tag-reservado',\n            f'Reservado manualmente para {robot_asignado}'\n        )\n    \n    # Si tiene robot pero no es programado ni reservado → Dinámico\n    return (\n        'Dinámico',\n        'tag-dinamico',\n        f'Asignado dinámicamente a {robot_asignado} por el balanceador'\n    )",
+      "uso_en_equipo_row": "# En EquipoRow (línea ~115), reemplazar la celda de tipo:\ntipo_text, tipo_class, tipo_tooltip = get_tipo_asignacion(equipo)\nhtml.td(\n    html.span(\n        {\n            'class_name': tipo_class,\n            'title': tipo_tooltip,\n        },\n        tipo_text\n    )\n)",
+      "uso_en_equipo_card": "# En EquipoCard (línea ~203), dentro del card body:\ntipo_text, tipo_class, tipo_tooltip = get_tipo_asignacion(equipo)\nhtml.p(\n    'Tipo Asig.: ',\n    html.span(\n        {\n            'class_name': tipo_class,\n            'title': tipo_tooltip,\n        },\n        tipo_text\n    )\n)"
+    },
+    "estilos_css": {
+      "ubicacion_sugerida": "Archivo CSS principal del proyecto o styles.py",
+      "formato_css_puro": "/* ============================================\n   Tags de Estado de Equipos - Sistema SAM\n   ============================================ */\n\n/* Tag Programado - Azul */\n.tag-programado {\n    background-color: var(--pico-color-azure-500, #0ea5e9);\n    color: white;\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    font-weight: 500;\n    display: inline-block;\n    white-space: nowrap;\n    transition: opacity 0.2s ease;\n}\n\n.tag-programado:hover {\n    opacity: 0.9;\n}\n\n/* Tag Reservado - Ámbar/Naranja */\n.tag-reservado {\n    background-color: var(--pico-color-amber-500, #f59e0b);\n    color: var(--pico-color-grey-900, #1a1a1a);\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    font-weight: 500;\n    display: inline-block;\n    white-space: nowrap;\n    transition: opacity 0.2s ease;\n}\n\n.tag-reservado:hover {\n    opacity: 0.9;\n}\n\n/* Tag Dinámico - Violeta/Púrpura */\n.tag-dinamico {\n    background-color: var(--pico-color-violet-500, #8b5cf6);\n    color: white;\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    font-weight: 500;\n    display: inline-block;\n    white-space: nowrap;\n    transition: opacity 0.2s ease;\n}\n\n.tag-dinamico:hover {\n    opacity: 0.9;\n}\n\n/* Tag Libre - Verde */\n.tag-libre {\n    background-color: var(--pico-color-green-500, #10b981);\n    color: white;\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    font-weight: 500;\n    display: inline-block;\n    white-space: nowrap;\n    transition: opacity 0.2s ease;\n}\n\n.tag-libre:hover {\n    opacity: 0.9;\n}\n\n/* Tag Secundario (N/A) - Gris */\n.tag-secondary {\n    background-color: var(--pico-muted-border-color);\n    color: var(--pico-muted-color);\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    font-weight: 400;\n    display: inline-block;\n    white-space: nowrap;\n}\n\n/* Clase base para todos los tags (opcional) */\n.tag {\n    display: inline-block;\n    padding: 0.25rem 0.75rem;\n    border-radius: 0.25rem;\n    font-size: 0.875rem;\n    white-space: nowrap;\n    line-height: 1.5;\n    vertical-align: middle;\n}",
+      "formato_python_styles": "# Si el proyecto usa constantes de Python para estilos (styles.py):\n\n# Tags de Estado de Equipos\nTAG_PROGRAMADO = 'tag-programado'  # Azul - Compartible\nTAG_RESERVADO = 'tag-reservado'    # Ámbar - No compartible\nTAG_DINAMICO = 'tag-dinamico'      # Violeta - Balanceador\nTAG_LIBRE = 'tag-libre'            # Verde - Disponible\nTAG_SECONDARY = 'tag-secondary'    # Gris - N/A\n\n# Estilos inline si no se usa CSS externo (no recomendado):\nSTYLE_TAG_PROGRAMADO = {\n    'backgroundColor': '#0ea5e9',\n    'color': 'white',\n    'padding': '0.25rem 0.75rem',\n    'borderRadius': '0.25rem',\n    'fontSize': '0.875rem',\n    'fontWeight': '500',\n    'display': 'inline-block',\n    'whiteSpace': 'nowrap'\n}\n\nSTYLE_TAG_RESERVADO = {\n    'backgroundColor': '#f59e0b',\n    'color': '#1a1a1a',\n    'padding': '0.25rem 0.75rem',\n    'borderRadius': '0.25rem',\n    'fontSize': '0.875rem',\n    'fontWeight': '500',\n    'display': 'inline-block',\n    'whiteSpace': 'nowrap'\n}\n\n# ... (resto de estilos siguiendo el mismo patrón)"
+    }
+  },
+  "checklist_implementacion": {
+    "pre_implementacion": [
+      {
+        "tarea": "Hacer backup del código actual",
+        "responsable": "Desarrollador",
+        "completado": false
+      },
+      {
+        "tarea": "Crear rama de git para los cambios (feature/fix-equipment-status-tags)",
+        "responsable": "Desarrollador",
+        "completado": false
+      },
+      {
+        "tarea": "Revisar que existan datos de prueba con los 4 estados de equipos",
+        "responsable": "QA/Desarrollador",
+        "completado": false
+      }
+    ],
+    "durante_implementacion": [
+      {
+        "orden": 1,
+        "tarea": "Agregar/verificar clases CSS para tags de estado",
+        "archivo": "CSS principal o styles.py",
+        "verificacion": "Inspeccionar elemento en navegador y confirmar aplicación de estilos",
+        "completado": false
+      },
+      {
+        "orden": 2,
+        "tarea": "Actualizar función get_estado() en robots_modals.py",
+        "archivo": "src/sam/web/frontend/features/modals/robots_modals.py",
+        "linea": "~876",
+        "verificacion": "Ejecutar escenarios TEST-001 y TEST-002",
+        "completado": false
+      },
+      {
+        "orden": 3,
+        "tarea": "Actualizar función get_estado() en schedule_modal.py",
+        "archivo": "src/sam/web/frontend/features/modals/schedule_modal.py",
+        "linea": "~319",
+        "verificacion": "Ejecutar escenario TEST-003",
+        "completado": false
+      },
+      {
+        "orden": 4,
+        "tarea": "Agregar función get_tipo_asignacion() y actualizar EquipoRow/EquipoCard",
+        "archivo": "src/sam/web/frontend/features/components/equipo_list.py",
+        "linea": "~110, ~115, ~203",
+        "verificacion": "Ejecutar escenario TEST-004",
+        "completado": false
+      },
+      {
+        "orden": 5,
+        "tarea": "Verificar tooltips en todos los tags",
+        "archivo": "Todos los modificados",
+        "verificacion": "Ejecutar escenario TEST-005",
+        "completado": false
+      }
+    ],
+    "post_implementacion": [
+      {
+        "tarea": "Ejecutar suite completa de pruebas de regresión",
+        "verificacion": "Todos los tests existentes pasan sin errores",
+        "completado": false
+      },
+      {
+        "tarea": "Validar visualmente en navegadores: Chrome, Firefox, Safari",
+        "verificacion": "Tags se ven correctamente en los 3 navegadores",
+        "completado": false
+      },
+      {
+        "tarea": "Validar en dispositivos móviles (responsive)",
+        "verificacion": "Tarjetas de equipos muestran tags correctamente",
+        "completado": false
+      },
+      {
+        "tarea": "Actualizar documentación del proyecto (si aplica)",
+        "verificacion": "README o Wiki actualizado con nuevos estados",
+        "completado": false
+      },
+      {
+        "tarea": "Code review por par técnico",
+        "verificacion": "Aprobación de pull request",
+        "completado": false
+      },
+      {
+        "tarea": "Merge a rama principal y deploy",
+        "verificacion": "Funcionalidad verificada en ambiente de producción",
+        "completado": false
+      }
+    ]
+  },
+  "matriz_trazabilidad": {
+    "descripcion": "Relación entre reglas de negocio, problemas identificados y soluciones implementadas",
+    "mapeo": [
+      {
+        "regla_negocio": "BR-01 (Estados de Equipos)",
+        "problema": "P-001, P-002, P-003",
+        "solucion": "S-001, S-002, S-003",
+        "archivos_afectados": [
+          "robots_modals.py",
+          "schedule_modal.py",
+          "equipo_list.py"
+        ],
+        "test_validacion": "TEST-001, TEST-002, TEST-003, TEST-004"
+      },
+      {
+        "regla_negocio": "BR-02 (Equipos Disponibles)",
+        "problema": "Ninguno (backend correcto)",
+        "solucion": "No requiere cambios en backend, solo visualización",
+        "archivos_afectados": [],
+        "test_validacion": "TEST-001, TEST-003"
+      },
+      {
+        "regla_negocio": "BR-03 (Equipos NO Disponibles)",
+        "problema": "P-001 (no se visualizaba correctamente el por qué)",
+        "solucion": "S-001 (tooltips informativos)",
+        "archivos_afectados": [
+          "robots_modals.py",
+          "schedule_modal.py"
+        ],
+        "test_validacion": "TEST-005"
+      }
+    ]
+  },
+  "FAQ_implementacion": [
+    {
+      "pregunta": "¿Por qué no se detectaban las asignaciones dinámicas?",
+      "respuesta": "La lógica original solo verificaba los flags EsProgramado y Reservado explícitamente. Las asignaciones dinámicas son un 'estado implícito' que se deduce cuando AMBOS flags son False pero el equipo tiene un robot asignado. El código original no implementaba esta deducción."
+    },
+    {
+      "pregunta": "¿Es necesario modificar el backend o la base de datos?",
+      "respuesta": "NO. El backend ya retorna correctamente los flags EsProgramado, Reservado y RobotAsignado en sus queries. El problema era únicamente en la capa de presentación (frontend), donde no se interpretaban correctamente estos datos."
+    },
+    {
+      "pregunta": "¿Por qué se usa una tupla de 3 elementos en get_estado()?",
+      "respuesta": "Para retornar: (1) texto visible del tag, (2) clase CSS para estilos, (3) tooltip descriptivo. Esto mejora la experiencia de usuario al proporcionar información contextual al hacer hover sobre los tags."
+    },
+    {
+      "pregunta": "¿Se puede simplificar la lógica usando un solo componente compartido?",
+      "respuesta": "Sí, eventualmente se podría refactorizar en un componente genérico TagEstadoEquipo que ambos modales importen. Por ahora, mantener la función get_estado() en cada archivo facilita la depuración y evita dependencias circulares."
+    },
+    {
+      "pregunta": "¿Qué pasa si un equipo tiene EsProgramado=1 Y Reservado=1 simultáneamente?",
+      "respuesta": "Esto NO debería ocurrir según las reglas de negocio (son mutuamente excluyentes). Si ocurriera, la función get_estado() dará prioridad a 'Programado' porque se evalúa primero. Se recomienda agregar una constraint en la base de datos para prevenir esta inconsistencia."
+    },
+    {
+      "pregunta": "¿Los cambios afectan el funcionamiento del balanceador automático?",
+      "respuesta": "NO. El balanceador es un servicio backend que opera independientemente de la UI. Los cambios solo afectan cómo se VISUALIZAN los estados en el frontend, no cómo se asignan/desasignan equipos."
+    }
+  ],
+  "recursos_adicionales": {
+    "links_documentacion": [
+      {
+        "titulo": "ReactPy Documentation",
+        "url": "https://reactpy.dev/docs/index.html",
+        "relevancia": "Framework usado para los componentes frontend"
+      },
+      {
+        "titulo": "Pico CSS",
+        "url": "https://picocss.com/",
+        "relevancia": "Framework CSS usado (inferido por las variables CSS)"
+      },
+      {
+        "titulo": "FastAPI Documentation",
+        "url": "https://fastapi.tiangolo.com/",
+        "relevancia": "Framework del backend API"
+      }
+    ],
+    "comandos_utiles": {
+      "reiniciar_servidor_desarrollo": "# Depende del setup del proyecto, típicamente:\npython -m sam.web.app\n# o\nuvicorn sam.web.app:app --reload",
+      "ejecutar_tests": "pytest tests/frontend/test_equipo_list.py -v",
+      "linter_codigo": "flake8 src/sam/web/frontend/features/",
+      "formatear_codigo": "black src/sam/web/frontend/features/"
+    }
+  },
+  "glosario_extendido": {
+    "terminos_tecnicos": {
+      "ReactPy": "Framework Python para crear interfaces de usuario reactivas similares a React.js pero usando Python puro",
+      "FastAPI": "Framework web moderno y rápido para construir APIs con Python basado en type hints",
+      "Hook": "Función reutilizable en ReactPy (use_state, use_effect, etc.) que permite usar características de React en componentes funcionales",
+      "Component": "Función decorada con @component que retorna elementos HTML/ReactPy",
+      "State": "Datos que pueden cambiar con el tiempo y provocan re-renderizado del componente cuando se actualizan",
+      "Tooltip": "Texto informativo que aparece al posicionar el cursor sobre un elemento UI",
+      "Tag": "Etiqueta visual (badge) que muestra información de estado de forma compacta y colorida"
+    },
+    "terminos_negocio": {
+      "Balanceador": "Servicio automático que asigna dinámicamente equipos a robots según demanda y disponibilidad",
+      "Programación": "Configuración de horarios y días en que un robot debe ejecutarse automáticamente",
+      "Asignación Manual": "Cuando un usuario reserva explícitamente un equipo para un robot específico",
+      "Equipo Compartible": "Equipo que puede ser usado por múltiples robots/programaciones simultáneamente (solo los Programados)",
+      "Equipo Exclusivo": "Equipo de uso único para un robot (Reservados y Dinámicos)",
+      "Pool": "Grupo lógico de equipos que pueden ser asignados conjuntamente a robots relacionados"
+    }
+  },
+  "apendices": {
+    "apendice_a_diagrama_flujo": {
+      "titulo": "Diagrama de Flujo - Determinación de Estado de Equipo",
+      "descripcion_textual": "INICIO\n  |\n  v\n¿EsProgramado == 1?\n  |-- SÍ --> ESTADO: Programado (Azul) --> FIN\n  |\n  NO\n  |\n  v\n¿Reservado == 1?\n  |-- SÍ --> ESTADO: Reservado (Ámbar) --> FIN\n  |\n  NO\n  |\n  v\n¿Tiene RobotAsignado?\n  |-- SÍ --> ESTADO: Dinámico (Violeta) --> FIN\n  |\n  NO\n  |\n  v\nESTADO: Libre (Verde) --> FIN"
+    },
+    "apendice_b_tabla_decision": {
+      "titulo": "Tabla de Decisión - Estado de Equipo",
+      "columnas": [
+        "EsProgramado",
+        "Reservado",
+        "RobotAsignado != N/A",
+        "Estado Resultante",
+        "Color",
+        "Compartible"
+      ],
+      "filas": [
+        {
+          "EsProgramado": "1 (True)",
+          "Reservado": "* (cualquiera)",
+          "RobotAsignado": "* (cualquiera)",
+          "Estado": "Programado",
+          "Color": "Azul (#0ea5e9)",
+          "Compartible": "Sí",
+          "notas": "Prioridad 1 - Siempre prevalece"
+        },
+        {
+          "EsProgramado": "0 (False)",
+          "Reservado": "1 (True)",
+          "RobotAsignado": "* (cualquiera)",
+          "Estado": "Reservado",
+          "Color": "Ámbar (#f59e0b)",
+          "Compartible": "No",
+          "notas": "Prioridad 2"
+        },
+        {
+          "EsProgramado": "0 (False)",
+          "Reservado": "0 (False)",
+          "RobotAsignado": "Sí (tiene valor != N/A)",
+          "Estado": "Dinámico",
+          "Color": "Violeta (#8b5cf6)",
+          "Compartible": "No",
+          "notas": "Prioridad 3 - Asignado por balanceador"
+        },
+        {
+          "EsProgramado": "0 (False)",
+          "Reservado": "0 (False)",
+          "RobotAsignado": "No (N/A o NULL)",
+          "Estado": "Libre",
+          "Color": "Verde (#10b981)",
+          "Compartible": "N/A (sin asignación)",
+          "notas": "Prioridad 4 - Estado por defecto"
+        }
+      ],
+      "casos_invalidos": [
+        {
+          "condicion": "EsProgramado=1 AND Reservado=1",
+          "validez": "INVÁLIDO - No debería existir",
+          "accion": "Priorizar Programado, pero reportar inconsistencia en logs",
+          "prevencion": "Agregar constraint CHECK en base de datos"
+        }
+      ]
+    },
+    "apendice_c_ejemplos_uso": {
+      "titulo": "Ejemplos de Uso en Código",
+      "ejemplo_1": {
+        "descripcion": "Uso básico en componente de tabla",
+        "codigo": "# En un componente de tabla de equipos\n@component\ndef TablaEquipos(equipos: List[Dict]):\n    def get_estado(equipo: Dict) -> tuple[str, str, str]:\n        # ... (implementación completa de la función)\n        pass\n    \n    return html.table(\n        html.thead(\n            html.tr(\n                html.th('Equipo'),\n                html.th('Estado'),\n                html.th('Acciones')\n            )\n        ),\n        html.tbody(\n            *[\n                html.tr(\n                    html.td(eq['Equipo']),\n                    html.td(\n                        html.span(\n                            {\n                                'class_name': f\"tag {get_estado(eq)[1]}\",\n                                'title': get_estado(eq)[2]\n                            },\n                            get_estado(eq)[0]\n                        )\n                    ),\n                    html.td('...')\n                )\n                for eq in equipos\n            ]\n        )\n    )"
+      },
+      "ejemplo_2": {
+        "descripcion": "Filtrado de equipos por estado",
+        "codigo": "# Filtrar equipos disponibles (Libres o Programados)\ndef obtener_equipos_disponibles(todos_equipos: List[Dict]) -> List[Dict]:\n    disponibles = []\n    \n    for equipo in todos_equipos:\n        estado = get_estado_equipo(equipo)[0]  # Obtener texto del estado\n        \n        # Los equipos Libres y Programados están disponibles\n        if estado in ['Libre', 'Programado']:\n            disponibles.append(equipo)\n    \n    return disponibles"
+      },
+      "ejemplo_3": {
+        "descripcion": "Deshabilitar acciones según estado",
+        "codigo": "# Deshabilitar switch de balanceo si el equipo está programado\nes_programado = equipo.get('EsProgramado', False)\n\nhtml.label(\n    html.input(\n        {\n            'type': 'checkbox',\n            'role': 'switch',\n            'checked': equipo['PermiteBalanceoDinamico'],\n            'on_change': event(handle_toggle_balanceo),\n            'disabled': es_programado,  # Deshabilitar si está programado\n            'title': 'No se puede balancear un equipo programado' if es_programado else 'Activar/Desactivar Balanceo Dinámico'\n        }\n    ),\n    'Balanceo Dinámico'\n)"
+      }
+    },
+    "apendice_d_query_validacion": {
+      "titulo": "Queries SQL para Validar Datos",
+      "descripcion": "Scripts SQL para verificar la consistencia de datos antes y después de los cambios",
+      "queries": [
+        {
+          "nombre": "Contar equipos por estado",
+          "proposito": "Obtener distribución de equipos en cada estado",
+          "sql": "-- Contar equipos por estado de asignación\nWITH EstadosEquipos AS (\n    SELECT \n        e.EquipoId,\n        e.Equipo,\n        COALESCE(a.EsProgramado, 0) AS EsProgramado,\n        COALESCE(a.Reservado, 0) AS Reservado,\n        CASE \n            WHEN a.EquipoId IS NULL THEN 'N/A'\n            ELSE r.Robot\n        END AS RobotAsignado,\n        CASE\n            WHEN a.EsProgramado = 1 THEN 'Programado'\n            WHEN a.Reservado = 1 THEN 'Reservado'\n            WHEN a.EquipoId IS NOT NULL AND a.EsProgramado = 0 AND a.Reservado = 0 THEN 'Dinamico'\n            ELSE 'Libre'\n        END AS Estado\n    FROM dbo.Equipos e\n    LEFT JOIN dbo.Asignaciones a ON e.EquipoId = a.EquipoId\n    LEFT JOIN dbo.Robots r ON a.RobotId = r.RobotId\n    WHERE e.Activo_SAM = 1\n)\nSELECT \n    Estado,\n    COUNT(*) AS CantidadEquipos,\n    CAST(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER () AS DECIMAL(5,2)) AS Porcentaje\nFROM EstadosEquipos\nGROUP BY Estado\nORDER BY CantidadEquipos DESC;"
+        },
+        {
+          "nombre": "Detectar inconsistencias",
+          "proposito": "Identificar equipos con estados mutuamente excluyentes",
+          "sql": "-- Detectar equipos con EsProgramado=1 Y Reservado=1 (inconsistencia)\nSELECT \n    e.EquipoId,\n    e.Equipo,\n    a.EsProgramado,\n    a.Reservado,\n    r.Robot AS RobotAsignado,\n    'INCONSISTENCIA: Programado Y Reservado' AS Problema\nFROM dbo.Equipos e\nINNER JOIN dbo.Asignaciones a ON e.EquipoId = a.EquipoId\nLEFT JOIN dbo.Robots r ON a.RobotId = r.RobotId\nWHERE a.EsProgramado = 1 \n  AND a.Reservado = 1;\n\n-- Si esta query retorna filas, hay datos inconsistentes que deben corregirse"
+        },
+        {
+          "nombre": "Listar equipos compartidos",
+          "proposito": "Ver qué equipos programados están siendo usados por múltiples robots",
+          "sql": "-- Equipos programados compartidos entre múltiples robots\nSELECT \n    e.EquipoId,\n    e.Equipo,\n    COUNT(DISTINCT a.RobotId) AS CantidadRobots,\n    STRING_AGG(r.Robot, ', ') AS RobotsAsignados\nFROM dbo.Equipos e\nINNER JOIN dbo.Asignaciones a ON e.EquipoId = a.EquipoId\nINNER JOIN dbo.Robots r ON a.RobotId = r.RobotId\nWHERE a.EsProgramado = 1\nGROUP BY e.EquipoId, e.Equipo\nHAVING COUNT(DISTINCT a.RobotId) > 1\nORDER BY CantidadRobots DESC;"
+        },
+        {
+          "nombre": "Verificar equipos disponibles para programación",
+          "proposito": "Simular la lógica de 'get_available_devices' en SQL puro",
+          "sql": "-- Equipos disponibles para asignar a una programación\n-- (Libres + Programados, excluyendo Reservados y Dinámicos)\nWITH EquiposReservadosODinamicos AS (\n    SELECT DISTINCT EquipoId\n    FROM dbo.Asignaciones\n    WHERE Reservado = 1\n       OR (EsProgramado = 0 AND Reservado = 0)\n)\nSELECT \n    e.EquipoId,\n    e.Equipo,\n    CASE \n        WHEN EXISTS (\n            SELECT 1 FROM dbo.Asignaciones a2 \n            WHERE a2.EquipoId = e.EquipoId AND a2.EsProgramado = 1\n        ) THEN 'Programado'\n        ELSE 'Libre'\n    END AS Estado\nFROM dbo.Equipos e\nWHERE e.Activo_SAM = 1\n  AND e.Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')\n  AND e.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservadosODinamicos)\nORDER BY e.Equipo;"
+        }
+      ]
+    }
+  },
+  "historial_cambios": [
+    {
+      "version": "1.0",
+      "fecha": "2025-01-01",
+      "autor": "Análisis Claude + Usuario",
+      "cambios": [
+        "Documento inicial completo",
+        "Identificación de 4 problemas principales",
+        "Definición de 4 soluciones con código propuesto",
+        "Plan de implementación y testing",
+        "Documentación extensa de reglas de negocio"
+      ]
+    }
+  ],
+  "conclusiones": {
+    "resumen": "Se identificaron inconsistencias en la visualización de estados de equipos en 3 componentes del frontend que no reflejaban correctamente las 4 clasificaciones definidas en las reglas de negocio (Programado, Reservado, Dinámico, Libre). Las soluciones propuestas unifican la lógica de detección de estados y mejoran la experiencia de usuario mediante tooltips informativos y colores distintivos.",
+    "impacto_esperado": {
+      "usuarios": "Mayor claridad sobre el estado real de cada equipo y por qué está disponible o no para asignación",
+      "operaciones": "Reducción de consultas de soporte por confusión sobre estados de equipos",
+      "mantenimiento": "Código más consistente y mantenible al unificar la lógica de estados",
+      "escalabilidad": "Facilita agregar nuevos estados o modificar visualización en el futuro"
+    },
+    "riesgos_mitigados": [
+      "Malinterpretación de disponibilidad de equipos",
+      "Asignaciones incorrectas por desconocimiento del estado real",
+      "Inconsistencias visuales entre diferentes vistas de la aplicación"
+    ],
+    "proximos_pasos_sugeridos": [
+      "Implementar los cambios siguiendo el plan de implementación",
+      "Ejecutar suite completa de pruebas de validación",
+      "Considerar agregar constraint en BD para prevenir EsProgramado=1 AND Reservado=1",
+      "Evaluar refactorización futura de get_estado() a componente compartido",
+      "Documentar estados de equipos en manual de usuario"
+    ]
+  },
+  "contacto_soporte": {
+    "descripcion": "Información de contacto para soporte durante implementación",
+    "responsables": [
+      {
+        "rol": "Autor del Análisis",
+        "nombre": "Claude (Anthropic AI)",
+        "notas": "Documento generado mediante análisis de código y reglas de negocio"
+      },
+      {
+        "rol": "Implementador",
+        "nombre": "[Completar con nombre del desarrollador asignado]",
+        "email": "[Completar]",
+        "notas": "Responsable de aplicar los cambios propuestos"
+      },
+      {
+        "rol": "QA/Testing",
+        "nombre": "[Completar con nombre del QA asignado]",
+        "email": "[Completar]",
+        "notas": "Responsable de ejecutar escenarios de validación"
+      },
+      {
+        "rol": "Product Owner",
+        "nombre": "[Completar]",
+        "email": "[Completar]",
+        "notas": "Aprobación final de cambios en UI/UX"
+      }
+    ]
+  },
+  "licencia_documento": {
+    "tipo": "Documento de Análisis Técnico - Uso Interno",
+    "restricciones": "Este documento es confidencial y de uso exclusivo para el equipo de desarrollo del proyecto SAM",
+    "version_documento": "1.0",
+    "ultima_actualizacion": "2025-01-01"
+  }
+}

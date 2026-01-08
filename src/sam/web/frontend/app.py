@@ -10,6 +10,7 @@ from sam.web.frontend.api.api_client import APIClient, get_api_client
 
 # Componentes de analítica
 from .features.components.analytics import (
+    AnalyticsSummary,
     BalanceadorDashboard,
     CallbacksDashboard,
     StatusDashboard,
@@ -639,6 +640,55 @@ def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
     robots_state = use_robots()
     equipos_state = use_equipos()
 
+    # Estado para controlar la vista actual
+    # Valores: "summary", "status", "callbacks", "balanceador", "tiempos", "utilizacion", "patrones", "tasas"
+    current_view, set_current_view = use_state("summary")
+
+    # Estado para caché de datos del resumen (evita recargas al volver)
+    summary_data, set_summary_data = use_state(None)
+
+    def handle_navigate(view_name):
+        set_current_view(view_name)
+
+    def handle_update_summary(new_data):
+        set_summary_data(new_data)
+
+    def render_content():
+        if current_view == "summary":
+            return AnalyticsSummary(
+                on_navigate=handle_navigate, initial_data=summary_data, on_refresh=handle_update_summary
+            )
+
+        # Botón para volver
+        back_button = html.button(
+            {
+                "on_click": lambda e: set_current_view("summary"),
+                "class_name": "secondary outline",
+                "style": {"margin-bottom": "1rem"},
+            },
+            "← Volver al Resumen",
+        )
+
+        content = None
+        if current_view == "status":
+            content = StatusDashboard()
+        elif current_view == "callbacks":
+            content = CallbacksDashboard()
+        elif current_view == "balanceador":
+            content = BalanceadorDashboard()
+        elif current_view == "tiempos":
+            content = TiemposEjecucionDashboard()
+        elif current_view == "utilizacion":
+            content = UtilizationDashboard()
+        elif current_view == "patrones":
+            content = TemporalPatternsDashboard()
+        elif current_view == "tasas":
+            content = TasasExitoDashboard()
+        else:
+            content = html.div("Vista no encontrada")
+
+        return html.div(back_button, content)
+
     return PageWithLayout(
         theme_is_dark=theme_is_dark,
         on_theme_toggle=on_theme_toggle,
@@ -661,25 +711,10 @@ def AnalyticsPage(theme_is_dark: bool, on_theme_toggle):
             html.div(
                 {
                     "style": {
-                        "display": "grid",
-                        "grid-template-columns": "1fr",
-                        "gap": "2rem",
                         "margin-top": "2rem",
                     }
                 },
-                StatusDashboard(),
-                html.hr(),
-                CallbacksDashboard(),
-                html.hr(),
-                BalanceadorDashboard(),
-                html.hr(),
-                TiemposEjecucionDashboard(),
-                html.hr(),
-                UtilizationDashboard(),
-                html.hr(),
-                TemporalPatternsDashboard(),
-                html.hr(),
-                TasasExitoDashboard(),
+                render_content(),
             ),
         ),
     )

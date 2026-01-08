@@ -23,6 +23,10 @@ def TiemposEjecucionDashboard():
     error, set_error = use_state(None)
     meses_hacia_atras, set_meses_hacia_atras = use_state(1)
     incluir_solo_completadas, set_incluir_solo_completadas = use_state(True)
+    # Estado para Top N
+    top_n, set_top_n = use_state(20)
+    # Estado para Ordenamiento
+    sort_by, set_sort_by = use_state("tiempo_desc")  # tiempo_desc, latencia_desc
 
     api_client = get_api_client()
 
@@ -68,6 +72,15 @@ def TiemposEjecucionDashboard():
     if not dashboard_data:
         return html.div({"class_name": "tiempos-ejecucion-dashboard"}, html.p("No hay datos disponibles"))
 
+    # Ordenar datos según criterio
+    if sort_by == "tiempo_desc":
+        dashboard_data.sort(key=lambda x: float(x.get("TiempoPromedioPorRepeticionMinutos", 0) or 0), reverse=True)
+    elif sort_by == "latencia_desc":
+        dashboard_data.sort(key=lambda x: float(x.get("LatenciaPromedioMinutos", 0) or 0), reverse=True)
+
+    # Aplicar Top N a los datos
+    filtered_data = dashboard_data[:top_n]
+
     # Preparar datos para gráficos
     robots_labels = []
     tiempos_por_repeticion = []
@@ -75,7 +88,7 @@ def TiemposEjecucionDashboard():
     repeticiones_promedio = []
     latencias = []
 
-    for item in dashboard_data:
+    for item in filtered_data:
         robots_labels.append(item.get("RobotNombre", "N/A")[:30])  # Limitar longitud
         tiempos_por_repeticion.append(item.get("TiempoPromedioPorRepeticionMinutos", 0))
         tiempos_totales.append(item.get("TiempoPromedioTotalMinutos", 0))
@@ -132,6 +145,33 @@ def TiemposEjecucionDashboard():
                 ),
             ),
             html.div(
+                html.label("Ordenar por:"),
+                html.select(
+                    {
+                        "value": sort_by,
+                        "on_change": lambda e: set_sort_by(e["target"]["value"]),
+                    },
+                    html.option({"value": "tiempo_desc"}, "Tiempo por Repetición (Más Lento)"),
+                    html.option({"value": "latencia_desc"}, "Latencia de Inicio (Mayor)"),
+                ),
+            ),
+            html.div(
+                html.label("Top N:"),
+                html.input(
+                    {
+                        "type": "number",
+                        "min": "1",
+                        "max": "100",
+                        "value": top_n,
+                        "on_change": lambda e: set_top_n(int(e["target"]["value"]) if e["target"]["value"] else 20),
+                    }
+                ),
+            ),
+            html.div(
+                {
+                    "title": "Excluye ejecuciones en progreso o con errores. Solo analiza ejecuciones finalizadas exitosamente para métricas más precisas.",
+                    "style": {"display": "flex", "align-items": "center"},
+                },
                 html.label(
                     html.input(
                         {
@@ -142,7 +182,7 @@ def TiemposEjecucionDashboard():
                         }
                     ),
                     "Solo ejecuciones completadas",
-                )
+                ),
             ),
             html.button(
                 {"on_click": handle_refresh, "type": "button"}, html.i({"class_name": "fa-solid fa-filter"}), " Aplicar"
@@ -151,7 +191,7 @@ def TiemposEjecucionDashboard():
         # Gráfico de tiempo por repetición
         html.div(
             {"class_name": "chart-container"},
-            html.h3("Tiempo Promedio por Repetición por Robot"),
+            html.h3(f"Top {top_n} Tiempo Promedio por Repetición por Robot"),
             BarChart(
                 chart_id="tiempos-repeticion-chart",
                 title="Tiempo Promedio por Repetición (minutos)",
@@ -171,7 +211,7 @@ def TiemposEjecucionDashboard():
         # Gráfico de latencia
         html.div(
             {"class_name": "chart-container"},
-            html.h3("Latencia Promedio de Inicio por Robot"),
+            html.h3(f"Top {top_n} Latencia Promedio de Inicio por Robot"),
             html.p(
                 {"class_name": "metric-description"},
                 "Delay entre que SAM dispara el robot y A360 realmente lo inicia (actualizado por Conciliador)",
@@ -195,18 +235,23 @@ def TiemposEjecucionDashboard():
         # Tabla de métricas detalladas
         html.div(
             {"class_name": "metrics-table"},
-            html.h3("Métricas Detalladas por Robot"),
+            html.h3(f"Top {top_n} Métricas Detalladas por Robot"),
             html.table(
                 {"class_name": "dashboard-table"},
                 html.thead(
                     html.tr(
                         html.th("Robot"),
-                        html.th("Ejecuciones"),
-                        html.th("Tiempo/Rep (HH:MM:SS)"),
-                        html.th("Tiempo Total (HH:MM:SS)"),
-                        html.th("Repeticiones"),
-                        html.th("Latencia (HH:MM:SS)"),
-                        html.th("Desv. Est. (seg)"),
+                        html.th({"title": "Cantidad total de ejecuciones analizadas en el periodo"}, "Ejecuciones"),
+                        html.th(
+                            {"title": "Tiempo promedio que toma procesar UN solo ítem o vuelta"},
+                            "Tiempo/Rep (HH:MM:SS)",
+                        ),
+                        html.th({"title": "Tiempo promedio total de la ejecución completa"}, "Tiempo Total (HH:MM:SS)"),
+                        html.th({"title": "Cantidad promedio de ítems procesados por ejecución"}, "Repeticiones"),
+                        html.th(
+                            {"title": "Tiempo de espera desde el disparo hasta el inicio real"}, "Latencia (HH:MM:SS)"
+                        ),
+                        html.th({"title": "Medida de estabilidad (menor es más estable)"}, "Desv. Est. (seg)"),
                     )
                 ),
                 html.tbody(
@@ -216,7 +261,7 @@ def TiemposEjecucionDashboard():
                             html.td(str(item.get("EjecucionesAnalizadas", 0))),
                             html.td(format_minutes_to_hhmmss(item.get("TiempoPromedioPorRepeticionMinutos"))),
                             html.td(format_minutes_to_hhmmss(item.get("TiempoPromedioTotalMinutos"))),
-                            html.td(f"{(item.get('PromedioRepeticiones') or 1):.1f}"),
+                            html.td(f"{int(item.get('PromedioRepeticiones') or 1)}"),
                             html.td(
                                 format_minutes_to_hhmmss(item.get("LatenciaPromedioMinutos"))
                                 if item.get("LatenciaPromedioMinutos")
@@ -224,7 +269,7 @@ def TiemposEjecucionDashboard():
                             ),
                             html.td(f"{(item.get('DesviacionEstandarSegundos') or 0):.1f}"),
                         )
-                        for item in dashboard_data[:20]  # Top 20
+                        for item in filtered_data
                     ]
                 ),
             ),

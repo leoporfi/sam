@@ -146,3 +146,25 @@
     font-size: 1.5rem;
     font-weight: bold;
 }
+
+/* Summary Cards */
+.summary-card {
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: 1px solid var(--pico-card-border-color);
+    background-color: var(--pico-card-background-color);
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.card-blue { border-left: 4px solid var(--pico-color-blue-500); }
+.card-red { border-left: 4px solid var(--pico-color-red-500); }
+.card-green { border-left: 4px solid var(--pico-color-green-500); }
+.card-purple { border-left: 4px solid var(--pico-color-purple-500); }
+.card-orange { border-left: 4px solid var(--pico-color-orange-500); }
+.card-cyan { border-left: 4px solid var(--pico-color-cyan-500); }
+.card-indigo { border-left: 4px solid var(--pico-color-indigo-500); }
