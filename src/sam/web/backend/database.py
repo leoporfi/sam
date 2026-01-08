@@ -102,67 +102,28 @@ def get_robots(
     sort_by: str = "Robot",
     sort_dir: str = "asc",
 ) -> Dict:
-    sortable_columns = {
-        "Robot": "r.Robot",
-        "CantidadEquiposAsignados": "ISNULL(ea.Equipos, 0)",
-        "Activo": "r.Activo",
-        "EsOnline": "r.EsOnline",
-        "TieneProgramacion": "(CASE WHEN EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1) THEN 1 ELSE 0 END)",
-        "PrioridadBalanceo": "r.PrioridadBalanceo",
-        "TicketsPorEquipoAdicional": "r.TicketsPorEquipoAdicional",
-    }
-    order_by_column = sortable_columns.get(sort_by, "r.Robot")
-    order_by_direction = "DESC" if sort_dir.lower() == "desc" else "ASC"
-
-    select_from_clause = "FROM dbo.Robots r LEFT JOIN dbo.EquiposAsignados ea ON r.Robot = ea.Robot"
-    conditions: List[str] = []
-    params: List[any] = []
-
-    if name:
-        conditions.append("r.Robot LIKE ?")
-        params.append(f"%{name}%")
-    if active is not None:
-        conditions.append("r.Activo = ?")
-        params.append(active)
-    if online is not None:
-        conditions.append("r.EsOnline = ?")
-        params.append(online)
-    if programado is not None:
-        # Programado = True  -> robots que tienen al menos una programación activa
-        # Programado = False -> robots sin programaciones activas
-        if programado:
-            conditions.append(
-                "EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)"
-            )
-        else:
-            conditions.append(
-                "NOT EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)"
-            )
-
-    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
-
-    count_query = f"SELECT COUNT(*) as total_count {select_from_clause} {where_clause}"
-    total_count_result = db.ejecutar_consulta(count_query, tuple(params), es_select=True)
-    total_count = total_count_result[0]["total_count"] if total_count_result else 0
-
-    offset = (page - 1) * size
-    main_query = f"""
-        SELECT
-            r.RobotId, r.Robot, r.Descripcion, r.MinEquipos, r.MaxEquipos,
-            r.EsOnline, r.Activo, r.PrioridadBalanceo,
-            r.TicketsPorEquipoAdicional, r.Parametros,
-            ISNULL(ea.Equipos, 0) as CantidadEquiposAsignados,
-            CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.Programaciones p WHERE p.RobotId = r.RobotId AND p.Activo = 1)
-                 THEN 1 ELSE 0 END AS BIT) AS TieneProgramacion
-        {select_from_clause}
-        {where_clause}
-        ORDER BY {order_by_column} {order_by_direction}
-        OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
     """
-    pagination_params = params + [offset, size]
-    robots_data = db.ejecutar_consulta(main_query, tuple(pagination_params), es_select=True)
+    Obtiene lista de robots paginada usando SP.
+    """
+    try:
+        # Construimos la llamada EXEC con parámetros nombrados para seguridad y claridad
+        query = "EXEC dbo.ObtenerRobotsPaginado @Nombre=?, @Activo=?, @Online=?, @Programado=?, @Page=?, @Size=?, @SortBy=?, @SortDir=?"
+        query_params = (name, active, online, programado, page, size, sort_by, sort_dir)
 
-    return {"total_count": total_count, "page": page, "size": size, "robots": robots_data}
+        robots_data = db.ejecutar_consulta(query, query_params, es_select=True)
+
+        total_count = 0
+        if robots_data:
+            total_count = robots_data[0].get("TotalCount", 0)
+            # Limpiamos la columna extra si no se quiere enviar al front (opcional)
+            for r in robots_data:
+                r.pop("TotalCount", None)
+
+        return {"total_count": total_count, "page": page, "size": size, "robots": robots_data}
+
+    except Exception as e:
+        logger.error(f"Error en get_robots: {e}", exc_info=True)
+        raise
 
 
 def update_robot_status(db: DatabaseConnector, robot_id: int, field: str, value: bool) -> bool:
@@ -642,92 +603,21 @@ def toggle_schedule_active(db: DatabaseConnector, schedule_id: int, activo: bool
 def get_schedule_devices_data(db: DatabaseConnector, schedule_id: int) -> Dict[str, List[Dict]]:
     """
     Obtiene los equipos asignados a una programación específica y los disponibles.
-    Incluye información sobre si los equipos están programados en otras programaciones.
+    Usa SP dbo.ObtenerEquiposParaProgramacion.
     """
-    # 1. Obtener los asignados a ESTA programación
-    query_assigned = """
-        SELECT e.EquipoId AS ID, e.Equipo AS Nombre, e.Licencia,
-               CAST(1 AS BIT) AS EsProgramado, CAST(0 AS BIT) AS Reservado
-        FROM Equipos e
-        INNER JOIN Asignaciones a ON e.EquipoId = a.EquipoId
-        WHERE a.ProgramacionId = ?
-    """
-    assigned = db.ejecutar_consulta(query_assigned, (schedule_id,), es_select=True)
+    try:
+        # Usamos ejecutar_sp_multiple_result_sets que espera un dict de params
+        params = {"ProgramacionId": schedule_id}
+        result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.ObtenerEquiposParaProgramacion", params)
 
-    # 2. Obtener equipos disponibles (que estén activos en SAM)
-    # Excluimos:
-    # - Los que ya están asignados a esta programación
-    # - Los que están reservados manualmente (Reservado = 1)
-    # - Los que están asignados dinámicamente (EsProgramado = 0 AND Reservado = 0)
-    # Incluimos información sobre si están programados en otras programaciones
-    assigned_ids = [item["ID"] for item in assigned]
+        assigned = result_sets[0] if len(result_sets) > 0 else []
+        available = result_sets[1] if len(result_sets) > 1 else []
 
-    # Si hay asignados, construimos los placeholders (?,?,?)
-    if assigned_ids:
-        placeholders = ",".join("?" * len(assigned_ids))
-        query_available = f"""
-            WITH EquiposReservadosODinamicos AS (
-                -- Equipos reservados manualmente o asignados dinámicamente
-                SELECT DISTINCT EquipoId
-                FROM dbo.Asignaciones
-                WHERE Reservado = 1
-                   OR (EsProgramado = 0 AND Reservado = 0)
-            ),
-            EquiposProgramadosEnOtrasProgramaciones AS (
-                -- Equipos programados en otras programaciones (no en esta)
-                SELECT DISTINCT EquipoId, CAST(1 AS BIT) AS EsProgramado
-                FROM dbo.Asignaciones
-                WHERE EsProgramado = 1
-                  AND ProgramacionId != ?
-            )
-            SELECT
-                e.EquipoId AS ID,
-                e.Equipo AS Nombre,
-                e.Licencia,
-                ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
-                CAST(0 AS BIT) AS Reservado
-            FROM Equipos e
-            LEFT JOIN EquiposProgramadosEnOtrasProgramaciones P ON e.EquipoId = P.EquipoId
-            WHERE e.Activo_SAM = 1
-              AND e.EquipoId NOT IN ({placeholders})
-              AND e.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservadosODinamicos)
-            ORDER BY e.Equipo ASC
-        """
-        params = tuple([schedule_id] + list(assigned_ids))
-    else:
-        # Si no hay nadie asignado, traemos todos los activos (excluyendo reservados/dinámicos)
-        query_available = """
-            WITH EquiposReservadosODinamicos AS (
-                -- Equipos reservados manualmente o asignados dinámicamente
-                SELECT DISTINCT EquipoId
-                FROM dbo.Asignaciones
-                WHERE Reservado = 1
-                   OR (EsProgramado = 0 AND Reservado = 0)
-            ),
-            EquiposProgramadosEnOtrasProgramaciones AS (
-                -- Equipos programados en otras programaciones (no en esta)
-                SELECT DISTINCT EquipoId, CAST(1 AS BIT) AS EsProgramado
-                FROM dbo.Asignaciones
-                WHERE EsProgramado = 1
-                  AND ProgramacionId != ?
-            )
-            SELECT
-                e.EquipoId AS ID,
-                e.Equipo AS Nombre,
-                e.Licencia,
-                ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
-                CAST(0 AS BIT) AS Reservado
-            FROM Equipos e
-            LEFT JOIN EquiposProgramadosEnOtrasProgramaciones P ON e.EquipoId = P.EquipoId
-            WHERE e.Activo_SAM = 1
-              AND e.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservadosODinamicos)
-            ORDER BY e.Equipo ASC
-        """
-        params = (schedule_id,)
+        return {"assigned": assigned, "available": available}
 
-    available = db.ejecutar_consulta(query_available, params, es_select=True)
-
-    return {"assigned": assigned, "available": available}
+    except Exception as e:
+        logger.error(f"Error en get_schedule_devices_data: {e}", exc_info=True)
+        raise
 
 
 def update_schedule_devices_db(db: DatabaseConnector, schedule_id: int, equipo_ids: List[int]):
@@ -931,77 +821,42 @@ def delete_mapping(db: DatabaseConnector, mapeo_id: int):
 
 
 def get_system_status(db: DatabaseConnector) -> Dict:
-    """Obtiene el estado actual del sistema en tiempo real."""
-    result = {}
+    """Obtiene el estado actual del sistema en tiempo real usando SP optimizado."""
+    try:
+        # Usamos ejecutar_sp_multiple_result_sets que espera un dict de params
+        # Aunque no tenga params, pasamos dict vacío
+        result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.ObtenerEstadoSistema", {})
 
-    # Estado del balanceador - Resumen agregado
-    query_balanceador = """
-        SELECT
-            COUNT(*) AS TotalRobots,
-            SUM(CASE WHEN EstadoActual = 'Online' THEN 1 ELSE 0 END) AS RobotsOnline,
-            SUM(CASE WHEN EstadoActual = 'Programado' THEN 1 ELSE 0 END) AS RobotsProgramados,
-            SUM(CASE WHEN EstadoBalanceo = 'Necesita más equipos' THEN 1 ELSE 0 END) AS RobotsNecesitanEquipos,
-            SUM(CASE WHEN EstadoBalanceo = 'Exceso de equipos' THEN 1 ELSE 0 END) AS RobotsConExcesoEquipos,
-            SUM(CASE WHEN EstadoBalanceo = 'Balanceado' THEN 1 ELSE 0 END) AS RobotsBalanceados,
-            AVG(CAST(EquiposAsignados AS FLOAT)) AS PromedioEquiposAsignados,
-            SUM(EjecucionesActivas) AS TotalEjecucionesActivas
-        FROM dbo.EstadoBalanceadorTiempoReal
-    """
-    estado_balanceador = db.ejecutar_consulta(query_balanceador, es_select=True)
-    result["balanceador"] = estado_balanceador[0] if estado_balanceador else {}
+        if not result_sets:
+            return {}
 
-    # Ejecuciones activas
-    query_ejecuciones = """
-        SELECT
-            COUNT(*) AS TotalActivas,
-            COUNT(DISTINCT RobotId) AS RobotsActivos,
-            COUNT(DISTINCT EquipoId) AS EquiposOcupados
-        FROM dbo.EjecucionesActivas
-    """
-    ejecuciones = db.ejecutar_consulta(query_ejecuciones, es_select=True)
-    result["ejecuciones"] = ejecuciones[0] if ejecuciones else {}
+        row = result_sets[0][0] if result_sets[0] else {}
 
-    # Robots - con distinción de programados
-    # Usamos subconsultas para evitar el error de agregación sobre EXISTS
-    query_robots = """
-        SELECT
-            COUNT(*) AS TotalRobots,
-            SUM(CASE WHEN Activo = 1 THEN 1 ELSE 0 END) AS RobotsActivos,
-            SUM(CASE WHEN EsOnline = 1 THEN 1 ELSE 0 END) AS RobotsOnline,
-            SUM(CASE WHEN EsOnline = 0 THEN 1 ELSE 0 END) AS RobotsOffline,
-            (
-                SELECT COUNT(DISTINCT p.RobotId)
-                FROM dbo.Programaciones p
-                WHERE p.Activo = 1
-            ) AS RobotsProgramados,
-            SUM(CASE WHEN Activo = 1 AND EsOnline = 1 THEN 1 ELSE 0 END) AS RobotsActivosOnline,
-            (
-                SELECT COUNT(DISTINCT r2.RobotId)
-                FROM dbo.Robots r2
-                WHERE r2.Activo = 1
-                    AND r2.EsOnline = 0
-                    AND EXISTS (
-                        SELECT 1 FROM dbo.Programaciones p2
-                        WHERE p2.RobotId = r2.RobotId AND p2.Activo = 1
-                    )
-            ) AS RobotsActivosProgramados
-        FROM dbo.Robots r
-    """
-    robots = db.ejecutar_consulta(query_robots, es_select=True)
-    result["robots"] = robots[0] if robots else {}
+        return {
+            "ejecuciones": {
+                "TotalActivas": row.get("EjecucionesActivas", 0),
+                "RobotsActivos": row.get("RobotsEjecutando", 0),
+                "EquiposOcupados": row.get("EquiposEjecutando", 0),
+            },
+            "programaciones": {
+                "ProgramacionesActivas": row.get("ProgramacionesActivas", 0),
+            },
+            "robots": {
+                "TotalRobots": row.get("TotalRobots", 0),
+                "RobotsActivos": row.get("RobotsActivos", 0),
+                "RobotsOnline": row.get("RobotsOnline", 0),
+                "RobotsProgramados": row.get("RobotsProgramados", 0),
+            },
+            "equipos": {
+                "TotalEquipos": row.get("TotalEquipos", 0),
+                "EquiposActivos": row.get("EquiposActivos", 0),
+                "EquiposBalanceables": row.get("EquiposBalanceables", 0),
+            },
+        }
 
-    # Equipos
-    query_equipos = """
-        SELECT
-            COUNT(*) AS TotalEquipos,
-            SUM(CASE WHEN Activo_SAM = 1 THEN 1 ELSE 0 END) AS EquiposActivos,
-            SUM(CASE WHEN PermiteBalanceoDinamico = 1 THEN 1 ELSE 0 END) AS EquiposBalanceables
-        FROM dbo.Equipos
-    """
-    equipos = db.ejecutar_consulta(query_equipos, es_select=True)
-    result["equipos"] = equipos[0] if equipos else {}
-
-    return result
+    except Exception as e:
+        logger.error(f"Error en get_system_status: {e}", exc_info=True)
+        return {}
 
 
 def ejecutar_sp_multiple_result_sets(db: DatabaseConnector, sp_name: str, params: Dict[str, Any]) -> List[List[Dict]]:
@@ -1207,134 +1062,19 @@ def get_recent_executions(
     factor_umbral_dinamico: float = 1.5,
 ) -> List[Dict]:
     """
-    Obtiene las ejecuciones recientes, incluyendo detección inteligente de ejecuciones críticas.
-
-    Ejecuciones críticas incluyen:
-    1. Fallos: RUN_FAILED, DEPLOY_FAILED, RUN_ABORTED
-    2. Demoradas: RUNNING/DEPLOYED que exceden umbral (dinámico o fijo)
-    3. Huérfanas: QUEUED sin DEPLOYED/RUNNING correspondiente
-
-    Args:
-        limit: Número máximo de ejecuciones a retornar
-        critical_only: Si True, solo retorna ejecuciones críticas
-        umbral_fijo_minutos: Umbral fijo cuando no hay historial del robot
-        factor_umbral_dinamico: Multiplicador del tiempo promedio del robot
+    Obtiene las ejecuciones recientes usando SP.
     """
-
-    # Query compleja con CTEs para calcular tiempos promedio y detectar críticos
-    query = f"""
-        WITH TiemposPromedio AS (
-            -- Calcular tiempo promedio por robot (solo si tiene suficiente historial)
-            SELECT
-                RobotId,
-                AVG(DATEDIFF(MINUTE, FechaInicio, FechaFin)) AS TiempoPromedioMinutos,
-                COUNT(*) AS CantidadEjecuciones
-            FROM dbo.Ejecuciones
-            WHERE FechaFin IS NOT NULL
-              AND Estado = 'RUN_COMPLETED'
-              AND DATEDIFF(MINUTE, FechaInicio, FechaFin) > 0
-            GROUP BY RobotId
-            HAVING COUNT(*) >= 5
-        )
-        SELECT TOP {limit}
-            e.EjecucionId AS Id,
-            r.Robot,
-            eq.Equipo,
-            e.Estado,
-            e.FechaInicio,
-            e.FechaFin,
-            DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) AS TiempoTranscurridoMinutos,
-            CASE
-                -- Fallos inmediatos
-                WHEN e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED') THEN 'Fallo'
-
-                -- RUNNING o DEPLOYED demorados
-                WHEN e.Estado IN ('RUNNING', 'DEPLOYED') AND (
-                    (tp.TiempoPromedioMinutos IS NOT NULL AND
-                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > tp.TiempoPromedioMinutos * {factor_umbral_dinamico})
-                    OR
-                    (tp.TiempoPromedioMinutos IS NULL AND
-                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > {umbral_fijo_minutos})
-                ) THEN 'Demorada'
-
-                -- QUEUED huérfano (sin DEPLOYED/RUNNING correspondiente)
-                WHEN e.Estado = 'QUEUED'
-                     AND DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > 5
-                     AND NOT EXISTS (
-                        SELECT 1 FROM dbo.Ejecuciones e2
-                        WHERE e2.RobotId = e.RobotId
-                          AND e2.EquipoId = e.EquipoId
-                          AND e2.Estado IN ('DEPLOYED', 'RUNNING')
-                          AND e2.FechaInicio >= e.FechaInicio
-                     ) THEN 'Huerfana'
-
-                ELSE NULL
-            END AS TipoCritico,
-            CASE
-                WHEN tp.TiempoPromedioMinutos IS NOT NULL
-                THEN tp.TiempoPromedioMinutos * {factor_umbral_dinamico}
-                ELSE {umbral_fijo_minutos}
-            END AS UmbralUtilizadoMinutos,
-            CASE
-                WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN 'Dinámico'
-                ELSE 'Fijo'
-            END AS TipoUmbral,
-            tp.TiempoPromedioMinutos AS TiempoPromedioRobotMinutos,
-            CASE WHEN e.FechaFin IS NULL THEN 'Activa' ELSE 'Historico' END AS Origen
-        FROM dbo.Ejecuciones e
-        LEFT JOIN dbo.Robots r ON e.RobotId = r.RobotId
-        LEFT JOIN dbo.Equipos eq ON e.EquipoId = eq.EquipoId
-        LEFT JOIN TiemposPromedio tp ON e.RobotId = tp.RobotId
-    """
-
-    if critical_only:
-        query += (
-            """
-        WHERE
-            -- Fallos
-            e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
-            OR (
-                -- RUNNING/DEPLOYED demorados
-                e.Estado IN ('RUNNING', 'DEPLOYED') AND (
-                    (tp.TiempoPromedioMinutos IS NOT NULL AND
-                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > tp.TiempoPromedioMinutos * """
-            + str(factor_umbral_dinamico)
-            + """)
-                    OR
-                    (tp.TiempoPromedioMinutos IS NULL AND
-                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > """
-            + str(umbral_fijo_minutos)
-            + """)
-                )
-            )
-            OR (
-                -- QUEUED huérfanos
-                e.Estado = 'QUEUED'
-                AND DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > 5
-                AND NOT EXISTS (
-                    SELECT 1 FROM dbo.Ejecuciones e2
-                    WHERE e2.RobotId = e.RobotId
-                      AND e2.EquipoId = e.EquipoId
-                      AND e2.Estado IN ('DEPLOYED', 'RUNNING')
-                      AND e2.FechaInicio >= e.FechaInicio
-                )
-            )
-        """
-        )
-
-    query += """
-        ORDER BY
-            CASE
-                WHEN e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED') THEN 1
-                WHEN e.Estado IN ('RUNNING', 'DEPLOYED') THEN 2
-                WHEN e.Estado = 'QUEUED' THEN 3
-                ELSE 4
-            END,
-            e.FechaInicio DESC
-    """
-
     try:
-        return db.ejecutar_consulta(query, es_select=True)
+        params = {
+            "Limit": limit,
+            "SoloCriticos": critical_only,
+            "UmbralFijoMinutos": umbral_fijo_minutos,
+            "FactorUmbralDinamico": factor_umbral_dinamico,
+        }
+        # El SP retorna un solo result set
+        result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.ObtenerEjecucionesRecientes", params)
+        return result_sets[0] if result_sets else []
+
     except Exception as e:
         logger.error(f"Error obteniendo ejecuciones recientes: {e}", exc_info=True)
         return []
