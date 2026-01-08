@@ -5,6 +5,8 @@ from typing import Callable, List, Optional
 from reactpy import component, html, use_state
 from reactpy_router import link
 
+from sam import __version__
+
 logger = logging.getLogger(__name__)
 
 
@@ -418,5 +420,19 @@ def PageWithLayout(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_s
             robots_state=robots_state,
             equipos_state=equipos_state,
         ),
-        html.main({"class_name": "container"}, children),
+        html.main({"class_name": "container", "style": {"min-height": "calc(100vh - 140px)"}}, children),
+        html.footer(
+            {
+                "class_name": "container",
+                "style": {
+                    "text-align": "center",
+                    "padding": "1rem",
+                    "color": "var(--pico-muted-color)",
+                    "font-size": "0.8rem",
+                    "border-top": "1px solid var(--pico-muted-border-color)",
+                    "margin-top": "auto",
+                },
+            },
+            f"SAM v{__version__}",
+        ),
     )
