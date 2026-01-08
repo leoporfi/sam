@@ -42,6 +42,6 @@ BEGIN
         (SELECT COUNT(DISTINCT E.EquipoId) FROM Ejecuciones E
             INNER JOIN Robots R ON E.RobotId = R.RobotId
             WHERE E.Estado IN ('DEPLOYED', 'RUNNING', 'QUEUED', 'PENDING_EXECUTION')
-            AND (@PoolId IS NULL OR R.PoolId = @PoolId)) AS EquiposOcupados;
+            AND (@PoolId IS NULL OR R.PoolId = @PoolId)) AS EquiposEjecutando;
 END
 GO

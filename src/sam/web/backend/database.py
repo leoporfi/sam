@@ -836,7 +836,7 @@ def get_system_status(db: DatabaseConnector) -> Dict:
             "ejecuciones": {
                 "TotalActivas": row.get("EjecucionesActivas", 0),
                 "RobotsActivos": row.get("RobotsEjecutando", 0),
-                "EquiposOcupados": row.get("EquiposEjecutando", 0),
+                "EquiposEjecutando": row.get("EquiposEjecutando", 0),
             },
             "programaciones": {
                 "ProgramacionesActivas": row.get("ProgramacionesActivas", 0),

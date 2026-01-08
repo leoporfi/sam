@@ -154,7 +154,7 @@ def StatusDashboard(scroll_to=None):
                 html.div({"class_name": "metric-label"}, "Ejecuciones en curso"),
                 html.footer(
                     {"class_name": "metric-footer"},
-                    f"{ejecuciones.get('RobotsActivos', 0)} robots activos • {ejecuciones.get('EquiposOcupados', 0)} equipos ocupados",
+                    f"{ejecuciones.get('RobotsActivos', 0)} robots activos • {ejecuciones.get('EquiposEjecutando', 0)} equipos ocupados",
                 ),
             ),
             # Card Robots
