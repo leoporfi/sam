@@ -1067,7 +1067,7 @@ def get_recent_executions(
     try:
         params = {
             "Limit": limit,
-            "SoloCriticos": critical_only,
+            "CriticalOnly": critical_only,
             "UmbralFijoMinutos": umbral_fijo_minutos,
             "FactorUmbralDinamico": factor_umbral_dinamico,
         }

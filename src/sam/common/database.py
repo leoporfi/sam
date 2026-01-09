@@ -32,7 +32,7 @@ class DatabaseConnector:
         self.max_retries = sql_config["max_retries"]
         self.initial_delay = sql_config["initial_delay"]
         self.retryable_sqlstates = set(sql_config["retryable_sqlstates"])
-        self._pool_max_size = 5
+        self._pool_max_size = sql_config["pool_size"]
 
         self.connection_string = (
             f"DRIVER={sql_config['driver']};"

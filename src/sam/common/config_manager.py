@@ -106,6 +106,7 @@ class ConfigManager:
             "retryable_sqlstates": cls._get_env_with_warning(
                 f"{prefix}_CODIGOS_SQLSTATE_REINTENTABLES", "40001,HYT00,HYT01,08S01"
             ).split(","),
+            "pool_size": int(cls._get_env_with_warning(f"{prefix}_POOL_SIZE", 5)),
         }
 
     # --- CONFIGURACIONES ESPECÍFICAS POR SERVICIO ---
