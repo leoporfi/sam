@@ -352,3 +352,23 @@ class AutomationAnywhereClient:
         if self._client and not self._client.is_closed:
             await self._client.aclose()
             logger.info("Cliente API de A360 cerrado.")
+
+    async def check_health(self) -> bool:
+        """
+        Verifica la conectividad con el Control Room realizando una petición ligera.
+        Retorna True si el servicio responde correctamente (incluso 401), False si hay error de conexión o 5xx.
+        """
+        try:
+            # Usamos el endpoint de autenticación con credenciales dummy para verificar que el servidor responde
+            # No usamos _realizar_peticion_api para evitar bucles de re-autenticación
+            # Solo queremos saber si el servidor está "vivo"
+            response = await self._client.post(self._ENDPOINT_AUTH_V2, json={"username": "healthcheck"})
+
+            # Si responde 401 (Unauthorized) o 200, el servidor está vivo.
+            # Si responde 5xx, está roto.
+            if response.status_code < 500:
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Health check fallido: {e}")
+            return False

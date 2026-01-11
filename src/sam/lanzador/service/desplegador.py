@@ -409,29 +409,32 @@ class Desplegador:
                         self._in_recovery_mode = False
 
                     elif recovery_status == "NORMAL":
-                        if self._is_potential_recovery():
-                            # Detectado patrón de reinicio -> Entrar en modo recovery
-                            self._in_recovery_mode = True
-                            self._recovery_start_time = datetime.now()
-                            should_alert = True
-                            alert_context = AlertContext(
-                                alert_level=AlertLevel.MEDIUM,
-                                alert_scope=AlertScope.SYSTEM,
-                                alert_type=AlertType.RECOVERY,
-                                subject="Control Room A360 posiblemente reiniciándose",
-                                summary="Se han detectado múltiples errores 5xx en corto tiempo. Posible reinicio en curso.",
-                                technical_details={
-                                    "Patrón": "Múltiples 5xx en < 3 min",
-                                    "Errores recientes": str([p.status_code for p in self._server_error_history[-3:]]),
-                                },
-                                actions=[
-                                    "Esperar 5 minutos a que el servicio se estabilice",
-                                    "No reiniciar servicios manualmente aún",
-                                ],
-                            )
+                        # Verificar salud real del servidor para distinguir caída de error aislado
+                        is_server_healthy = await self._aa_client.check_health()
+
+                        if not is_server_healthy:
+                            # Servidor NO responde -> Caída de Sistema
+                            if not self._in_recovery_mode:
+                                self._in_recovery_mode = True
+                                self._recovery_start_time = datetime.now()
+                                should_alert = True
+                                alert_context = AlertContext(
+                                    alert_level=AlertLevel.CRITICAL,
+                                    alert_scope=AlertScope.SYSTEM,
+                                    alert_type=AlertType.RECOVERY,
+                                    subject="Control Room A360 no responde",
+                                    summary="El servidor A360 no responde a las verificaciones de salud. Posible caída total.",
+                                    technical_details={
+                                        "Error Original": f"{status_code} - {response_text}",
+                                        "Health Check": "Fallido (Conexión rechazada o 5xx)",
+                                    },
+                                    actions=[
+                                        "Verificar estado del servidor A360",
+                                        "Contactar a Infraestructura inmediatamente",
+                                    ],
+                                )
                         else:
-                            # Error 5xx aislado o inicial -> Alerta estándar pero CRITICAL
-                            # Solo alertar si no se ha alertado recientemente para este equipo (evitar spam local)
+                            # Servidor SÍ responde -> Error 500 es específico de este request (Robot/Usuario)
                             equipo_alertado_key = f"{status_code}_{equipo_id}"
                             if equipo_alertado_key not in self._equipos_alertados_500:
                                 should_alert = True
@@ -440,12 +443,13 @@ class Desplegador:
                                     alert_scope=AlertScope.ROBOT,
                                     alert_type=AlertType.PERMANENT,
                                     subject=f"Error 500 en Despliegue de '{robot_nombre}'",
-                                    summary="Error 500 irreversible al intentar desplegar. Posible ID de archivo o usuario inválido.",
+                                    summary="Error 500 irreversible. El servidor está online, pero rechazó este despliegue específico.",
                                     technical_details={
                                         "Robot": f"{robot_nombre} (ID: {robot_id})",
                                         "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
                                         "Usuario": f"{user_nombre} (ID: {user_id})",
                                         "Error": f"{status_code} - {response_text}",
+                                        "Health Check": "Exitoso (Servidor Online)",
                                     },
                                     actions=[
                                         "Verificar que el FileId del robot exista en A360",
