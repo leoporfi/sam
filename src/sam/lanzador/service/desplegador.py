@@ -3,12 +3,13 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 import pytz
 
 from sam.common.a360_client import AutomationAnywhereClient
+from sam.common.alert_types import AlertContext, AlertLevel, AlertScope, AlertType, ServerErrorPattern
 from sam.common.apigw_client import ApiGatewayClient
 from sam.common.database import DatabaseConnector
 from sam.common.mail_client import EmailAlertClient
@@ -53,6 +54,12 @@ class Desplegador:
         self._equipos_alertados_400 = set()
         # Control para no spamear alertas de error 500 en el mismo ciclo
         self._equipos_alertados_500 = set()
+
+        # --- SISTEMA DE ALERTAS MEJORADO ---
+        self._server_error_history: List[ServerErrorPattern] = []
+        self._in_recovery_mode: bool = False
+        self._recovery_start_time: Optional[datetime] = None
+        self._alert_history: Dict[str, List[datetime]] = {}
 
     async def desplegar_robots_pendientes(self) -> List[Dict[str, Any]]:
         """
@@ -224,20 +231,25 @@ class Desplegador:
                         logger.error(
                             f"Error 412 - Problema con Robot {robot_id} ({robot_nombre}) - No compatible targets. Error: {response_text_full}"
                         )
-                        alert_sent = self._notificador.send_alert(
-                            subject=f"[SAM CRÍTICO] Robot '{robot_nombre}' sin Compatible Targets",
-                            message=(
-                                f"Error al desplegar robot (Error 412 - Problema con el robot, NO con el device):\n\n"
-                                f"🤖 Robot: {robot_nombre} (ID: {robot_id})\n"
-                                f"💻 Equipo: {equipo_nombre} (ID: {equipo_id})\n"
-                                f"👤 Usuario: {user_nombre} (ID: {user_id})\n\n"
-                                f"📋 Mensaje de error completo:\n{response_text_full}\n\n"
-                                f"⚠️ Acción requerida:\n"
-                                f"   - Revisar la configuración del robot '{robot_nombre}' en A360\n"
-                                f"   - Verificar que tenga al menos un Compatible Target configurado"
-                            ),
-                            is_critical=True,
+                        context = AlertContext(
+                            alert_level=AlertLevel.CRITICAL,
+                            alert_scope=AlertScope.ROBOT,
+                            alert_type=AlertType.PERMANENT,
+                            subject=f"Robot '{robot_nombre}' no configurable",
+                            summary=f"El robot '{robot_nombre}' no tiene dispositivos compatibles asignados en A360.",
+                            technical_details={
+                                "Robot": f"{robot_nombre} (ID: {robot_id})",
+                                "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
+                                "Usuario": f"{user_nombre} (ID: {user_id})",
+                                "Error": "No compatible targets found",
+                            },
+                            actions=[
+                                f"Ingresar a A360 Control Room > Bots > {robot_nombre}",
+                                "Editar el bot y verificar la pestaña 'Run settings'",
+                                "Asegurar que haya al menos un dispositivo en 'Run with these devices'",
+                            ],
                         )
+                        alert_sent = self._notificador.send_alert_v2(context)
                         if not alert_sent:
                             logger.error(f"Fallo al enviar alerta de error de robot {robot_id} ({robot_nombre})")
 
@@ -317,21 +329,25 @@ class Desplegador:
                             logger.debug(
                                 f"Intentando enviar alerta para error 400 en equipo {equipo_id} ({equipo_nombre})"
                             )
-                            alert_sent = self._notificador.send_alert(
-                                subject=f"[SAM CRÍTICO] Error 400 - Robot '{robot_nombre}' en Equipo '{equipo_nombre}'",
-                                message=(
-                                    f"Error de Configuración (400 Bad Request) al desplegar:\n\n"
-                                    f"🤖 Robot: {robot_nombre} (ID: {robot_id})\n"
-                                    f"💻 Equipo: {equipo_nombre} (ID: {equipo_id})\n"
-                                    f"👤 Usuario: {user_nombre} (ID: {user_id})\n\n"
-                                    f"📋 Causa del error:\n{response_text}\n\n"
-                                    f"⚠️ Acción requerida:\n"
-                                    f"   1. Verificar que el usuario '{user_nombre}' tenga permisos sobre el robot '{robot_nombre}'\n"
-                                    f"   2. Confirmar que haya licencias disponibles en A360\n"
-                                    f"   3. Validar que el robot exista en el Control Room"
-                                ),
-                                is_critical=True,
+                            context = AlertContext(
+                                alert_level=AlertLevel.CRITICAL,
+                                alert_scope=AlertScope.ROBOT,
+                                alert_type=AlertType.PERMANENT,
+                                subject=f"Error de configuración en despliegue de '{robot_nombre}'",
+                                summary=f"Fallo de configuración (400 Bad Request) al intentar desplegar en {equipo_nombre}.",
+                                technical_details={
+                                    "Robot": f"{robot_nombre} (ID: {robot_id})",
+                                    "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
+                                    "Usuario": f"{user_nombre} (ID: {user_id})",
+                                    "Error": response_text,
+                                },
+                                actions=[
+                                    f"Verificar que el usuario '{user_nombre}' tenga permisos sobre el robot",
+                                    "Confirmar que haya licencias disponibles en A360",
+                                    "Validar que el robot exista en el Control Room",
+                                ],
                             )
+                            alert_sent = self._notificador.send_alert_v2(context)
                             if alert_sent:
                                 self._equipos_alertados_400.add(equipo_alertado_key)
                             else:
@@ -361,33 +377,84 @@ class Desplegador:
                         f"Error HTTP {status_code} (Server Error) Robot {robot_id} ({robot_nombre}) Equipo {equipo_id} ({equipo_nombre}): {response_text}"
                     )
 
-                    # Enviar alerta para errores del servidor (solo la primera vez por equipo en el ciclo)
-                    equipo_alertado_key = f"{status_code}_{equipo_id}"
-                    if equipo_alertado_key not in self._equipos_alertados_500:
-                        logger.warning(
-                            f"Enviando alerta por error {status_code} del servidor para equipo {equipo_id} ({equipo_nombre})"
+                    # --- LÓGICA DE DETECCIÓN DE REINICIO A360 ---
+                    self._track_server_error(status_code)
+                    recovery_status = self._check_recovery_window()
+
+                    should_alert = False
+                    alert_context = None
+
+                    if recovery_status == "RECOVERY":
+                        logger.info(f"Suprimiendo alerta 5xx (Modo Recuperación Activo). Status: {status_code}")
+
+                    elif recovery_status == "TIMEOUT":
+                        # Fallo persistente tras ventana de recuperación
+                        should_alert = True
+                        alert_context = AlertContext(
+                            alert_level=AlertLevel.CRITICAL,
+                            alert_scope=AlertScope.SYSTEM,
+                            alert_type=AlertType.PERMANENT,
+                            subject="Control Room A360 caído persistentemente",
+                            summary="El servidor A360 no se ha recuperado después de 5 minutos de inestabilidad.",
+                            technical_details={
+                                "Último Error": f"{status_code} - {response_text}",
+                                "Tiempo Caída": "> 5 minutos",
+                            },
+                            actions=[
+                                "Contactar a Soporte de Infraestructura AHORA",
+                                "Verificar servicios de A360 en el servidor",
+                            ],
                         )
-                        alert_sent = self._notificador.send_alert(
-                            subject=f"[SAM CRÍTICO] Error {status_code} del Servidor A360 - Robot '{robot_nombre}'",
-                            message=(
-                                f"Error del servidor A360 ({status_code} Server Error) al desplegar robot:\n\n"
-                                f"🤖 Robot: {robot_nombre} (ID: {robot_id})\n"
-                                f"💻 Equipo: {equipo_nombre} (ID: {equipo_id})\n"
-                                f"👤 Usuario: {user_nombre} (ID: {user_id})\n\n"
-                                f"📋 Mensaje de error del servidor:\n{response_text_full}\n\n"
-                                f"⚠️ Acción requerida:\n"
-                                f"   - Verificar el estado del servidor A360\n"
-                                f"   - Revisar si hay problemas conocidos en A360 Control Room\n"
-                                f"   - El sistema reintentará en el próximo ciclo"
-                            ),
-                            is_critical=True,
-                        )
-                        if alert_sent:
-                            self._equipos_alertados_500.add(equipo_alertado_key)
-                        else:
-                            logger.error(
-                                f"Fallo al enviar alerta de error {status_code} para equipo {equipo_id} ({equipo_nombre})"
+                        # Salir de modo recovery para permitir futuras alertas si esto persiste
+                        self._in_recovery_mode = False
+
+                    elif recovery_status == "NORMAL":
+                        if self._is_potential_recovery():
+                            # Detectado patrón de reinicio -> Entrar en modo recovery
+                            self._in_recovery_mode = True
+                            self._recovery_start_time = datetime.now()
+                            should_alert = True
+                            alert_context = AlertContext(
+                                alert_level=AlertLevel.MEDIUM,
+                                alert_scope=AlertScope.SYSTEM,
+                                alert_type=AlertType.RECOVERY,
+                                subject="Control Room A360 posiblemente reiniciándose",
+                                summary="Se han detectado múltiples errores 5xx en corto tiempo. Posible reinicio en curso.",
+                                technical_details={
+                                    "Patrón": "Múltiples 5xx en < 3 min",
+                                    "Errores recientes": str([p.status_code for p in self._server_error_history[-3:]]),
+                                },
+                                actions=[
+                                    "Esperar 5 minutos a que el servicio se estabilice",
+                                    "No reiniciar servicios manualmente aún",
+                                ],
                             )
+                        else:
+                            # Error 5xx aislado o inicial -> Alerta estándar pero CRITICAL
+                            # Solo alertar si no se ha alertado recientemente para este equipo (evitar spam local)
+                            equipo_alertado_key = f"{status_code}_{equipo_id}"
+                            if equipo_alertado_key not in self._equipos_alertados_500:
+                                should_alert = True
+                                alert_context = AlertContext(
+                                    alert_level=AlertLevel.CRITICAL,
+                                    alert_scope=AlertScope.SYSTEM,
+                                    alert_type=AlertType.TRANSIENT,
+                                    subject=f"Error {status_code} en Control Room A360",
+                                    summary=f"El servidor respondió con error {status_code}. Podría ser un fallo transitorio.",
+                                    technical_details={
+                                        "Error": f"{status_code} - {response_text}",
+                                        "Equipo": equipo_nombre,
+                                    },
+                                    actions=["Verificar acceso a Control Room", "Si persiste, contactar soporte"],
+                                )
+                                self._equipos_alertados_500.add(equipo_alertado_key)
+
+                    if should_alert and alert_context:
+                        # Usar tracking de frecuencia para no spamear la misma alerta de sistema
+                        alert_key = f"SYSTEM_5XX_{alert_context.alert_type.value}"
+                        if self._should_send_alert(alert_key, cooldown_min=15):
+                            alert_context.frequency_info = self._get_frequency_info(alert_key)
+                            self._notificador.send_alert_v2(alert_context)
 
                     # No reintentar errores del servidor, esperar al próximo ciclo
                     break
@@ -474,3 +541,80 @@ class Desplegador:
         except (ValueError, pytz.exceptions.UnknownTimeZoneError) as e:
             logger.error(f"Error al procesar la ventana de pausa. Verifique el formato HH:MM. Error: {e}")
             return False
+
+    # --- MÉTODOS DE SOPORTE PARA ALERTAS MEJORADAS ---
+
+    def _track_server_error(self, status_code: int) -> None:
+        """Registra un error 5xx para detección de patrones."""
+        now = datetime.now()
+        # Limpiar historial antiguo (> 10 min)
+        self._server_error_history = [
+            p for p in self._server_error_history if (now - p.timestamp).total_seconds() < 600
+        ]
+        self._server_error_history.append(ServerErrorPattern(status_code, now))
+
+    def _is_potential_recovery(self) -> bool:
+        """
+        Detecta si hay un patrón de reinicio:
+        Al menos 2 errores 5xx diferentes en los últimos 3 minutos.
+        """
+        now = datetime.now()
+        recent_errors = [p for p in self._server_error_history if (now - p.timestamp).total_seconds() < 180]
+
+        if len(recent_errors) < 2:
+            return False
+
+        # Verificar si hay códigos de estado diferentes (ej: 500 y 502)
+        unique_codes = {p.status_code for p in recent_errors}
+        return len(unique_codes) >= 2 or len(recent_errors) >= 3
+
+    def _check_recovery_window(self) -> str:
+        """
+        Verifica el estado de la ventana de recuperación.
+        Returns: 'NORMAL', 'RECOVERY', 'TIMEOUT'
+        """
+        if not self._in_recovery_mode:
+            return "NORMAL"
+
+        if not self._recovery_start_time:
+            self._in_recovery_mode = False
+            return "NORMAL"
+
+        elapsed = (datetime.now() - self._recovery_start_time).total_seconds()
+
+        # Ventana de 5 minutos (300s)
+        if elapsed > 300:
+            return "TIMEOUT"
+
+        return "RECOVERY"
+
+    def _should_send_alert(self, alert_key: str, cooldown_min: int = 30) -> bool:
+        """
+        Determina si se debe enviar una alerta basado en cooldown.
+        """
+        now = datetime.now()
+        history = self._alert_history.get(alert_key, [])
+
+        if not history:
+            self._alert_history[alert_key] = [now]
+            return True
+
+        last_sent = history[-1]
+        if (now - last_sent).total_seconds() < (cooldown_min * 60):
+            return False
+
+        history.append(now)
+        # Mantener solo las últimas 10 ocurrencias
+        self._alert_history[alert_key] = history[-10:]
+        return True
+
+    def _get_frequency_info(self, alert_key: str) -> str:
+        """Genera texto informativo sobre la frecuencia de la alerta."""
+        history = self._alert_history.get(alert_key, [])
+        count = len(history)
+        if count <= 1:
+            return "Primera ocurrencia registrada."
+
+        last = history[-2] if count >= 2 else history[0]
+        diff_min = int((datetime.now() - last).total_seconds() / 60)
+        return f"Esta alerta se ha disparado {count} veces. Última vez hace {diff_min} minutos."

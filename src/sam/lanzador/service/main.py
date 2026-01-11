@@ -1,8 +1,10 @@
 # sam/lanzador/service/main.py
 import asyncio
 import logging
-from typing import Dict, List, Set
+from datetime import datetime
+from typing import Dict, List
 
+from sam.common.alert_types import AlertContext, AlertLevel, AlertScope, AlertType
 from sam.common.mail_client import EmailAlertClient
 
 from .conciliador import Conciliador
@@ -45,7 +47,7 @@ class LanzadorService:
 
         # Tracking de errores 412 persistentes
         self._fallos_412_por_equipo: Dict[int, int] = {}  # {equipo_id: contador_fallos}
-        self._equipos_alertados: Set[int] = set()  # Equipos ya notificados
+        self._equipos_alertados: Dict[int, datetime] = {}  # {equipo_id: last_alert_time}
         self._umbral_alertas_412 = cfg_lanzador.get("umbral_alertas_412", 20)
 
         self._validar_configuracion_critica()
@@ -141,7 +143,8 @@ class LanzadorService:
                 # Resetear contador si el equipo vuelve a funcionar
                 if equipo_id in self._fallos_412_por_equipo:
                     del self._fallos_412_por_equipo[equipo_id]
-                    self._equipos_alertados.discard(equipo_id)
+                    if equipo_id in self._equipos_alertados:
+                        del self._equipos_alertados[equipo_id]
                     logger.debug(f"Equipo {equipo_id} recuperado. Contador de fallos 412 reseteado.")
 
             elif status == "fallido" and error_type == "412":
@@ -149,26 +152,46 @@ class LanzadorService:
                 contador = self._fallos_412_por_equipo.get(equipo_id, 0) + 1
                 self._fallos_412_por_equipo[equipo_id] = contador
 
-                # Alertar si cruza el umbral (solo la primera vez)
-                if contador >= self._umbral_alertas_412 and equipo_id not in self._equipos_alertados:
+                # Alertar si cruza el umbral (primera vez o cada 30 min)
+                should_alert = False
+                if contador >= self._umbral_alertas_412:
+                    last_alert = self._equipos_alertados.get(equipo_id)
+                    if not last_alert:
+                        should_alert = True
+                    elif (datetime.now() - last_alert).total_seconds() > 1800:  # 30 min
+                        should_alert = True
+
+                if should_alert:
                     logger.warning(
                         f"Equipo {equipo_id} ha alcanzado {contador} fallos consecutivos (412). Enviando alerta..."
                     )
                     equipo_nombre = resultado.get("equipo_nombre", "N/A")
-                    alert_sent = self._notificador.send_alert(
-                        subject="[SAM] Dispositivo Offline Persistente",
-                        message=(
-                            f"El Equipo '{equipo_nombre}' (ID: {equipo_id}) ha fallado {contador} despliegues consecutivos.\n\n"
-                            f"Error: 412 Precondition Failed (Dispositivo offline/ocupado)\n\n"
-                            f"Acción requerida: Verificar conectividad y estado del Bot Runner en A360."
-                        ),
-                        is_critical=True,
+
+                    context = AlertContext(
+                        alert_level=AlertLevel.HIGH,
+                        alert_scope=AlertScope.DEVICE,
+                        alert_type=AlertType.THRESHOLD,
+                        subject=f"Equipo '{equipo_nombre}' persistentemente offline",
+                        summary=f"El equipo ha fallado {contador} intentos de despliegue consecutivos (Error 412).",
+                        technical_details={
+                            "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
+                            "Fallos Consecutivos": str(contador),
+                            "Umbral Configurado": str(self._umbral_alertas_412),
+                        },
+                        actions=[
+                            "Verificar conectividad del equipo",
+                            "Verificar estado del Bot Agent en el equipo",
+                            "Reiniciar servicio de Automation Anywhere Bot Agent si es necesario",
+                        ],
+                        frequency_info="Primera alerta. Se repetirá cada 30 minutos si persiste.",
                     )
+
+                    alert_sent = self._notificador.send_alert_v2(context)
                     if alert_sent:
-                        self._equipos_alertados.add(equipo_id)
+                        self._equipos_alertados[equipo_id] = datetime.now()
                     else:
                         logger.error(
-                            f"No se pudo enviar la alerta para equipo {equipo_id}. Se reintentará en el próximo umbral."
+                            f"No se pudo enviar la alerta para equipo {equipo_id}. Se reintentará en el próximo ciclo."
                         )
 
     async def _run_sync_cycle(self, interval: int):

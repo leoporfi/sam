@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-01-11
+
+### Added
+- **Sistema de Alertas Inteligentes**: Implementación de clasificación tridimensional de alertas (Severidad, Alcance, Naturaleza).
+- **Detección de Patrones de Reinicio A360**: Lógica para identificar reinicios de servicios (errores 5xx múltiples) y suprimir alertas redundantes, enviando un aviso de recuperación (RECOVERY) en lugar de múltiples alertas críticas.
+- **Formato de Email Mejorado**: Nuevas plantillas HTML con badges de clasificación, secciones estructuradas (Contexto Técnico, Acciones) y tracking de frecuencia.
+- **Tracking de Frecuencia**: Control de repetición de alertas persistentes (ej. cada 30 min) para evitar fatiga de alertas.
+
+### Changed
+- **Refactorización de Alertas en Desplegador**: Migración de alertas 412, 400 y 500 al nuevo sistema `send_alert_v2`.
+- **Refactorización de Alertas en Orquestador**: Migración de alerta de umbral 412 al nuevo sistema.
+
 ## [1.3.3] - 2026-01-05
 
 ### Fixed

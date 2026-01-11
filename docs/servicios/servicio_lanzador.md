@@ -33,67 +33,55 @@ El servicio está construido sobre asyncio para manejar múltiples tareas concur
      * **Usuarios**.
    * Permite que SAM "vea" los nuevos robots creados en A360 sin intervención manual.
 
-## **3\. Lógica Crítica: Manejo de Errores 412**
+## **3. Sistema de Alertas Inteligentes**
 
-El error **412 Precondition Failed** tiene **DOS causas distintas** que el sistema maneja de forma diferente:
+SAM implementa un sistema de clasificación tridimensional para las alertas, permitiendo priorizar incidentes basándose en **Severidad** (CRITICAL, HIGH, MEDIUM), **Alcance** (SYSTEM, ROBOT, DEVICE) y **Naturaleza** (PERMANENT, TRANSIENT, THRESHOLD, RECOVERY).
 
 ### **3.1. Error 412 - Problema del Robot**
+**Clasificación:** `[CRITICAL] [ROBOT] [PERMANENTE]`
 **Mensaje de A360:** `"No compatible targets found in automation"`
 
-**Significado:** El robot NO tiene configurados targets compatibles en A360. Es un problema de configuración del propio bot, **NO del dispositivo**.
+**Significado:** El robot NO tiene configurados targets compatibles en A360. Es un problema de configuración del propio bot.
 
-**Comportamiento del Sistema:**
-- ✋ **NO reintenta** (es un error permanente de configuración)
-- 🚨 **Alerta INMEDIATA por email** con todos los detalles:
-  - 🤖 **Robot:** Nombre (ID)
-  - 💻 **Equipo:** Nombre (ID)
-  - 👤 **Usuario:** Nombre (ID)
-  - 📋 Mensaje de error completo de A360
-  - ⚠️ Acción requerida: "Revisar configuración del robot '{RobotNombre}' en A360"
-- 📝 El deployment NO se registra en la BD
-
-**Acción de Soporte:**
-1. Verificar en A360 Control Room la configuración de "Compatible Targets" del robot
-2. Asegurarse de que el robot tenga al menos un target compatible configurado
-
----
+**Comportamiento:**
+- ✋ **NO reintenta** (error permanente).
+- 🚨 **Alerta INMEDIATA** con acciones específicas ("Editar bot > Run settings").
+- 📝 El deployment NO se registra en la BD.
 
 ### **3.2. Error 412 - Dispositivo Offline/Ocupado**
-**Mensaje de A360:** Otros mensajes 412 (device offline, device busy, etc.)
+**Clasificación:** `[HIGH] [DEVICE] [THRESHOLD]`
+**Mensaje de A360:** Device offline, device busy, etc.
 
 **Significado:** El Bot Runner no está disponible temporalmente.
 
-**Comportamiento del Sistema:**
-- 🔄 **Reintenta automáticamente** (configurable: `LANZADOR_MAX_REINTENTOS_DEPLOY`, por defecto 2 intentos)
-- ⏱️ Espera entre reintentos: `LANZADOR_DELAY_REINTENTOS_DEPLOY_SEG` (por defecto 5 segundos)
-- 📊 **Tracking de fallos persistentes:**
-  - El orquestador cuenta fallos consecutivos por equipo
-  - Al superar el umbral (`LANZADOR_UMBRAL_ALERTAS_412`, por defecto 20), envía alerta
-  - Título: `"[SAM] Dispositivo Offline Persistente"`
-  - Se resetea automáticamente cuando el equipo vuelve a funcionar
-
-**Acción de Soporte:**
-1. Verificar que el Bot Runner esté conectado al Control Room
-2. Revisar logs del dispositivo en A360
-3. Confirmar que no haya tareas en ejecución bloqueando el equipo
-
----
+**Comportamiento:**
+- 🔄 **Reintenta automáticamente** (configurable: `LANZADOR_MAX_REINTENTOS_DEPLOY`).
+- 📊 **Tracking de Frecuencia:** Si supera el umbral (`LANZADOR_UMBRAL_ALERTAS_412`), envía alerta.
+- 🔁 **Repetición:** La alerta se repite cada 30 minutos si el problema persiste.
+- ✅ **Auto-recuperación:** Se resetea automáticamente cuando el equipo vuelve a funcionar.
 
 ### **3.3. Error 400 - Configuración Inválida**
-**Significado:** Error permanente de configuración (permisos, licencias, bot inexistente)
+**Clasificación:** `[CRITICAL] [ROBOT] [PERMANENTE]`
+**Significado:** Error permanente de configuración (permisos, licencias, bot inexistente).
 
-**Comportamiento del Sistema:**
-- ✋ **NO reintenta** (es permanente)
-- 🚨 **Alerta por email** (una sola vez por equipo en el ciclo) con formato enriquecido:
-  - Subject: `[SAM CRÍTICO] Error 400 - Robot 'X' en Equipo 'Y'`
-  - Cuerpo con nombres legibles y acciones recomendadas.
-- ❌ **Desactiva la asignación** automáticamente (elimina registro de `dbo.Asignaciones`)
+**Comportamiento:**
+- ✋ **NO reintenta**.
+- 🚨 **Alerta única** por equipo/ciclo.
+- ❌ **Desactiva la asignación** automáticamente.
 
-**Acción de Soporte:**
-Verificar en A360:
-- Permisos del usuario sobre el robot
-- Licencias disponibles
-- Existencia del robot en el Control Room
+### **3.4. Error 500 - Patrones de Reinicio A360**
+**Clasificación:** `[MEDIUM] [SYSTEM] [RECOVERY]` o `[CRITICAL] [SYSTEM] [PERMANENTE]`
+
+**Lógica de Detección:**
+El sistema monitorea errores 5xx (500, 502, 503, 504) para distinguir entre un fallo real y un reinicio de servicios.
+
+1. **Detección de Patrón:** Si ocurren múltiples errores 5xx diferentes en < 3 minutos.
+   - **Acción:** Entra en **Modo Recuperación**.
+   - **Alerta:** Envía alerta `MEDIUM` indicando "Posible reinicio de A360".
+2. **Ventana de Recuperación (5 min):**
+   - Suprime nuevas alertas 5xx para evitar spam.
+3. **Timeout:**
+   - Si tras 5 minutos no se recupera, escala a alerta `CRITICAL` ("Control Room caído persistentemente").
 
 ## **4\. Lógica Crítica: El Estado UNKNOWN**
 
@@ -304,13 +292,13 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 
 ### **Caso: "Muchas alertas de Error 412"**
 
-1. **Alerta de "Dispositivo Offline Persistente":**
-   - Se activa tras 20 fallos consecutivos (configurable)
-   - Verificar conectividad del Bot Runner con Control Room
-   - Revisar estado del dispositivo en A360
-   - El contador se resetea automáticamente al recuperarse
+1. **Alerta `[HIGH] [DEVICE] [THRESHOLD] Equipo 'X' persistentemente offline`:**
+   - Se activa tras 20 fallos consecutivos (configurable).
+   - Verificar conectividad del Bot Runner con Control Room.
+   - Revisar estado del dispositivo en A360.
+   - El contador se resetea automáticamente al recuperarse.
 
-2. **Alerta de "Robot sin Compatible Targets":**
-   - Error permanente de configuración del robot
-   - Revisar settings del bot en A360
-   - Configurar al menos un target compatible
+2. **Alerta `[CRITICAL] [ROBOT] [PERMANENTE] Robot 'X' no configurable`:**
+   - Error permanente de configuración del robot.
+   - Revisar settings del bot en A360.
+   - Configurar al menos un target compatible.

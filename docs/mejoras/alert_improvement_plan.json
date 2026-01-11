@@ -1,0 +1,355 @@
+{
+  "metadata": {
+    "proyecto": "SAM - Sistema Automático de Robots",
+    "area": "Sistema de Alertas por Email",
+    "fecha_creacion": "2026-01-11",
+    "version": "1.0"
+  },
+  
+  "problema_identificado": {
+    "resumen": "El sistema actual de alertas no diferencia entre severidades, alcances ni naturaleza de los errores, generando confusión operativa y dificultando la priorización de incidentes",
+    
+    "deficiencias_especificas": [
+      {
+        "categoria": "Falta de Categorización",
+        "descripcion": "Todas las alertas usan prefijo [CRÍTICO] o [ALERTA] sin distinguir severidad real, alcance (sistema vs componente) o naturaleza (permanente vs transitorio)",
+        "impacto": "El equipo no puede priorizar qué atender primero. Un error de configuración de 1 robot se ve igual que una caída total de A360"
+      },
+      {
+        "categoria": "Contenido Redundante",
+        "descripcion": "Los emails repiten estructura de datos (Robot ID, Equipo ID, Usuario) sin jerarquizar información esencial vs accesoria",
+        "impacto": "Dificulta lectura rápida. Lo crítico se pierde entre detalles técnicos"
+      },
+      {
+        "categoria": "Sin Contexto de Frecuencia",
+        "descripcion": "No se indica si es la primera ocurrencia o si lleva 20 fallos consecutivos",
+        "impacto": "Imposible distinguir anomalías puntuales de problemas sistémicos"
+      },
+      {
+        "categoria": "Acciones Genéricas",
+        "descripcion": "Recomendaciones vagas como 'Verificar el estado del servidor' sin pasos concretos priorizados",
+        "impacto": "El operador no sabe qué hacer exactamente ni en qué orden"
+      },
+      {
+        "categoria": "Reinicio de Servicios A360",
+        "descripcion": "Cuando A360 se reinicia, genera secuencia de errores (500→502→503) sin indicar que es proceso esperado de recuperación",
+        "impacto": "Se generan múltiples alertas críticas durante 2-5 minutos por un proceso normal de reinicio"
+      }
+    ]
+  },
+
+  "solucion_propuesta": {
+    "resumen": "Implementar sistema de clasificación tridimensional (Severidad, Alcance, Naturaleza) con detección inteligente de patrones de reinicio de A360 y formato de email optimizado para acción inmediata",
+    
+    "componentes_clave": [
+      {
+        "nombre": "Sistema de Clasificación Tridimensional",
+        "descripcion": "Tres enums independientes para categorizar alertas",
+        "dimensiones": [
+          {
+            "nombre": "AlertLevel (Severidad)",
+            "valores": [
+              "CRITICAL: Requiere acción inmediata (minutos)",
+              "HIGH: Requiere acción pronto (horas)",
+              "MEDIUM: Monitorear, actuar si persiste (días)"
+            ]
+          },
+          {
+            "nombre": "AlertScope (Alcance)",
+            "valores": [
+              "SYSTEM: Afecta capacidad global de ejecución",
+              "ROBOT: Específico de un robot",
+              "DEVICE: Específico de un equipo"
+            ]
+          },
+          {
+            "nombre": "AlertType (Naturaleza)",
+            "valores": [
+              "PERMANENT: Error de configuración, requiere corrección manual",
+              "TRANSIENT: Temporal (red, offline), se autocorrige",
+              "THRESHOLD: Acumulación de eventos que superó umbral",
+              "RECOVERY: Proceso de recuperación en curso (nuevo)"
+            ]
+          }
+        ]
+      },
+      {
+        "nombre": "Detección de Patrones de Reinicio A360",
+        "descripcion": "Lógica para identificar múltiples errores 5xx en ventana corta (posible reinicio) y evitar spam de alertas",
+        "comportamiento": [
+          "Trackear últimos errores 5xx (500, 502, 503, 504) con timestamp",
+          "Criterio de posible reinicio: ≥2 errores 5xx diferentes en ventana <3min",
+          "Primera detección → Enviar alerta MEDIUM/RECOVERY: 'A360 posiblemente reiniciándose'",
+          "Durante ventana de recuperación (5min): Suprimir nuevas alertas 5xx",
+          "Si errores 5xx persisten >5min O primer despliegue exitoso → Finalizar ventana",
+          "Si NO hubo recuperación tras 5min → Enviar alerta CRITICAL/SYSTEM: 'A360 caído persistentemente'"
+        ],
+        "ventanas_temporales": {
+          "deteccion_patron": "3 minutos (ventana para considerar errores como grupo)",
+          "esperando_recuperacion": "5 minutos (tiempo antes de escalar a crítico)",
+          "cooldown_entre_alertas_recovery": "30 minutos (evitar spam si reinicia múltiples veces)"
+        }
+      },
+      {
+        "nombre": "Tracking de Frecuencia",
+        "descripcion": "Historial de alertas para agregar contexto de recurrencia",
+        "datos_capturados": [
+          "Primera ocurrencia vs repetición",
+          "Número de fallos consecutivos",
+          "Tiempo desde último éxito",
+          "Cooldown entre alertas idénticas (30min default)"
+        ]
+      },
+      {
+        "nombre": "Formato de Email Optimizado",
+        "estructura": [
+          "Subject: [SEVERIDAD] [ALCANCE] [NATURALEZA] Título conciso",
+          "Body Sección 1 - Resumen Ejecutivo: 1 línea qué pasó + 1 línea impacto",
+          "Body Sección 2 - Contexto Técnico: Datos estructurados (IDs, nombres, errores)",
+          "Body Sección 3 - Acciones Requeridas: Lista ordenada por prioridad con pasos específicos",
+          "Body Sección 4 - Información de Frecuencia: Si aplica, cuántas veces y cuándo"
+        ]
+      }
+    ]
+  },
+
+  "casos_de_uso_transformados": [
+    {
+      "escenario": "Error 412 - Robot sin Compatible Targets",
+      "antes": {
+        "subject": "[SAM CRÍTICO] Robot 'X' sin Compatible Targets",
+        "problema": "No indica alcance (solo 1 robot afectado) ni naturaleza (permanente)"
+      },
+      "despues": {
+        "subject": "[CRÍTICO] [ROBOT] [PERMANENTE] Robot 'X' no configurable",
+        "mejoras": [
+          "Severidad justificada: Robot bloqueado hasta corrección manual",
+          "Alcance claro: Solo afecta ese robot, no todo el sistema",
+          "Naturaleza: Permanente, no se autocorrige",
+          "Acciones: 3 pasos específicos con rutas exactas en A360"
+        ]
+      }
+    },
+    {
+      "escenario": "Error 412 - Device Offline Persistente (>20 fallos)",
+      "antes": {
+        "subject": "[SAM] Dispositivo Offline Persistente",
+        "problema": "No indica cuántos robots afectados ni urgencia real"
+      },
+      "despues": {
+        "subject": "[ALTO] [EQUIPO] [UMBRAL] Equipo 'Y' persistentemente offline",
+        "mejoras": [
+          "Severidad reducida: Alto (no crítico) porque es temporal",
+          "Alcance: Equipo específico",
+          "Naturaleza: Umbral alcanzado (20 fallos consecutivos)",
+          "Contexto: Lista de robots que no pueden ejecutarse",
+          "Frecuencia: 'Primera alerta, se repetirá cada 30min si persiste'"
+        ]
+      }
+    },
+    {
+      "escenario": "Múltiples errores 5xx en ventana corta (posible reinicio A360)",
+      "antes": {
+        "subject": "[SAM CRÍTICO] Error 500 del Servidor A360",
+        "problema": "Genera múltiples alertas críticas (500, luego 502, luego 503) en pocos minutos por proceso que podría ser reinicio normal"
+      },
+      "despues": {
+        "subject": "[MEDIO] [SISTEMA] [RECOVERY] Control Room A360 posiblemente reiniciándose",
+        "mejoras": [
+          "UNA sola alerta en lugar de múltiples",
+          "Severidad: Media (proceso potencialmente esperado)",
+          "Naturaleza: RECOVERY indica posible transición normal",
+          "Mensaje: 'Detectados múltiples errores 5xx en 3min (500, 502). Posible reinicio de A360. Monitoreando recuperación...'",
+          "Acciones: '1. Esperar 5min. 2. Si no recupera, verificar estado A360 manualmente. 3. Si persiste >10min, contactar AA Support'",
+          "Seguimiento automático: Si recupera → No más alertas. Si persiste >5min → Escala a CRITICAL"
+        ]
+      }
+    },
+    {
+      "escenario": "Error 500 persistente (no patrón de reinicio)",
+      "antes": {
+        "subject": "[SAM CRÍTICO] Error 500 del Servidor A360",
+        "problema": "Mismo subject que reinicio, no distingue severidad"
+      },
+      "despues": {
+        "subject": "[CRÍTICO] [SISTEMA] [TRANSITORIO] Control Room A360 no responde",
+        "mejoras": [
+          "Severidad: Crítica (ningún robot puede ejecutarse)",
+          "Alcance: Sistema completo",
+          "Naturaleza: Transitorio (no es config, es fallo del servicio)",
+          "Contexto: 'Lleva 8 minutos sin responder (4 intentos fallidos)'",
+          "Acciones escaladas: 'Contactar AA Support AHORA'"
+        ]
+      }
+    }
+  ],
+
+  "implementacion": {
+    "fases": [
+      {
+        "fase": 1,
+        "nombre": "Crear Infraestructura Base",
+        "archivos_nuevos": [
+          "src/sam/common/alert_types.py"
+        ],
+        "contenido": [
+          "Enums: AlertLevel, AlertScope, AlertType",
+          "Dataclass: AlertContext para structured data",
+          "Dataclass: ServerErrorPattern para tracking 5xx"
+        ],
+        "estimacion_horas": 2
+      },
+      {
+        "fase": 2,
+        "nombre": "Extender EmailAlertClient",
+        "archivos_modificados": [
+          "src/sam/common/mail_client.py"
+        ],
+        "cambios": [
+          "Agregar método send_alert_v2() con nueva firma",
+          "Implementar _format_context() para rendering estructurado",
+          "Implementar _format_actions() con numeración prioritaria",
+          "Agregar badge HTML con colores por severidad",
+          "Mantener send_alert() legacy para retrocompatibilidad"
+        ],
+        "estimacion_horas": 4
+      },
+      {
+        "fase": 3,
+        "nombre": "Detector de Patrones de Reinicio A360",
+        "archivos_modificados": [
+          "src/sam/lanzador/service/desplegador.py"
+        ],
+        "logica_agregada": [
+          "Atributo: self._server_error_history: List[Tuple[int, datetime]] - Últimos errores 5xx",
+          "Atributo: self._in_recovery_mode: bool = False - Estado de ventana de recuperación",
+          "Atributo: self._recovery_start_time: Optional[datetime] = None - Inicio de ventana",
+          "Método: _track_server_error(status_code: int) → None",
+          "Método: _is_potential_recovery() → bool - Detecta si hay ≥2 errores 5xx en últimos 3min",
+          "Método: _check_recovery_window() → RecoveryStatus - Verifica si aún en ventana de 5min",
+          "Lógica: Al detectar 5xx → Si patrón de reinicio → Entrar en modo recovery → Suprimir alertas 5xx durante 5min",
+          "Lógica: Si recuperación exitosa O timeout → Salir de recovery mode"
+        ],
+        "estimacion_horas": 3
+      },
+      {
+        "fase": 4,
+        "nombre": "Tracking de Frecuencia",
+        "archivos_modificados": [
+          "src/sam/lanzador/service/desplegador.py",
+          "src/sam/lanzador/orquestador.py"
+        ],
+        "cambios": [
+          "Atributo: self._alert_history: Dict[str, List[datetime]]",
+          "Método: _should_send_alert(alert_key, cooldown_min) → bool",
+          "Método: _get_frequency_info(alert_key) → str",
+          "Integrar en todos los puntos de envío de alerta"
+        ],
+        "estimacion_horas": 2
+      },
+      {
+        "fase": 5,
+        "nombre": "Refactorizar Alertas en Desplegador",
+        "archivos_modificados": [
+          "src/sam/lanzador/service/desplegador.py"
+        ],
+        "puntos_de_cambio": [
+          {
+            "linea_aprox": 265,
+            "actual": "Error 412 - Robot sin targets",
+            "nuevo": "Usar send_alert_v2() con CRITICAL/ROBOT/PERMANENT"
+          },
+          {
+            "linea_aprox": 320,
+            "actual": "Error 400 - Bad Request",
+            "nuevo": "Usar send_alert_v2() con CRITICAL/ROBOT/PERMANENT"
+          },
+          {
+            "linea_aprox": 380,
+            "actual": "Error 500 - Server Error",
+            "nuevo": "Usar _track_server_error() + lógica de ventana de recuperación. Si _in_recovery_mode → Suprimir alerta. Si patrón detectado → Enviar MEDIUM/RECOVERY. Si persiste >5min → Enviar CRITICAL/SYSTEM"
+          }
+        ],
+        "estimacion_horas": 4
+      },
+      {
+        "fase": 6,
+        "nombre": "Refactorizar Alertas en Orquestador",
+        "archivos_modificados": [
+          "src/sam/lanzador/orquestador.py"
+        ],
+        "puntos_de_cambio": [
+          {
+            "metodo": "_gestionar_alertas_412_por_umbral()",
+            "cambio": "Usar send_alert_v2() con HIGH/DEVICE/THRESHOLD, agregar lista de robots afectados"
+          }
+        ],
+        "estimacion_horas": 2
+      },
+      {
+        "fase": 7,
+        "nombre": "Testing y Documentación",
+        "tareas": [
+          "Crear tests unitarios para _is_recovery_pattern()",
+          "Crear tests para _should_send_alert()",
+          "Probar manualmente cada tipo de alerta en dev",
+          "Actualizar docs/servicios/servicio_lanzador.md con nuevas categorías",
+          "Agregar entrada en CHANGELOG.md"
+        ],
+        "estimacion_horas": 4
+      }
+    ],
+    "estimacion_total_horas": 21,
+    "dependencias_externas": "Ninguna - cambios internos solamente"
+  },
+
+  "beneficios_esperados": {
+    "operacionales": [
+      "Reducción 70% en tiempo de diagnóstico (subject indica naturaleza del problema)",
+      "Eliminación de alertas redundantes durante reinicios A360 (3 alertas → 1)",
+      "Priorización clara: CRITICAL requiere acción inmediata, MEDIUM puede esperar",
+      "Acciones específicas aceleran resolución (no más 'verificar estado')"
+    ],
+    "tecnicos": [
+      "Código más mantenible: lógica de alertas centralizada en alert_types.py",
+      "Extensibilidad: agregar nuevas categorías sin tocar lógica existente",
+      "Retrocompatibilidad: send_alert() legacy sigue funcionando durante transición"
+    ]
+  },
+
+  "metricas_de_exito": {
+    "pre_implementacion": {
+      "alertas_spam_reinicio_a360": "3 emails críticos por cada reinicio",
+      "tiempo_promedio_identificacion_causa": "15-20 minutos (requiere revisar logs)",
+      "falsos_positivos_criticos": "~40% (errores transitorios marcados como críticos)"
+    },
+    "post_implementacion_esperado": {
+      "alertas_spam_reinicio_a360": "1 email informativo (RECOVERY) si es reinicio, o 1 CRITICAL si es fallo real después de 5min",
+      "tiempo_promedio_identificacion_causa": "<5 minutos (subject + resumen ejecutivo)",
+      "falsos_positivos_criticos": "<10% (solo errores permanentes son CRITICAL)"
+    }
+  },
+
+  "riesgos_y_mitigaciones": [
+    {
+      "riesgo": "Cambio de formato confunde a operadores acostumbrados al anterior",
+      "probabilidad": "Media",
+      "mitigacion": "Mantener send_alert() legacy 1 mes en paralelo + capacitación al equipo"
+    },
+    {
+      "riesgo": "Detección de posible reinicio marca como RECOVERY algo que no es reinicio sino fallo real",
+      "probabilidad": "Media",
+      "impacto": "Se retrasa 5 minutos la alerta crítica (espera recuperación que nunca llega)",
+      "mitigacion": [
+        "Timeout agresivo de 5min: Si no hay recuperación, escala automáticamente a CRITICAL",
+        "Monitoreo: Trackear en logs cuántas veces se activa recovery mode vs cuántas recuperan realmente",
+        "Ajuste empírico: Después de 2 semanas, revisar métricas y ajustar ventanas (3min detección, 5min timeout)"
+      ]
+    },
+    {
+      "riesgo": "Tracking de frecuencia consume mucha memoria en ejecuciones largas",
+      "probabilidad": "Muy Baja",
+      "mitigacion": "Auto-limpieza de historial >24h en cada ciclo"
+    }
+  ]
+}
