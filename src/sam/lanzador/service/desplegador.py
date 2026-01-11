@@ -437,15 +437,21 @@ class Desplegador:
                                 should_alert = True
                                 alert_context = AlertContext(
                                     alert_level=AlertLevel.CRITICAL,
-                                    alert_scope=AlertScope.SYSTEM,
-                                    alert_type=AlertType.TRANSIENT,
-                                    subject=f"Error {status_code} en Control Room A360",
-                                    summary=f"El servidor respondió con error {status_code}. Podría ser un fallo transitorio.",
+                                    alert_scope=AlertScope.ROBOT,
+                                    alert_type=AlertType.PERMANENT,
+                                    subject=f"Error 500 en Despliegue de '{robot_nombre}'",
+                                    summary="Error 500 irreversible al intentar desplegar. Posible ID de archivo o usuario inválido.",
                                     technical_details={
+                                        "Robot": f"{robot_nombre} (ID: {robot_id})",
+                                        "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
+                                        "Usuario": f"{user_nombre} (ID: {user_id})",
                                         "Error": f"{status_code} - {response_text}",
-                                        "Equipo": equipo_nombre,
                                     },
-                                    actions=["Verificar acceso a Control Room", "Si persiste, contactar soporte"],
+                                    actions=[
+                                        "Verificar que el FileId del robot exista en A360",
+                                        "Verificar que el UserId del usuario exista en A360",
+                                        "Si el error persiste, contactar soporte de A360",
+                                    ],
                                 )
                                 self._equipos_alertados_500.add(equipo_alertado_key)
 
