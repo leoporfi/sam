@@ -7,26 +7,26 @@ from typing import Any, Dict, List, Optional
 class AlertLevel(Enum):
     """Nivel de severidad de la alerta."""
 
-    CRITICAL = "CRITICAL"  # Requiere acción inmediata (minutos)
-    HIGH = "HIGH"  # Requiere acción pronto (horas)
-    MEDIUM = "MEDIUM"  # Monitorear, actuar si persiste (días)
+    CRITICAL = "CRÍTICO"  # Requiere acción inmediata (minutos)
+    HIGH = "ALTO"  # Requiere acción pronto (horas)
+    MEDIUM = "MEDIO"  # Monitorear, actuar si persiste (días)
 
 
 class AlertScope(Enum):
     """Alcance del problema reportado."""
 
-    SYSTEM = "SYSTEM"  # Afecta capacidad global de ejecución
+    SYSTEM = "SISTEMA"  # Afecta capacidad global de ejecución
     ROBOT = "ROBOT"  # Específico de un robot
-    DEVICE = "DEVICE"  # Específico de un equipo
+    DEVICE = "EQUIPO"  # Específico de un equipo
 
 
 class AlertType(Enum):
     """Naturaleza del problema."""
 
-    PERMANENT = "PERMANENT"  # Error de configuración, requiere corrección manual
-    TRANSIENT = "TRANSIENT"  # Temporal (red, offline), se autocorrige
-    THRESHOLD = "THRESHOLD"  # Acumulación de eventos que superó umbral
-    RECOVERY = "RECOVERY"  # Proceso de recuperación en curso
+    PERMANENT = "PERMANENTE"  # Error de configuración, requiere corrección manual
+    TRANSIENT = "TRANSITORIO"  # Temporal (red, offline), se autocorrige
+    THRESHOLD = "UMBRAL"  # Acumulación de eventos que superó umbral
+    RECOVERY = "RECUPERACIÓN"  # Proceso de recuperación en curso
 
 
 @dataclass

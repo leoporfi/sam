@@ -155,7 +155,7 @@ class EmailAlertClient:
 
             # Construir subject: [SEVERIDAD] [ALCANCE] [NATURALEZA] Título
             subject_prefix = f"[{context.alert_level.value}] [{context.alert_scope.value}] [{context.alert_type.value}]"
-            full_subject = f"{self.service_name} {subject_prefix} {context.subject}"
+            full_subject = f"{self.service_name.capitalize()} {subject_prefix} {context.subject}"
             msg["Subject"] = full_subject
 
             # Generar cuerpo HTML
@@ -255,7 +255,7 @@ class EmailAlertClient:
                 </div>
 
                 <div class="footer">
-                    <p>Servicio: {html.escape(self.service_name)} | Fecha: {timestamp}</p>
+                    <p>Servicio: {html.escape(self.service_name.capitalize())} | Fecha: {timestamp}</p>
                     <p>Este mensaje fue generado automáticamente por el sistema SAM.</p>
                 </div>
             </div>
