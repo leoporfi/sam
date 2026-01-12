@@ -143,7 +143,7 @@ def StatusDashboard(scroll_to=None):
             {
                 "class_name": "dashboard-alert dashboard-alert-yellow",
             },
-            "ℹ️ Datos en tiempo real: Solo muestra ejecuciones activas de la tabla actual. Los datos históricos no se incluyen en este dashboard.",
+            "ℹ️ Estado operativo: Muestra ejecuciones en curso y alertas críticas recientes. Incluye datos de la tabla actual y del histórico reciente para asegurar visibilidad de fallos.",
         ),
         html.div(
             {
