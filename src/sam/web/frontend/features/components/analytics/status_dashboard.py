@@ -214,8 +214,25 @@ def StatusDashboard(scroll_to=None):
                 ),
                 html.div({"class_name": "metric-label"}, "Activos / Total"),
                 html.footer(
-                    {"class_name": "metric-footer"},
-                    f"{equipos.get('EquiposBalanceables', 0)} balanceables",
+                    {
+                        "class_name": "metric-footer",
+                        "style": {"display": "flex", "flex-direction": "column", "gap": "0.2rem"},
+                    },
+                    html.div(f"{equipos.get('EquiposBalanceables', 0)} balanceables"),
+                    html.div(
+                        {
+                            "style": {
+                                "display": "flex",
+                                "gap": "0.8rem",
+                                "font-size": "0.8rem",
+                                "margin-top": "0.3rem",
+                                "border-top": "1px solid var(--pico-muted-border-color)",
+                                "padding-top": "0.3rem",
+                            }
+                        },
+                        html.span(f"📍 VIALE: {equipos.get('EquiposViale', 0)}"),
+                        html.span(f"📍 VELEZ: {equipos.get('EquiposVelez', 0)}"),
+                    ),
                 ),
             ),
             # Card Programaciones

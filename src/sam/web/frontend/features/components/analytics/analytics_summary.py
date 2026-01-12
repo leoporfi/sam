@@ -106,11 +106,15 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
     total_robots = 0
     active_teams = 0
     total_teams = 0
+    viale_teams = 0
+    velez_teams = 0
     if status_data:
         active_robots = status_data.get("robots", {}).get("RobotsActivos", 0)
         total_robots = status_data.get("robots", {}).get("TotalRobots", 0)
         active_teams = status_data.get("equipos", {}).get("EquiposActivos", 0)
         total_teams = status_data.get("equipos", {}).get("TotalEquipos", 0)
+        viale_teams = status_data.get("equipos", {}).get("EquiposViale", 0)
+        velez_teams = status_data.get("equipos", {}).get("EquiposVelez", 0)
 
     # 2. Desvíos Críticos - Contar por tipo
     fallos_list = critical_executions.get("fallos", []) if isinstance(critical_executions, dict) else []
@@ -228,6 +232,19 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
                 html.div(
                     html.div(f"🤖 Robots: {active_robots} / {total_robots} Activos"),
                     html.div(f"💻 Equipos: {active_teams} / {total_teams} Activos"),
+                    html.div(
+                        {
+                            "style": {
+                                "display": "flex",
+                                "gap": "1rem",
+                                "font-size": "0.85rem",
+                                "margin-top": "0.5rem",
+                                "opacity": "0.9",
+                            }
+                        },
+                        html.span(f"📍 VIALE: {viale_teams}"),
+                        html.span(f"📍 VELEZ: {velez_teams}"),
+                    ),
                 ),
                 "card-blue",
                 "status",

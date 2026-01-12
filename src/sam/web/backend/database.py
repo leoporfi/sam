@@ -851,6 +851,8 @@ def get_system_status(db: DatabaseConnector) -> Dict:
                 "TotalEquipos": row.get("TotalEquipos", 0),
                 "EquiposActivos": row.get("EquiposActivos", 0),
                 "EquiposBalanceables": row.get("EquiposBalanceables", 0),
+                "EquiposViale": row.get("EquiposViale", 0),
+                "EquiposVelez": row.get("EquiposVelez", 0),
             },
         }
 

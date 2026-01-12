@@ -22,6 +22,8 @@ BEGIN
         (SELECT COUNT(*) FROM Equipos WHERE (@PoolId IS NULL OR PoolId = @PoolId)) AS TotalEquipos,
         (SELECT COUNT(*) FROM Equipos WHERE Activo_SAM = 1 AND (@PoolId IS NULL OR PoolId = @PoolId)) AS EquiposActivos,
         (SELECT COUNT(*) FROM Equipos WHERE PermiteBalanceoDinamico = 1 AND (@PoolId IS NULL OR PoolId = @PoolId)) AS EquiposBalanceables,
+        (SELECT COUNT(*) FROM Equipos WHERE Activo_SAM = 1 AND Equipo LIKE '%-VIA-%' AND (@PoolId IS NULL OR PoolId = @PoolId)) AS EquiposViale,
+        (SELECT COUNT(*) FROM Equipos WHERE Activo_SAM = 1 AND Equipo LIKE '%-VEL-%' AND (@PoolId IS NULL OR PoolId = @PoolId)) AS EquiposVelez,
         (SELECT COUNT(*) FROM Programaciones P
             LEFT JOIN Robots R ON P.RobotId = R.RobotId
             WHERE P.Activo = 1 AND (@PoolId IS NULL OR R.PoolId = @PoolId)) AS ProgramacionesActivas,
