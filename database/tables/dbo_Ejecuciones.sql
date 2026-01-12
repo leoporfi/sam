@@ -13,7 +13,7 @@ CREATE TABLE [dbo].[Ejecuciones](
 	[FechaFin] [datetime2](0) NULL,
 	[Estado] [nvarchar](20) NOT NULL,
 	[FechaActualizacion] [datetime2](0) NULL,
-	[CallbackInfo] [nvarchar](500) NULL,
+	[CallbackInfo] [nvarchar](max) NULL,
 	[IntentosConciliadorFallidos] [int] NOT NULL,
 	[FechaUltimoUNKNOWN] [datetime] NULL,
  CONSTRAINT [pk_EjecucionId] PRIMARY KEY CLUSTERED

@@ -103,9 +103,12 @@ async def handle_callback(payload: CallbackPayload, db: DatabaseConnector = Depe
             return SuccessResponse(message="Callback procesado y estado actualizado.")
         elif update_result == UpdateStatus.ALREADY_PROCESSED:
             return SuccessResponse(message="La ejecución ya estaba en estado final.")
-        else:  # NOT_FOUND
+        elif update_result == UpdateStatus.NOT_FOUND:
             logger.warning(f"DeploymentId '{payload.deployment_id}' no fue encontrado en la base de datos.")
             return SuccessResponse(message=f"DeploymentId '{payload.deployment_id}' no encontrado.")
+        else:  # UpdateStatus.ERROR
+            # El error detallado ya se logueó en database.py
+            return SuccessResponse(message=f"Error al actualizar DeploymentId '{payload.deployment_id}'.")
     except Exception as e:
         logger.error(f"Error al procesar callback para {payload.deployment_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Error interno al actualizar el estado.")
