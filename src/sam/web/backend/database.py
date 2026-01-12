@@ -1156,13 +1156,26 @@ def get_success_analysis(
 
     if not result_sets or len(result_sets) < 3:
         return {
+            "resumen_global": {"TotalEjecuciones": 0, "TotalFallidas": 0},
             "resumen_estados": [],
             "top_errores": [],
             "detalle_robots": [],
         }
 
+    resumen_estados = result_sets[0]
+    total_ejecuciones = sum(item.get("Cantidad", 0) for item in resumen_estados)
+    total_fallidas = sum(
+        item.get("Cantidad", 0)
+        for item in resumen_estados
+        if item.get("Estado") in ("RUN_FAILED", "DEPLOY_FAILED", "RUN_ABORTED")
+    )
+
     return {
-        "resumen_estados": result_sets[0],
+        "resumen_global": {
+            "TotalEjecuciones": total_ejecuciones,
+            "TotalFallidas": total_fallidas,
+        },
+        "resumen_estados": resumen_estados,
         "top_errores": result_sets[1],
         "detalle_robots": result_sets[2],
     }
