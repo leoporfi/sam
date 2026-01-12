@@ -1060,9 +1060,10 @@ def get_recent_executions(
     critical_only: bool = True,
     umbral_fijo_minutos: int = 25,
     factor_umbral_dinamico: float = 1.5,
-) -> List[Dict]:
+) -> Dict[str, List[Dict]]:
     """
     Obtiene las ejecuciones recientes usando SP.
+    Retorna dos listas: fallos y demoras/huérfanas.
     """
     try:
         params = {
@@ -1071,13 +1072,19 @@ def get_recent_executions(
             "UmbralFijoMinutos": umbral_fijo_minutos,
             "FactorUmbralDinamico": factor_umbral_dinamico,
         }
-        # El SP retorna un solo result set
+        # El SP retorna DOS result sets:
+        # 0: Fallos
+        # 1: Demoras y Huérfanas
         result_sets = ejecutar_sp_multiple_result_sets(db, "dbo.ObtenerEjecucionesRecientes", params)
-        return result_sets[0] if result_sets else []
+
+        fallos = result_sets[0] if result_sets and len(result_sets) > 0 else []
+        demoras = result_sets[1] if result_sets and len(result_sets) > 1 else []
+
+        return {"fallos": fallos, "demoras": demoras}
 
     except Exception as e:
         logger.error(f"Error obteniendo ejecuciones recientes: {e}", exc_info=True)
-        return []
+        return {"fallos": [], "demoras": []}
 
 
 def get_utilization_analysis(

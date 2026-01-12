@@ -1,0 +1,93 @@
+{
+    "meta_info": {
+        "project": "SAM (Sistema de Automatización y Monitoreo)",
+        "module": "Analytics & Dashboard",
+        "version": "2.0",
+        "status": "DRAFT_PLANNING",
+        "priority": "HIGH",
+        "objective": "Eliminar la ceguera de alertas operativas separando fallos técnicos de demoras de proceso."
+    },
+    "contexto_y_necesidad": {
+        "problema_actual": {
+            "descripcion": "El dashboard actual consume un único flujo de datos mezclado (Errores + Demoras). Debido a un alto volumen de errores (RUN_FAILED/DEPLOY_FAILED), el límite de registros (@Limit) se satura con errores, ocultando completamente las ejecuciones demoradas (RUNNING/DEPLOYED > tiempo esperado) y huérfanas.",
+            "impacto_negativo": "El equipo de operaciones no detecta procesos trabados (loops infinitos o bloqueos) porque están sepultados bajo alertas de errores de despliegue, lo que aumenta el tiempo de respuesta ante incidentes críticos de infraestructura."
+        },
+        "requerimiento": {
+            "descripcion": "Separar lógica y visualmente los tres tipos de incidentes críticos para permitir acciones dirigidas.",
+            "categorias": [
+                {
+                    "tipo": "FALLOS",
+                    "color": "Rojo",
+                    "accion_requerida": "Intervención de Desarrollo/Soporte (Bugfix, Credenciales)."
+                },
+                {
+                    "tipo": "DEMORAS",
+                    "color": "Naranja",
+                    "accion_requerida": "Intervención Operativa (Matar proceso, revisar recursos)."
+                },
+                {
+                    "tipo": "HUÉRFANAS",
+                    "color": "Amarillo",
+                    "accion_requerida": "Intervención de Infraestructura (Reiniciar servicio en equipo remoto)."
+                }
+            ]
+        }
+    },
+    "propuesta_solucion": {
+        "estrategia_tecnica": "Implementación de Multi-Recordset en Base de Datos y UI por Pestañas (Tabs).",
+        "arquitectura_datos": "Modificar el Stored Procedure para devolver dos conjuntos de resultados independientes en una sola llamada de red: uno para errores (prioridad informativa) y otro para demoras/huérfanas (prioridad operativa).",
+        "arquitectura_ui": "Migrar de una tabla monolítica a un sistema de Tabs con Badges (contadores) que alerten visualmente la presencia de problemas en cada categoría sin necesidad de scroll."
+    },
+    "plan_ejecucion_tecnica": {
+        "paso_1_capa_datos": {
+            "componente": "Base de Datos SQL Server",
+            "archivo_objetivo": "database/procedures/dbo_ObtenerEjecucionesRecientes.sql",
+            "accion": "REFACTORIZAR",
+            "logica_implementacion": "Cambiar la lógica de un solo SELECT TOP(@Limit) a una generación de tabla temporal (#Resultados) y retornar DOS SELECTs separados al final.",
+            "especificacion_cambios": [
+                "Calcular estados críticos y guardar en #ResultadosAnalisis.",
+                "SELECT 1: TOP(@Limit) WHERE TipoCritico = 'Fallo' ORDER BY FechaInicio DESC.",
+                "SELECT 2: TOP(@Limit) WHERE TipoCritico IN ('Demorada', 'Huerfana') ORDER BY TiempoTranscurridoMinutos DESC.",
+                "Asegurar que el parámetro @Limit se aplique a CADA grupo por separado, no al total."
+            ]
+        },
+        "paso_2_capa_backend": {
+            "componente": "Backend Python (API/Database Service)",
+            "archivo_objetivo": "src/sam/web/backend/database.py",
+            "accion": "MODIFICAR MÉTODO DE CONSULTA",
+            "logica_implementacion": "Actualizar el método 'obtener_casos_criticos_dashboard' para manejar múltiples cursores.",
+            "pseudocodigo_python": "cursor.execute(sp); resultados_fallos = cursor.fetchall(); cursor.nextset(); resultados_demoras = cursor.fetchall(); procesar_y_retornar_dict(fallos, demoras);"
+        },
+        "paso_3_capa_frontend": {
+            "componente": "Frontend NiceGUI",
+            "archivo_objetivo": "src/sam/web/frontend/features/components/analytics/status_dashboard.py",
+            "accion": "REDISEÑO UI",
+            "elementos_ui": [
+                {
+                    "componente": "ui.tabs",
+                    "descripcion": "Contenedor principal para cambiar vistas."
+                },
+                {
+                    "componente": "ui.badge",
+                    "descripcion": "Contador numérico sobre cada tab (ej: 'Errores (314)'). Ocultar si es 0."
+                },
+                {
+                    "componente": "ui.table",
+                    "descripcion": "Tres tablas independientes con columnas específicas (ej: Demoras necesita mostrar 'Tiempo Transcurrido' y 'Umbral')."
+                }
+            ]
+        }
+    },
+    "criterios_aceptacion_qa": [
+        "El SP 'dbo.ObtenerEjecucionesRecientes' debe compilar sin errores.",
+        "Al ejecutar el SP en SSMS, deben aparecer dos grillas de resultados distintas.",
+        "El dashboard web debe mostrar tres pestañas: Fallos, Demoras, Huérfanas.",
+        "Si hay 500 errores y 1 demora, la demora DEBE aparecer en su pestaña (no debe ser filtrada por el límite de errores).",
+        "Los contadores (badges) deben coincidir con el número de filas en cada tabla."
+    ],
+    "instrucciones_agente": {
+        "rol": "Full Stack Developer Expert",
+        "orden_ejecucion": "SECUENCIAL (DB -> Backend -> Frontend)",
+        "nota_seguridad": "No eliminar lógica existente de cálculo de promedios históricos, es vital para la detección precisa de demoras."
+    }
+}
