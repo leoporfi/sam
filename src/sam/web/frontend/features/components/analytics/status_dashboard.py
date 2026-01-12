@@ -14,9 +14,12 @@ logger = logging.getLogger(__name__)
 def StatusDashboard(scroll_to=None):
     """Dashboard de estado actual del sistema."""
     status_data, set_status_data = use_state(None)
-    executions_data, set_executions_data = use_state([])
+    executions_data, set_executions_data = use_state({"fallos": [], "demoras": []})
     loading, set_loading = use_state(True)
     error, set_error = use_state(None)
+
+    # Estado para tabs
+    active_tab, set_active_tab = use_state("fallos")
 
     # Nuevo estado para el filtro
     critical_only, set_critical_only = use_state(True)
@@ -47,6 +50,23 @@ def StatusDashboard(scroll_to=None):
     def handle_refresh(event=None):
         """Wrapper para manejar el click del botón de actualizar."""
         asyncio.create_task(fetch_status())
+
+    def format_duration(minutes):
+        """Formatea minutos a 'dd hh:mm:ss' o 'hh:mm:ss'."""
+        if minutes is None:
+            return "-"
+
+        total_seconds = int(minutes * 60)
+        days = total_seconds // 86400
+        remaining_seconds = total_seconds % 86400
+        hours = remaining_seconds // 3600
+        remaining_seconds %= 3600
+        mins = remaining_seconds // 60
+        secs = remaining_seconds % 60
+
+        if days > 0:
+            return f"{days}d {hours:02}:{mins:02}:{secs:02}"
+        return f"{hours:02}:{mins:02}:{secs:02}"
 
     # Efecto para cargar datos al inicio y cuando cambia el filtro
     @use_effect(dependencies=[critical_only])
@@ -90,6 +110,21 @@ def StatusDashboard(scroll_to=None):
     programaciones = status_data.get("programaciones", {})
     timestamp = status_data.get("timestamp", "N/A")
 
+    # Procesar datos para tabs
+    fallos = executions_data.get("fallos", [])
+    demoras_raw = executions_data.get("demoras", [])
+    demoras = [x for x in demoras_raw if x.get("TipoCritico") == "Demorada"]
+    huerfanas = [x for x in demoras_raw if x.get("TipoCritico") == "Huerfana"]
+
+    # Seleccionar datos según tab activo
+    current_data = []
+    if active_tab == "fallos":
+        current_data = fallos
+    elif active_tab == "demoras":
+        current_data = demoras
+    elif active_tab == "huerfanas":
+        current_data = huerfanas
+
     return html.div(
         {"class_name": "status-dashboard"},
         html.header(
@@ -97,31 +132,6 @@ def StatusDashboard(scroll_to=None):
                 "class_name": "dashboard-header",
             },
             html.h2({"class_name": "dashboard-title"}, "Estado Actual del Sistema"),
-            html.div(
-                {"class_name": "header-actions", "style": {"display": "flex", "gap": "1rem", "align-items": "center"}},
-                # Toggle Switch
-                html.label(
-                    {"style": {"cursor": "pointer", "display": "flex", "align-items": "center", "gap": "0.5rem"}},
-                    html.input(
-                        {
-                            "type": "checkbox",
-                            "role": "switch",
-                            "checked": critical_only,
-                            "on_change": lambda e: set_critical_only(e["target"]["checked"]),
-                        }
-                    ),
-                    "Mostrar solo críticos",
-                ),
-                html.button(
-                    {
-                        "on_click": handle_refresh,
-                        "class_name": "secondary dashboard-refresh-btn",
-                        "title": "Actualizar",
-                        "aria-label": "Actualizar estado del sistema",
-                    },
-                    html.i({"class_name": "fa-solid fa-rotate"}),
-                ),
-            ),
         ),
         html.p(
             {
@@ -223,19 +233,191 @@ def StatusDashboard(scroll_to=None):
                 html.div({"class_name": "metric-label"}, "Programaciones activas"),
             ),
         ),
-        # --- TABLA DE EJECUCIONES RECIENTES ---
+        # --- TABLA DE EJECUCIONES RECIENTES (CON TABS) ---
         html.div(
             {
                 "class_name": "recent-executions-section",
                 "style": {"margin-top": "2rem"},
-                "id": "recent-executions",  # ID para anclaje
+                "id": "recent-executions",
             },
-            html.h3("Estado de Ejecuciones Recientes"),
+            html.div(
+                {
+                    "style": {
+                        "display": "flex",
+                        "justify-content": "space-between",
+                        "align-items": "center",
+                        "margin-bottom": "1rem",
+                    }
+                },
+                html.h3({"style": {"margin": "0"}}, "Estado de Ejecuciones Recientes"),
+                html.div(
+                    {"style": {"display": "flex", "align-items": "center", "gap": "1rem"}},
+                    # Toggle Switch
+                    html.label(
+                        {
+                            "style": {
+                                "cursor": "pointer",
+                                "display": "flex",
+                                "align-items": "center",
+                                "gap": "0.5rem",
+                                "margin": "0",
+                            }
+                        },
+                        html.input(
+                            {
+                                "type": "checkbox",
+                                "role": "switch",
+                                "checked": critical_only,
+                                "on_change": lambda e: set_critical_only(e["target"]["checked"]),
+                            }
+                        ),
+                        "Mostrar solo críticos",
+                    ),
+                    # Refresh Button
+                    html.button(
+                        {
+                            "on_click": handle_refresh,
+                            "class_name": "secondary outline",
+                            "title": "Actualizar",
+                            "style": {"padding": "0.4rem", "border": "none"},
+                        },
+                        html.i({"class_name": "fa-solid fa-rotate"}),
+                    ),
+                ),
+            ),
+            # TABS NAVIGATION
+            html.div(
+                {
+                    "class_name": "tabs-nav",
+                    "style": {
+                        "display": "flex",
+                        "gap": "1rem",
+                        "margin-bottom": "1rem",
+                        "border-bottom": "1px solid var(--pico-muted-border-color)",
+                    },
+                },
+                # Tab Fallos
+                html.button(
+                    {
+                        "class_name": f"tab-button {'active' if active_tab == 'fallos' else ''}",
+                        "on_click": lambda e: set_active_tab("fallos"),
+                        "style": {
+                            "background": "transparent",
+                            "border": "none",
+                            "border-bottom": "3px solid var(--pico-color-red-600)"
+                            if active_tab == "fallos"
+                            else "3px solid transparent",
+                            "color": "var(--pico-color-red-600)"
+                            if active_tab == "fallos"
+                            else "var(--pico-muted-color)",
+                            "font-weight": "bold",
+                            "padding": "0.5rem 1rem",
+                            "cursor": "pointer",
+                            "display": "flex",
+                            "align-items": "center",
+                            "gap": "0.5rem",
+                        },
+                    },
+                    "Fallos",
+                    html.span(
+                        {
+                            "style": {
+                                "background-color": "var(--pico-color-red-600)",
+                                "color": "white",
+                                "padding": "0.1rem 0.4rem",
+                                "border-radius": "10px",
+                                "font-size": "0.75rem",
+                            }
+                        },
+                        str(len(fallos)),
+                    )
+                    if len(fallos) > 0
+                    else "",
+                ),
+                # Tab Demoras
+                html.button(
+                    {
+                        "class_name": f"tab-button {'active' if active_tab == 'demoras' else ''}",
+                        "on_click": lambda e: set_active_tab("demoras"),
+                        "style": {
+                            "background": "transparent",
+                            "border": "none",
+                            "border-bottom": "3px solid var(--pico-color-orange-500)"
+                            if active_tab == "demoras"
+                            else "3px solid transparent",
+                            "color": "var(--pico-color-orange-500)"
+                            if active_tab == "demoras"
+                            else "var(--pico-muted-color)",
+                            "font-weight": "bold",
+                            "padding": "0.5rem 1rem",
+                            "cursor": "pointer",
+                            "display": "flex",
+                            "align-items": "center",
+                            "gap": "0.5rem",
+                        },
+                    },
+                    "Demoras",
+                    html.span(
+                        {
+                            "style": {
+                                "background-color": "var(--pico-color-orange-500)",
+                                "color": "white",
+                                "padding": "0.1rem 0.4rem",
+                                "border-radius": "10px",
+                                "font-size": "0.75rem",
+                            }
+                        },
+                        str(len(demoras)),
+                    )
+                    if len(demoras) > 0
+                    else "",
+                ),
+                # Tab Huérfanas
+                html.button(
+                    {
+                        "class_name": f"tab-button {'active' if active_tab == 'huerfanas' else ''}",
+                        "on_click": lambda e: set_active_tab("huerfanas"),
+                        "style": {
+                            "background": "transparent",
+                            "border": "none",
+                            "border-bottom": "3px solid var(--pico-color-yellow-500)"
+                            if active_tab == "huerfanas"
+                            else "3px solid transparent",
+                            "color": "var(--pico-color-yellow-500)"
+                            if active_tab == "huerfanas"
+                            else "var(--pico-muted-color)",
+                            "font-weight": "bold",
+                            "padding": "0.5rem 1rem",
+                            "cursor": "pointer",
+                            "display": "flex",
+                            "align-items": "center",
+                            "gap": "0.5rem",
+                        },
+                    },
+                    "Huérfanas",
+                    html.span(
+                        {
+                            "style": {
+                                "background-color": "var(--pico-color-yellow-500)",
+                                "color": "black",
+                                "padding": "0.1rem 0.4rem",
+                                "border-radius": "10px",
+                                "font-size": "0.75rem",
+                            }
+                        },
+                        str(len(huerfanas)),
+                    )
+                    if len(huerfanas) > 0
+                    else "",
+                ),
+            ),
+            # TABLE
             html.table(
                 {"class_name": "dashboard-table striped"},
                 html.thead(
                     html.tr(
                         html.th("Robot"),
+                        html.th("Equipo"),
                         html.th("Estado"),
                         html.th("Tiempo"),
                         html.th("Fecha Inicio"),
@@ -248,16 +430,32 @@ def StatusDashboard(scroll_to=None):
                         html.tr(
                             html.td(item.get("Robot", "N/A")),
                             html.td(
+                                html.div(
+                                    {"style": {"display": "flex", "align-items": "center", "gap": "0.5rem"}},
+                                    html.a(
+                                        {
+                                            "href": f"appurl://{item.get('Equipo', '')}",
+                                            "title": f"Conectar a {item.get('Equipo', '')}",
+                                            "style": {"color": "var(--pico-primary)", "text-decoration": "none"},
+                                        },
+                                        html.i({"class_name": "fa-solid fa-desktop"}),
+                                    ),
+                                    html.span(item.get("Equipo", "N/A")) if item.get("Equipo") else "",
+                                )
+                            ),
+                            html.td(
                                 html.span(
                                     {
                                         "data-tooltip": f"Umbral: {item.get('UmbralUtilizadoMinutos', 0):.1f} min ({item.get('TipoUmbral', 'Fijo')})"
                                         if item.get("TipoCritico")
                                         else None,
                                         "style": {
-                                            "color": "var(--pico-color-red-500)"
+                                            "color": "var(--pico-color-red-600)"
                                             if item.get("TipoCritico") == "Fallo"
+                                            else "var(--pico-color-orange-500)"
+                                            if item.get("TipoCritico") == "Demorada"
                                             else "var(--pico-color-yellow-500)"
-                                            if item.get("TipoCritico") in ["Demorada", "Huerfana"]
+                                            if item.get("TipoCritico") == "Huerfana"
                                             else "inherit",
                                             "font-weight": "bold" if item.get("TipoCritico") else "normal",
                                             "cursor": "help" if item.get("TipoCritico") else "default",
@@ -282,11 +480,7 @@ def StatusDashboard(scroll_to=None):
                                     item.get("Estado", "N/A"),
                                 )
                             ),
-                            html.td(
-                                f"{item.get('TiempoTranscurridoMinutos', 0)} min"
-                                if item.get("TiempoTranscurridoMinutos") is not None
-                                else "-"
-                            ),
+                            html.td(format_duration(item.get("TiempoTranscurridoMinutos"))),
                             html.td(
                                 str(item.get("FechaInicio", "")).replace("T", " ")[:19]
                                 if item.get("FechaInicio")
@@ -321,14 +515,14 @@ def StatusDashboard(scroll_to=None):
                                 )
                             ),
                         )
-                        for item in executions_data
+                        for item in current_data
                     ]
-                    if executions_data
+                    if current_data
                     else [
                         html.tr(
                             html.td(
-                                {"colspan": 6, "style": {"text-align": "center"}},
-                                "No hay ejecuciones recientes para mostrar.",
+                                {"colspan": 7, "style": {"text-align": "center"}},
+                                "No hay items en esta categoría.",
                             )
                         )
                     ]

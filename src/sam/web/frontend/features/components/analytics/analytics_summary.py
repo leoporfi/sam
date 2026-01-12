@@ -16,7 +16,9 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
     """
     # Estados para los datos (inicializados desde props si existen)
     status_data, set_status_data = use_state(initial_data.get("status") if initial_data else None)
-    critical_executions, set_critical_executions = use_state(initial_data.get("critical") if initial_data else [])
+    critical_executions, set_critical_executions = use_state(
+        initial_data.get("critical") if initial_data else {"fallos": [], "demoras": []}
+    )
     performance_data, set_performance_data = use_state(initial_data.get("performance") if initial_data else None)
     success_data, set_success_data = use_state(initial_data.get("success") if initial_data else None)
 
@@ -33,7 +35,7 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
 
             # Ejecutar peticiones en paralelo
             status_task = api_client.get("/api/analytics/status")
-            critical_task = api_client.get("/api/analytics/executions", params={"limit": 10, "critical_only": True})
+            critical_task = api_client.get("/api/analytics/executions", params={"limit": 50, "critical_only": True})
             # Para tiempos, traemos un resumen general (sin filtros específicos de percentiles por ahora)
             performance_task = api_client.get("/api/analytics/tiempos-ejecucion")
             success_task = api_client.get("/api/analytics/tasas-exito")
@@ -111,21 +113,12 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
         total_teams = status_data.get("equipos", {}).get("TotalEquipos", 0)
 
     # 2. Desvíos Críticos - Contar por tipo
-    critical_count = 0
-    fallos_count = 0
-    demoradas_count = 0
-    huerfanas_count = 0
+    fallos_list = critical_executions.get("fallos", []) if isinstance(critical_executions, dict) else []
+    demoras_list_raw = critical_executions.get("demoras", []) if isinstance(critical_executions, dict) else []
 
-    if critical_executions and isinstance(critical_executions, list):
-        for exec in critical_executions:
-            tipo = exec.get("TipoCritico")
-            if tipo == "Fallo":
-                fallos_count += 1
-            elif tipo == "Demorada":
-                demoradas_count += 1
-            elif tipo == "Huerfana":
-                huerfanas_count += 1
-        critical_count = fallos_count + demoradas_count + huerfanas_count
+    fallos_count = len(fallos_list)
+    demoradas_count = len([x for x in demoras_list_raw if x.get("TipoCritico") == "Demorada"])
+    huerfanas_count = len([x for x in demoras_list_raw if x.get("TipoCritico") == "Huerfana"])
 
     # 3. Performance (Tiempos)
     slowest_robot = "N/A"
@@ -245,30 +238,23 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
                 "Alertas Críticas",
                 "fa-triangle-exclamation",
                 html.div(
-                    html.h3(
-                        {
-                            "style": {
-                                "margin": "0",
-                                "font-size": "2rem",
-                                "color": "var(--pico-color-red-500)"
-                                if fallos_count > 0
-                                else "var(--pico-color-yellow-500)"
-                                if (demoradas_count + huerfanas_count) > 0
-                                else "var(--pico-color-green-500)",
-                            }
-                        },
-                        str(critical_count),
+                    html.div(
+                        {"style": {"display": "flex", "gap": "1rem", "font-size": "1.2rem", "margin-bottom": "0.5rem"}},
+                        html.span(
+                            {"style": "color: var(--pico-color-red-600)", "title": "Fallos"}, f"❌ {fallos_count}"
+                        ),
+                        html.span(
+                            {"style": "color: var(--pico-color-orange-500)", "title": "Demoras"}, f"⏱️ {demoradas_count}"
+                        ),
+                        html.span(
+                            {"style": "color: var(--pico-color-yellow-500)", "title": "Huérfanas"},
+                            f"⚠️ {huerfanas_count}",
+                        ),
                     ),
                     html.div(
-                        {"style": {"font-size": "0.9rem", "margin-top": "0.5rem"}},
-                        f"❌ {fallos_count} fallos" if fallos_count > 0 else "",
-                        html.br() if fallos_count > 0 and (demoradas_count + huerfanas_count) > 0 else "",
-                        f"⏱️ {demoradas_count} demoradas" if demoradas_count > 0 else "",
-                        html.br() if demoradas_count > 0 and huerfanas_count > 0 else "",
-                        f"⚠️ {huerfanas_count} huérfanas" if huerfanas_count > 0 else "",
-                    )
-                    if critical_count > 0
-                    else html.span("Sin ejecuciones críticas"),
+                        {"style": {"font-size": "0.8rem", "color": "var(--pico-muted-color)"}},
+                        "Fallos • Demoras • Huérfanas",
+                    ),
                 ),
                 "card-red"
                 if fallos_count > 0
@@ -326,10 +312,5 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
                 "patrones",
                 "Ver mapa de calor",
             ),
-        ),
-        html.style(
-            """
-            .summary-card:hover .card-title { text-decoration: underline; color: var(--pico-primary); }
-            """
         ),
     )

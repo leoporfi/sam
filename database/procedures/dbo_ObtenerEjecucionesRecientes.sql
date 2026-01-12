@@ -65,6 +65,37 @@ BEGIN
                 ELSE NULL
             END AS TipoCritico,
             CASE
+                -- Mensaje para Fallos
+                WHEN e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
+                THEN ISNULL(CAST(e.CallbackInfo AS NVARCHAR(MAX)), 'Fallo técnico reportado por A360')
+
+                -- Mensaje para Demoras
+                WHEN e.Estado IN ('RUNNING', 'DEPLOYED') AND (
+                    (tp.TiempoPromedioMinutos IS NOT NULL AND
+                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > tp.TiempoPromedioMinutos * @FactorUmbralDinamico)
+                    OR
+                    (tp.TiempoPromedioMinutos IS NULL AND
+                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > @UmbralFijoMinutos)
+                ) THEN 'Excede umbral de ' + CAST(CAST(
+                    CASE
+                        WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                        ELSE @UmbralFijoMinutos
+                    END AS DECIMAL(10,1)) AS VARCHAR(10)) + ' min'
+
+                -- Mensaje para Huérfanas
+                WHEN e.Estado = 'QUEUED'
+                     AND DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > 5
+                     AND NOT EXISTS (
+                        SELECT 1 FROM dbo.Ejecuciones e2
+                        WHERE e2.RobotId = e.RobotId
+                          AND e2.EquipoId = e.EquipoId
+                          AND e2.Estado IN ('DEPLOYED', 'RUNNING')
+                          AND e2.FechaInicio >= e.FechaInicio
+                     ) THEN 'Sin actividad detectada en DEPLOYED/RUNNING'
+
+                ELSE NULL
+            END AS MensajeError,
+            CASE
                 WHEN tp.TiempoPromedioMinutos IS NOT NULL
                 THEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico
                 ELSE @UmbralFijoMinutos
@@ -80,18 +111,28 @@ BEGIN
         LEFT JOIN dbo.Equipos eq ON e.EquipoId = eq.EquipoId
         LEFT JOIN TiemposPromedio tp ON e.RobotId = tp.RobotId
     )
+    -- Guardar resultados en tabla temporal para poder separar
+    SELECT
+        *
+    INTO #ResultadosAnalisis
+    FROM EjecucionesConEstado
+    WHERE (@CriticalOnly = 0 OR TipoCritico IS NOT NULL);
+
+    -- Result Set 1: FALLOS (Prioridad Alta)
     SELECT TOP (@Limit)
         *
-    FROM EjecucionesConEstado
-    WHERE
-        (@CriticalOnly = 0 OR TipoCritico IS NOT NULL)
-    ORDER BY
-        CASE
-            WHEN Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED') THEN 1
-            WHEN Estado IN ('RUNNING', 'DEPLOYED') THEN 2
-            WHEN Estado = 'QUEUED' THEN 3
-            ELSE 4
-        END,
-        FechaInicio DESC;
+    FROM #ResultadosAnalisis
+    WHERE TipoCritico = 'Fallo'
+    ORDER BY FechaInicio DESC;
+
+    -- Result Set 2: DEMORAS y HUÉRFANAS (Prioridad Operativa)
+    SELECT TOP (@Limit)
+        *
+    FROM #ResultadosAnalisis
+    WHERE TipoCritico IN ('Demorada', 'Huerfana')
+    ORDER BY TiempoTranscurridoMinutos DESC;
+
+    -- Limpieza
+    DROP TABLE #ResultadosAnalisis;
 END
 GO
