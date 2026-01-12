@@ -37,7 +37,6 @@ from .features.modals.schedule_create_modal import ScheduleCreateModal
 from .features.modals.schedule_modal import ScheduleEditModal, ScheduleEquiposModal
 
 # Hooks
-from .hooks.use_debounced_value_hook import use_debounced_value
 from .hooks.use_equipos_hook import use_equipos
 from .hooks.use_pools_hook import use_pools_management
 from .hooks.use_robots_hook import use_robots
@@ -71,10 +70,11 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
                 set_search_input(initial_value)
             initialized.current = True
 
-    def handle_search_execute():
+    def handle_search_execute(value: str):
         """Ejecuta la búsqueda cuando el usuario presiona Enter."""
-        search_value = search_input.strip() if search_input else None
+        search_value = value.strip() if value else None
         if search_value != robots_state["filters"].get("name"):
+            set_search_input(value)
             robots_state["set_filters"](lambda prev_filters: {**prev_filters, "name": search_value})
 
     selected_robot, set_selected_robot = use_state(None)
@@ -198,22 +198,26 @@ def PoolsPage(theme_is_dark: bool, on_theme_toggle):
 
     # Estados para búsqueda y modales
     search_input, set_search_input = use_state("")
-    debounced_search = use_debounced_value(search_input, 300)
+    # Filtrar pools por búsqueda
+    search_term_applied, set_search_term_applied = use_state("")
     modal_pool, set_modal_pool = use_state(None)
     modal_view, set_modal_view = use_state(None)
     pool_to_delete, set_pool_to_delete = use_state(None)
 
-    # Filtrar pools por búsqueda (memoizado para evitar recálculos innecesarios)
     filtered_pools = use_memo(
         lambda: [
             pool
             for pool in pools_state["pools"]
-            if not debounced_search or debounced_search.lower() in pool["Nombre"].lower()
+            if not search_term_applied or search_term_applied.lower() in pool["Nombre"].lower()
         ],
-        [pools_state["pools"], debounced_search],
+        [pools_state["pools"], search_term_applied],
     )
 
-    is_searching = debounced_search != search_input
+    def handle_search_execute_pools(value: str):
+        set_search_input(value)
+        set_search_term_applied(value.strip())
+
+    is_searching = search_term_applied != search_input
 
     def handle_modal_close(event=None):
         set_modal_pool(None)
@@ -250,6 +254,7 @@ def PoolsPage(theme_is_dark: bool, on_theme_toggle):
     page_controls = PoolsControls(
         search_term=search_input,
         on_search_change=set_search_input,
+        on_search_execute=handle_search_execute_pools,
         is_searching=is_searching,
         on_create_pool=handle_create_click,
     )
@@ -331,10 +336,11 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
                 set_search_input(initial_value)
             initialized_equipos.current = True
 
-    def handle_search_execute_equipos():
+    def handle_search_execute_equipos(value: str):
         """Ejecuta la búsqueda cuando el usuario presiona Enter."""
-        search_value = search_input.strip() if search_input else None
+        search_value = value.strip() if value else None
         if search_value != equipos_state["filters"].get("name"):
+            set_search_input(value)
             equipos_state["set_filters"](lambda prev: {**prev, "name": search_value})
 
     page_controls = EquiposControls(
@@ -384,7 +390,6 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
 
     # --- Estado de los filtros UI ---
     search_input, set_search_input = use_state("")
-    debounced_search = use_debounced_value(search_input, delay=500)
 
     robot_filter, set_robot_filter = use_state(None)
     tipo_filter, set_tipo_filter = use_state(None)
@@ -474,10 +479,12 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
 
     # --- LÓGICA 2: Sincronizar UI -> Hook de Datos (Filtros) ---
 
-    # A) Búsqueda (con Debounce)
-    @use_effect(dependencies=[debounced_search])
-    def sync_search():
-        schedules_state["set_filters"](lambda prev: {**prev, "search": debounced_search or None})
+    # A) Búsqueda (Manual al presionar Enter)
+    def handle_search_execute_schedules(value: str):
+        search_value = value.strip() if value else None
+        if search_value != schedules_state["filters"].get("search"):
+            set_search_input(value)
+            schedules_state["set_filters"](lambda prev: {**prev, "search": search_value})
 
     # B) Filtro Robot
     @use_effect(dependencies=[robot_filter])
@@ -545,6 +552,7 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
             SchedulesControls(
                 search=search_input,
                 on_search=set_search_input,
+                on_search_execute=handle_search_execute_schedules,
                 robot_filter=robot_filter,
                 on_robot=set_robot_filter,
                 tipo_filter=tipo_filter,

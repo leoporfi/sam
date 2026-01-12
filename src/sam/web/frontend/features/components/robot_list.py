@@ -13,7 +13,7 @@ from reactpy import component, event, html, use_state
 from sam.web.backend.schemas import Robot
 
 from ...shared.async_content import AsyncContent
-from ...shared.common_components import Pagination
+from ...shared.common_components import Pagination, SearchInput
 from ...shared.styles import (
     BUTTON_PRIMARY,
     CARDS_CONTAINER_ROBOTS,
@@ -40,7 +40,7 @@ def RobotsControls(
     on_create_robot: Callable[[], Any],
     search_term: str,
     on_search_change: Callable[[str], Any],
-    on_search_execute: Callable[[], Any],
+    on_search_execute: Callable[[str], Any],
     active_filter: str,
     on_active_change: Callable[[str], Any],
     online_filter: str,
@@ -72,16 +72,12 @@ def RobotsControls(
             {"class_name": collapsible_panel_class},
             html.div(
                 {"class_name": MASTER_CONTROLS_GRID, "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"}},
-                html.input(
-                    {
-                        "type": "search",
-                        "name": "search-robot",
-                        "placeholder": "Buscar robots por nombre... (Presiona Enter)",
-                        "value": search_term,
-                        "on_change": lambda event: on_search_change(event["target"]["value"]),
-                        "on_key_down": lambda event: on_search_execute() if event.get("key") == "Enter" else None,
-                        "class_name": SEARCH_INPUT,
-                    }
+                SearchInput(
+                    placeholder="Buscar robots por nombre... (Presiona Enter)",
+                    value=search_term,
+                    on_execute=on_search_execute,
+                    class_name=SEARCH_INPUT,
+                    name="search-robot",
                 ),
                 html.select(
                     {
@@ -150,7 +146,7 @@ def RobotsDashboard(
             pagination_component,
             html.div(
                 {"class_name": CARDS_CONTAINER_ROBOTS},
-                *[RobotCard(robot=robot, on_action=on_action) for robot in robots],
+                *[RobotCard(robot=robot, on_action=on_action, key=str(robot["RobotId"])) for robot in robots],
             ),
             html.div(
                 {"class_name": TABLE_CONTAINER},
@@ -206,7 +202,7 @@ def RobotTable(
         html.table(
             html.thead(html.tr(*[render_header(h) for h in table_headers])),
             html.tbody(
-                *[RobotRow(robot=robot, on_action=on_action) for robot in robots]
+                *[RobotRow(robot=robot, on_action=on_action, key=str(robot["RobotId"])) for robot in robots]
                 if robots
                 else [
                     html.tr(

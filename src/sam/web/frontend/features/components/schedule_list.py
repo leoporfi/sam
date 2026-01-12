@@ -14,7 +14,7 @@ from reactpy import component, event, html, use_state
 from sam.web.backend.schemas import ScheduleData
 
 from ...shared.async_content import AsyncContent
-from ...shared.common_components import Pagination
+from ...shared.common_components import Pagination, SearchInput
 from ...shared.formatters import format_equipos_list, format_schedule_details, format_time
 from ...shared.styles import (
     CARDS_CONTAINER,
@@ -58,6 +58,7 @@ def SchedulesControls(
     on_new: Callable,
     robots_list: List[Dict],
     is_searching: bool,
+    on_search_execute: Optional[Callable[[str], Any]] = None,
 ):
     is_expanded, set_is_expanded = use_state(False)
     collapsible_panel_class = COLLAPSIBLE_PANEL_EXPANDED if is_expanded else COLLAPSIBLE_PANEL
@@ -88,16 +89,13 @@ def SchedulesControls(
                     "class_name": MASTER_CONTROLS_GRID,
                     "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"},
                 },
-                html.input(
-                    {
-                        "type": "search",
-                        "name": "search-schedule",
-                        "placeholder": "Buscar robots por nombre...",
-                        "value": search,
-                        "on_change": lambda e: on_search(e["target"]["value"].strip()),
-                        "aria-busy": str(is_searching).lower(),
-                        "class_name": SEARCH_INPUT,
-                    }
+                SearchInput(
+                    placeholder="Buscar robots por nombre... (Presiona Enter)",
+                    value=search,
+                    on_execute=on_search_execute or (lambda v: on_search(v)),
+                    class_name=SEARCH_INPUT,
+                    name="search-schedule",
+                    aria_busy=str(is_searching).lower(),
                 ),
                 html.select(
                     {
@@ -175,7 +173,7 @@ def SchedulesDashboard(
                         on_edit=on_edit,
                         on_assign_equipos=on_assign_equipos,
                         on_delete=on_delete,
-                        key=s["ProgramacionId"],  # Importante para el rendimiento de renderizado
+                        key=str(s["ProgramacionId"]),  # Importante para el rendimiento de renderizado
                     )
                     for s in schedules
                 ],
@@ -309,7 +307,7 @@ def ScheduleCard(
     schedule: ScheduleData, on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable, on_delete: Callable
 ):
     return html.article(
-        {"class_name": SCHEDULE_CARD},
+        {"key": schedule["ProgramacionId"], "class_name": SCHEDULE_CARD},
         html.header(
             html.div(
                 {"style": {"display": "flex", "justifyContent": "space-between", "alignItems": "center"}},

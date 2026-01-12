@@ -1,8 +1,8 @@
 # sam/web/frontend/shared/common_components.py
 import logging
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional
 
-from reactpy import component, html, use_state
+from reactpy import component, html, use_effect, use_state
 from reactpy_router import link
 
 from sam import __version__
@@ -131,6 +131,45 @@ def LoadingSpinner(size: str = "medium"):
         style = {"width": "3rem", "height": "3rem"}
     # PicoCSS usa aria-busy="true" para mostrar el spinner
     return html.span({"aria-busy": "true", "style": style})
+
+
+@component
+def SearchInput(
+    placeholder: str,
+    value: str,
+    on_execute: Callable[[str], Any],
+    class_name: str = "",
+    name: str = "",
+    aria_busy: str = "false",
+):
+    """
+    Input de búsqueda que maneja su propio estado local para evitar re-renders
+    del padre mientras se escribe. Solo ejecuta la búsqueda al presionar Enter.
+    """
+    local_value, set_local_value = use_state(value or "")
+
+    # Sincronizar con el valor externo si cambia (ej: reset desde filtros)
+    @use_effect(dependencies=[value])
+    def sync_value():
+        if value != local_value:
+            set_local_value(value or "")
+
+    def handle_key_down(event):
+        if event.get("key") == "Enter":
+            on_execute(local_value)
+
+    return html.input(
+        {
+            "type": "search",
+            "name": name,
+            "placeholder": placeholder,
+            "value": local_value,
+            "on_change": lambda e: set_local_value(e["target"]["value"]),
+            "on_key_down": handle_key_down,
+            "class_name": class_name,
+            "aria-busy": aria_busy,
+        }
+    )
 
 
 @component

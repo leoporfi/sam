@@ -7,14 +7,14 @@ siguiendo el estándar de ReactPy de SAM.
 """
 
 import asyncio
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from reactpy import component, event, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
 
 from ...shared.async_content import AsyncContent, LoadingSpinner
-from ...shared.common_components import ConfirmationModal
+from ...shared.common_components import ConfirmationModal, SearchInput
 from ...shared.styles import (
     BUTTON_PRIMARY,
     CARDS_CONTAINER_POOLS,
@@ -39,6 +39,7 @@ def PoolsControls(
     on_search_change: Callable,
     is_searching: bool,
     on_create_pool: Callable,
+    on_search_execute: Optional[Callable[[str], Any]] = None,
 ):
     """Controles para el dashboard de Pools (título, buscador, botón)."""
     is_expanded, set_is_expanded = use_state(False)
@@ -62,16 +63,13 @@ def PoolsControls(
             {"class_name": collapsible_panel_class},
             html.div(
                 {"class_name": MASTER_CONTROLS_GRID, "style": {"gridTemplateColumns": "5fr 2fr"}},
-                html.input(
-                    {
-                        "type": "search",
-                        "name": "search-pool",
-                        "placeholder": "Buscar pools por nombre...",
-                        "value": search_term,
-                        "on_change": lambda event: on_search_change(event["target"]["value"].strip()),
-                        "aria-busy": str(is_searching).lower(),
-                        "class_name": SEARCH_INPUT,
-                    }
+                SearchInput(
+                    placeholder="Buscar pools por nombre... (Presiona Enter)",
+                    value=search_term,
+                    on_execute=on_search_execute or (lambda v: on_search_change(v)),
+                    class_name=SEARCH_INPUT,
+                    name="search-pool",
+                    aria_busy=str(is_searching).lower(),
                 ),
                 html.button(
                     {"on_click": on_create_pool, "type": "button", "class_name": BUTTON_PRIMARY},
@@ -99,11 +97,14 @@ def PoolsDashboard(
         children=html._(
             html.div(
                 {"class_name": CARDS_CONTAINER_POOLS},
-                *[PoolCard(pool=p, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete) for p in pools_data],
+                *[
+                    PoolCard(pool=p, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete, key=str(p["PoolId"]))
+                    for p in pools_data
+                ],
             ),
             html.div(
                 {"class_name": TABLE_CONTAINER},
-                PoolsTable(pools=pools, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete),
+                PoolsTable(pools=pools_data, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete),
             ),
         ),
     )
@@ -124,7 +125,10 @@ def PoolsTable(pools: List[Dict], on_edit: Callable, on_assign: Callable, on_del
                 )
             ),
             html.tbody(
-                *[PoolRow(pool=p, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete) for p in pools]
+                *[
+                    PoolRow(pool=p, on_edit=on_edit, on_assign=on_assign, on_delete=on_delete, key=str(p["PoolId"]))
+                    for p in pools
+                ]
                 if pools
                 else [html.tr(html.td({"colSpan": 5, "style": {"text_align": "center"}}, "No se encontraron pools."))]
             ),

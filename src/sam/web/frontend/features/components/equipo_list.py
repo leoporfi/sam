@@ -6,14 +6,14 @@ Este módulo contiene los componentes para listar, mostrar y gestionar equipos,
 siguiendo el estándar de ReactPy de SAM.
 """
 
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List
 
 from reactpy import component, event, html, use_state
 
 from sam.web.backend.schemas import Equipo
 
 from ...shared.async_content import AsyncContent
-from ...shared.common_components import Pagination
+from ...shared.common_components import Pagination, SearchInput
 from ...shared.styles import (
     BUTTON_PRIMARY,
     CARDS_CONTAINER,
@@ -36,7 +36,7 @@ from ...shared.styles import (
 def EquiposControls(
     search: str,
     on_search: Callable,
-    on_search_execute: Callable,
+    on_search_execute: Callable[[str], Any],
     active_filter: str,
     on_active: Callable,
     balanceable_filter: str,
@@ -65,16 +65,12 @@ def EquiposControls(
             {"class_name": collapsible_panel_class},
             html.div(
                 {"class_name": MASTER_CONTROLS_GRID, "style": {"gridTemplateColumns": "5fr 2fr 2fr 1fr"}},
-                html.input(
-                    {
-                        "type": "search",
-                        "name": "search-device",
-                        "placeholder": "Buscar equipos por nombre... (Presiona Enter)",
-                        "value": search,
-                        "on_change": lambda event: on_search(event["target"]["value"]),
-                        "on_key_down": lambda event: on_search_execute() if event.get("key") == "Enter" else None,
-                        "class_name": SEARCH_INPUT,
-                    }
+                SearchInput(
+                    placeholder="Buscar equipos por nombre... (Presiona Enter)",
+                    value=search,
+                    on_execute=on_search_execute,
+                    class_name=SEARCH_INPUT,
+                    name="search-device",
                 ),
                 html.select(
                     {
@@ -132,7 +128,9 @@ def EquiposDashboard(equipos_state: Dict):
             html.div(
                 {"class_name": CARDS_CONTAINER},
                 *[
-                    EquipoCard(equipo=equipo, on_action=equipos_state["update_equipo_status"])
+                    EquipoCard(
+                        equipo=equipo, on_action=equipos_state["update_equipo_status"], key=str(equipo["EquipoId"])
+                    )
                     for equipo in equipos_state["equipos"]
                 ],
             ),
@@ -179,7 +177,7 @@ def EquiposTable(equipos: List[Equipo], on_action: Callable, sort_by: str, sort_
         html.table(
             html.thead(html.tr(*[render_header(h) for h in headers])),
             html.tbody(
-                *[EquipoRow(equipo=equipo, on_action=on_action) for equipo in equipos]
+                *[EquipoRow(equipo=equipo, on_action=on_action, key=str(equipo["EquipoId"])) for equipo in equipos]
                 if len(equipos)
                 else [
                     html.tr(
