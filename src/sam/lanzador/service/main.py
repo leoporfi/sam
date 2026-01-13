@@ -51,6 +51,12 @@ class LanzadorService:
         self._umbral_alertas_412 = cfg_lanzador.get("umbral_alertas_412", 20)
 
         self._validar_configuracion_critica()
+
+        # Registrar callbacks de autenticación en el cliente de AA
+        self._desplegador._aa_client.set_auth_callbacks(
+            on_failure=self._handle_aa_auth_failure, on_success=self._handle_aa_auth_success
+        )
+
         logger.debug("Orquestador del LanzadorService inicializado correctamente.")
 
     def _validar_configuracion_critica(self):
@@ -202,3 +208,50 @@ class LanzadorService:
 
     async def _run_conciliador_cycle(self, interval: int):
         await self._run_generic_cycle(self._conciliador, "conciliar_ejecuciones", interval, "Conciliación")
+
+    # --- Handlers de Autenticación ---
+
+    async def _handle_aa_auth_failure(self, status_code: int, error_text: str):
+        """Maneja el fallo crítico de autenticación con la API Key."""
+        logger.error(f"Handler de fallo de autenticación activado. Status: {status_code}")
+
+        context = AlertContext(
+            alert_level=AlertLevel.CRITICAL,
+            alert_scope=AlertScope.SYSTEM,
+            alert_type=AlertType.PERMANENT,
+            subject="API KEY de Automation Anywhere INVÁLIDA o CADUCADA",
+            summary="La API Key (AA_CR_API_KEY) ha sido rechazada por el Control Room. Los lanzamientos están DETENIDOS.",
+            technical_details={
+                "Status Code": str(status_code),
+                "Error": error_text[:500],
+                "Usuario CR": self._sincronizador._aa_client.cr_user,
+                "URL CR": self._sincronizador._aa_client.cr_url,
+            },
+            actions=[
+                "Generar una nueva API Key en el Control Room de Automation Anywhere",
+                "Actualizar la variable de entorno AA_CR_API_KEY en el servidor",
+                "Reiniciar los servicios de SAM para aplicar el cambio",
+            ],
+            frequency_info="Esta es una alerta única por proceso hasta que se resuelva.",
+        )
+
+        self._notificador.send_alert_v2(context)
+
+    async def _handle_aa_auth_success(self):
+        """Maneja la recuperación de la autenticación."""
+        logger.info("Handler de recuperación de autenticación activado.")
+
+        context = AlertContext(
+            alert_level=AlertLevel.MEDIUM,
+            alert_scope=AlertScope.SYSTEM,
+            alert_type=AlertType.RECOVERY,
+            subject="Autenticación con Automation Anywhere RESTAURADA",
+            summary="La conexión con el Control Room se ha normalizado exitosamente.",
+            technical_details={
+                "Mensaje": "El cliente ha logrado obtener un token válido nuevamente.",
+                "Usuario CR": self._sincronizador._aa_client.cr_user,
+            },
+            actions=["No se requiere acción adicional.", "Verificar que los robots pendientes comiencen a ejecutarse."],
+        )
+
+        self._notificador.send_alert_v2(context)
