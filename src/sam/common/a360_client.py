@@ -38,6 +38,16 @@ class AutomationAnywhereClient:
         self._client = httpx.AsyncClient(base_url=self.cr_url, verify=False, timeout=self.cr_api_timeout)
         logger.debug(f"Cliente API Asíncrono inicializado para CR: {self.cr_url}")
 
+        # --- Estado de Autenticación ---
+        self._api_key_status_failed = False
+        self._on_auth_failure_cb = None
+        self._on_auth_success_cb = None
+
+    def set_auth_callbacks(self, on_failure, on_success):
+        """Registra callbacks para eventos de autenticación."""
+        self._on_auth_failure_cb = on_failure
+        self._on_auth_success_cb = on_success
+
     # --- Métodos Internos: Gestión de Token y Peticiones ---
 
     async def _obtener_token(self, is_retry: bool = False):
@@ -63,16 +73,37 @@ class AutomationAnywhereClient:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-        response = await self._client.post(self._ENDPOINT_AUTH_V2, json=payload)
-        response.raise_for_status()
+        try:
+            response = await self._client.post(self._ENDPOINT_AUTH_V2, json=payload)
+            response.raise_for_status()
 
-        self._token = response.json().get("token")
-        if self._token:
-            self._client.headers["X-Authorization"] = self._token
-            logger.info("Token de A360 obtenido/refrescado exitosamente.")
-        else:
-            logger.error("La autenticación fue exitosa pero no se recibió un token.")
-            raise ValueError("No se recibió un token de la API de A360.")
+            # Si llegamos aquí, la autenticación fue exitosa
+            if self._api_key_status_failed:
+                logger.info("Recuperación de autenticación detectada.")
+                self._api_key_status_failed = False
+                if self._on_auth_success_cb:
+                    # Ejecutar callback de éxito (sin esperar)
+                    asyncio.create_task(self._on_auth_success_cb())
+
+            self._token = response.json().get("token")
+            if self._token:
+                self._client.headers["X-Authorization"] = self._token
+                logger.info("Token de A360 obtenido/refrescado exitosamente.")
+            else:
+                logger.error("La autenticación fue exitosa pero no se recibió un token.")
+                raise ValueError("No se recibió un token de la API de A360.")
+
+        except httpx.HTTPStatusError as e:
+            status_code = e.response.status_code
+            # Si falla con 401/403 usando API Key, lo consideramos un fallo permanente de credenciales
+            if status_code in (401, 403) and self.cr_api_key:
+                if not self._api_key_status_failed:
+                    logger.error(f"Fallo crítico de autenticación con API Key (Status: {status_code}).")
+                    self._api_key_status_failed = True
+                    if self._on_auth_failure_cb:
+                        # Ejecutar callback de fallo (sin esperar)
+                        asyncio.create_task(self._on_auth_failure_cb(status_code, e.response.text))
+            raise
 
     async def _asegurar_validez_del_token(self, is_retry: bool = False):
         """Asegura que tenemos un token. Se llama solo si no hay token o si ha expirado."""
