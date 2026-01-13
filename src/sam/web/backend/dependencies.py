@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import HTTPException
 
 from sam.common.a360_client import AutomationAnywhereClient
+from sam.common.apigw_client import ApiGatewayClient
 from sam.common.database import DatabaseConnector
 
 
@@ -49,3 +50,21 @@ class AAClientDependencyProvider:
 
 aa_client_provider = AAClientDependencyProvider()
 get_aa_client = aa_client_provider.get_aa_client
+
+
+# --- Proveedor de Cliente APIGW ---
+class APIGWClientDependencyProvider:
+    def __init__(self):
+        self._apigw_client: Optional[ApiGatewayClient] = None
+
+    def set_apigw_client(self, apigw_client: ApiGatewayClient):
+        self._apigw_client = apigw_client
+
+    def get_apigw_client(self) -> ApiGatewayClient:
+        if self._apigw_client is None:
+            raise HTTPException(status_code=503, detail="Cliente APIGW no disponible.")
+        return self._apigw_client
+
+
+apigw_client_provider = APIGWClientDependencyProvider()
+get_apigw_client = apigw_client_provider.get_apigw_client

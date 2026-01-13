@@ -14,11 +14,14 @@ logger = logging.getLogger(__name__)
 class AutomationAnywhereClient:
     _ENDPOINT_AUTH_V2 = "/v2/authentication"
     _ENDPOINT_ACTIVITY_LIST_V3 = "/v3/activity/list"
+    _ENDPOINT_ACTIVITY_MANAGE_V3 = "/v3/activity/manage"
     _ENDPOINT_AUTOMATIONS_DEPLOY_V3 = "/v3/automations/deploy"
     _ENDPOINT_AUTOMATIONS_DEPLOY_V4 = "/v4/automations/deploy"
     _ENDPOINT_USERS_LIST_V2 = "/v2/usermanagement/users/list"
     _ENDPOINT_DEVICES_LIST_V2 = "/v2/devices/list"
+    _ENDPOINT_DEVICES_RESET_V2 = "/v2/devices/reset"
     _ENDPOINT_FILES_LIST_V2 = "/v2/repository/workspaces/public/files/list"
+    _ENDPOINT_ACTIVITY_AUDIT_UNKNOWN_V1 = "/v1/activity/auditunknown"
 
     def __init__(self, cr_url: str, cr_user: str, cr_pwd: Optional[str] = None, **kwargs):
         self.cr_url = cr_url.strip("/")
@@ -96,14 +99,14 @@ class AutomationAnywhereClient:
 
             # Loguear errores conocidos como WARNING
             if status_code in (400, 412):
-                logger.warning(f"Error {status_code} en {endpoint}: {e.response.text[:200]}")
+                logger.warning(f"Error {status_code} en {endpoint}: {e.response.text}")
 
             # Lógica de refresco de token para 401
             if status_code == 401:
                 logger.warning("Recibido error 401. Intentando reautenticar...")
                 await self._asegurar_validez_del_token(is_retry=True)
 
-                logger.debug(f"Reintentando petición a {endpoint} con nuevo token...")
+                logger.debug(f"Reintentando petición a {endpoint} with nuevo token...")
                 response_retry = await self._client.request(method, endpoint, **kwargs)
                 response_retry.raise_for_status()
                 return response_retry.json() if response_retry.content else {}
@@ -166,50 +169,6 @@ class AutomationAnywhereClient:
         logger.info(f"Se encontraron {len(usuarios_api)} usuarios.")
         return usuarios_api
 
-    async def obtener_devices_old(self) -> List[Dict]:
-        """
-        [DEPRECATED] Versión legacy que retorna estructura mapeada custom.
-
-        Usar `obtener_devices()` para obtener la estructura completa de la API.
-        Este método se mantendrá solo para compatibilidad con código existente.
-        """
-        logger.warning("Método obtener_devices_old() está deprecado. Use obtener_devices()")
-        payload = {"filter": {"operator": "eq", "field": "status", "value": "CONNECTED"}}
-        devices_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_DEVICES_LIST_V2, payload)
-
-        devices_mapeados = []
-        for device in devices_api:
-            user_info = (device.get("defaultUsers") or [{}])[0]
-            devices_mapeados.append(
-                {
-                    "EquipoId": device.get("id"),
-                    "Equipo": device.get("hostName"),
-                    "UserId": user_info.get("id"),
-                    "UserName": user_info.get("username"),
-                }
-            )
-        logger.info(f"Se encontraron {len(devices_mapeados)} devices conectados.")
-        return devices_mapeados
-
-    async def obtener_usuarios_detallados_old(self) -> List[Dict]:
-        logger.info("Obteniendo usuarios detallados de A360...")
-        usuarios_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_USERS_LIST_V2, {})
-
-        usuarios_mapeados = []
-        for user in usuarios_api:
-            licencia = "SIN_LICENCIA"
-            if user.get("licenseFeatures"):
-                licencia = user["licenseFeatures"][0]
-            usuarios_mapeados.append(
-                {
-                    "UserId": user.get("id"),
-                    "UserName": user.get("username"),
-                    "Licencia": licencia,
-                }
-            )
-        logger.info(f"Se encontraron {len(usuarios_mapeados)} usuarios.")
-        return usuarios_mapeados
-
     async def obtener_robots(self) -> List[Dict]:
         logger.info("Obteniendo robots de A360...")
         payload = {
@@ -224,7 +183,7 @@ class AutomationAnywhereClient:
         }
         robots_api = await self._obtener_lista_paginada_entidades(self._ENDPOINT_FILES_LIST_V2, payload)
 
-        expression = r"^P[A-Z0-9]*[0-9].*_.*"  # ^(P|CP)\S+[0-9]+_.+$
+        expression = r"^P[A-Z0-9]*[0-9].*_.*"
         patron_nombre = re.compile(expression)
         robots_mapeados = []
         for bot in robots_api:
@@ -268,31 +227,16 @@ class AutomationAnywhereClient:
         bot_input: Optional[Dict] = None,
         callback_auth_headers: Optional[Dict[str, str]] = None,
     ) -> List[Dict[str, Any]]:
-        """
-        Despliega un bot usando la API v3 (LEGACY - usar v4 para nuevos desarrollos).
-
-        Las excepciones HTTP (400, 412, etc.) se propagan al llamador.
-        """
+        """Despliega un bot usando la API v3."""
         logger.info(f"Desplegando bot v3 con FileID: {file_id} en UserIDs: {user_ids}")
-
         payload = {"fileId": file_id, "runAsUserIds": user_ids}
-
         if bot_input:
             payload["botInput"] = bot_input
-
         if self.callback_url_deploy:
             payload["callbackInfo"] = {"url": self.callback_url_deploy}
-            logger.debug(f"Callback URL configurada: {self.callback_url_deploy}")
-
             if callback_auth_headers:
                 payload["callbackInfo"]["headers"] = callback_auth_headers
-                logger.debug("Cabeceras de autorización añadidas al callback.")
-
-        logger.debug(f"Payload de despliegue: {payload}")
-
         response = await self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V3, json=payload)
-
-        logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
         return response
 
     async def desplegar_bot_v4(
@@ -302,73 +246,82 @@ class AutomationAnywhereClient:
         bot_input: Optional[Dict] = None,
         callback_auth_headers: Optional[Dict[str, str]] = None,
     ) -> List[Dict[str, Any]]:
-        """
-        Despliega un bot usando la API v4 (/automations/deploy).
-
-        IMPORTANTE: Este método NO captura excepciones (Clean Code).
-        Si la API responde con error (400, 412, 500), la excepción httpx.HTTPStatusError
-        subirá directamente al 'Desplegador' para ser gestionada allí (reintentos/alertas).
-
-        Estructura según documentación oficial AA v4:
-        - botId (no automationId)
-        - unattendedRequest/attendedRequest/headlessRequest
-        - botInput (opcional)
-        - callbackInfo (opcional)
-        """
+        """Despliega un bot usando la API v4."""
         logger.info(f"Desplegando bot v4 con BotID: {file_id} en UserIDs: {user_ids}")
-
-        # Estructura UnattendedRequest
         unattended_request = {"runAsUserIds": user_ids, "deviceUsageType": "RUN_ONLY_ON_DEFAULT_DEVICE"}
-
-        payload = {
-            "botId": file_id,
-            "unattendedRequest": unattended_request,
-        }
-
-        # Agregar bot inputs si existen
+        payload = {"botId": file_id, "unattendedRequest": unattended_request}
         if bot_input:
             payload["botInput"] = bot_input
-
-        # Agregar callback info si está configurado
         if self.callback_url_deploy:
             payload["callbackInfo"] = {"url": self.callback_url_deploy}
-            logger.debug(f"Callback URL configurada: {self.callback_url_deploy}")
-
             if callback_auth_headers:
                 payload["callbackInfo"]["headers"] = callback_auth_headers
-                logger.debug("Cabeceras de autorización añadidas al callback.")
-
-        logger.debug(f"Payload de despliegue: {payload}")
-
-        # Si falla, la excepción sube automáticamente al Desplegador
         response = await self._realizar_peticion_api("POST", self._ENDPOINT_AUTOMATIONS_DEPLOY_V4, json=payload)
-
-        logger.info(f"Bot desplegado exitosamente. DeploymentId: {response.get('deploymentId')}")
-
         return response
 
+    async def detener_deployment(self, deployment_id: str) -> bool:
+        """Detiene una ejecución en curso."""
+        logger.info(f"[UNLOCK] Intentando detener deployment: {deployment_id}")
+        payload = {"stop_executions": {"execution_ids": [deployment_id]}}
+        try:
+            response = await self._realizar_peticion_api("POST", self._ENDPOINT_ACTIVITY_MANAGE_V3, json=payload)
+            manage_errors = response.get("manage_action_errors", [])
+            if manage_errors:
+                logger.warning(
+                    f"[UNLOCK] No se pudo detener deployment {deployment_id}: {manage_errors[0].get('error_response')}"
+                )
+                return False
+            return True
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 400:
+                return False
+            raise
+
+    async def reset_device(self, device_id: str) -> bool:
+        """Resetea un device."""
+        logger.info(f"[UNLOCK] Intentando resetear device: {device_id}")
+        payload = {"deviceIds": {"ids": [int(device_id)]}}
+        try:
+            await self._realizar_peticion_api("POST", self._ENDPOINT_DEVICES_RESET_V2, json=payload)
+            return True
+        except Exception as e:
+            logger.error(f"[UNLOCK] Error al resetear device {device_id}: {e}")
+            raise
+
+    async def mover_a_historico_a360(self, deployment_id: str) -> bool:
+        """Mueve una ejecución al histórico en A360."""
+        logger.info(f"[UNLOCK] Intentando mover a histórico en A360: {deployment_id}")
+        try:
+            detalles = await self.obtener_detalles_por_deployment_ids([deployment_id])
+            if not detalles:
+                logger.warning(f"[UNLOCK] No se encontraron detalles para {deployment_id}")
+                return False
+
+            logger.debug(f"[UNLOCK] Detalles de actividad encontrados: {detalles[0]}")
+            internal_id = detalles[0].get("id")
+            if not internal_id:
+                logger.warning(f"[UNLOCK] No se encontró el campo 'id' en los detalles de {deployment_id}")
+                return False
+            headers = {"Content-Type": "text/plain;charset=UTF-8"}
+            await self._realizar_peticion_api(
+                "PUT", self._ENDPOINT_ACTIVITY_AUDIT_UNKNOWN_V1, content=internal_id, headers=headers
+            )
+            logger.info(f"[UNLOCK] Deployment {deployment_id} movido a histórico exitosamente.")
+            return True
+        except Exception as e:
+            logger.error(f"[UNLOCK] Error al mover a histórico en A360 para {deployment_id}: {e}", exc_info=True)
+            return False
+
     async def close(self):
-        """Cierra la sesión del cliente httpx de forma segura."""
+        """Cierra la sesión del cliente httpx."""
         if self._client and not self._client.is_closed:
             await self._client.aclose()
             logger.info("Cliente API de A360 cerrado.")
 
     async def check_health(self) -> bool:
-        """
-        Verifica la conectividad con el Control Room realizando una petición ligera.
-        Retorna True si el servicio responde correctamente (incluso 401), False si hay error de conexión o 5xx.
-        """
+        """Verifica conectividad."""
         try:
-            # Usamos el endpoint de autenticación con credenciales dummy para verificar que el servidor responde
-            # No usamos _realizar_peticion_api para evitar bucles de re-autenticación
-            # Solo queremos saber si el servidor está "vivo"
             response = await self._client.post(self._ENDPOINT_AUTH_V2, json={"username": "healthcheck"})
-
-            # Si responde 401 (Unauthorized) o 200, el servidor está vivo.
-            # Si responde 5xx, está roto.
-            if response.status_code < 500:
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"Health check fallido: {e}")
+            return response.status_code < 500
+        except Exception:
             return False

@@ -108,6 +108,42 @@ class ApiGatewayClient:
         # Devolver solo las cabeceras que tienen un valor asignado
         return {k: v for k, v in headers.items() if v is not None}
 
+    async def notificar_callback(self, callback_url: str, payload: Dict) -> bool:
+        """
+        Envía una notificación al callback local usando el token de APIGW.
+
+        Args:
+            callback_url: URL del callback local
+            payload: Datos a enviar (deploymentId, status, deviceId, etc.)
+
+        Returns:
+            True si la notificación fue exitosa
+        """
+        deployment_id = payload.get("deploymentId", "N/A")
+        logger.info(f"[CALLBACK] Notificando callback para deployment {deployment_id} a {callback_url}")
+
+        headers = await self.get_auth_header()
+        headers["Content-Type"] = "application/json"
+
+        try:
+            response = await self._client.post(callback_url, headers=headers, json=payload)
+            response.raise_for_status()
+            logger.info(
+                f"[CALLBACK] Callback notificado exitosamente para {deployment_id}. Status: {response.status_code}"
+            )
+            return True
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                f"[CALLBACK] Error HTTP al notificar callback para {deployment_id}: {e.response.status_code} - {e.response.text[:200]}"
+            )
+            return False
+        except Exception as e:
+            logger.error(
+                f"[CALLBACK] Error inesperado al notificar callback para {deployment_id}: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            return False
+
     async def close(self):
         """Cierra la sesión del cliente httpx."""
         if not self._client.is_closed:

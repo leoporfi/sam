@@ -90,6 +90,63 @@ async def sync_equipos_only(db: DatabaseConnector, aa_client: AutomationAnywhere
         raise
 
 
+def get_sync_status(db: DatabaseConnector) -> Dict:
+    """
+    Obtiene el estado de la última sincronización de robots/equipos.
+    """
+    # Por ahora retornamos None ya que no hay una columna de timestamp global
+    # en las tablas de Robots/Equipos.
+    return {"last_sync": None}
+
+
+async def sync_robots_only(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:
+    """
+    Sincroniza únicamente la tabla Robots con A360.
+    """
+    logger.info("Iniciando sincronización de robots desde A360...")
+    try:
+        # El cliente aa_client ya viene creado e inyectado
+        robots_api = await aa_client.obtener_robots()
+        logger.info(f"Datos recibidos de A360: {len(robots_api)} robots.")
+
+        # Mover la escritura a DB a un hilo aparte para NO bloquear el loop
+        await asyncio.to_thread(db.merge_robots, robots_api)
+
+        logger.info(f"Sincronización de robots completada. {len(robots_api)} robots procesados.")
+        return {"robots_sincronizados": len(robots_api)}
+    except Exception as e:
+        logger.critical(f"Error durante sincronización de robots: {type(e).__name__} - {e}", exc_info=True)
+        raise
+
+
+async def sync_equipos_only(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:
+    """
+    Sincroniza únicamente la tabla Equipos con A360.
+    """
+    logger.info("Iniciando sincronización de equipos desde A360...")
+    try:
+        # El cliente aa_client ya viene creado e inyectado
+        sincronizador = SincronizadorComun(db_connector=db, aa_client=aa_client)
+
+        devices_task = aa_client.obtener_devices()
+        users_task = aa_client.obtener_usuarios_detallados()
+        devices_api, users_api = await asyncio.gather(devices_task, users_task)
+
+        logger.info(f"Datos recibidos de A360: {len(devices_api)} dispositivos, {len(users_api)} usuarios.")
+
+        # Procesamiento en CPU (podría bloquear un poco, pero es rápido)
+        equipos_finales = sincronizador._procesar_y_mapear_equipos(devices_api, users_api)
+
+        # DB Write en hilo aparte
+        await asyncio.to_thread(db.merge_equipos, equipos_finales)
+
+        logger.info(f"Sincronización de equipos completada. {len(equipos_finales)} equipos procesados.")
+        return {"equipos_sincronizados": len(equipos_finales)}
+    except Exception as e:
+        logger.critical(f"Error durante sincronización de equipos: {type(e).__name__} - {e}", exc_info=True)
+        raise
+
+
 # Robots
 def get_robots(
     db: DatabaseConnector,
@@ -1179,3 +1236,44 @@ def get_success_analysis(
         "top_errores": result_sets[1],
         "detalle_robots": result_sets[2],
     }
+
+
+def obtener_info_ejecucion(db: DatabaseConnector, deployment_id: str) -> Optional[Dict]:
+    """
+    Obtiene información detallada de una ejecución por su DeploymentId.
+    """
+    query = """
+        SELECT EjecucionId, DeploymentId, RobotId, EquipoId, UserId, Estado, Hora
+        FROM dbo.Ejecuciones
+        WHERE DeploymentId = ?
+    """
+    try:
+        results = db.ejecutar_consulta(query, (deployment_id,), es_select=True)
+        return results[0] if results else None
+    except Exception as e:
+        logger.error(f"Error obteniendo info de ejecución {deployment_id}: {e}")
+        return None
+
+
+def mover_ejecucion_a_historico(db: DatabaseConnector, deployment_id: str, estado_final: str, mensaje: str) -> bool:
+    """
+    Actualiza el estado de una ejecución y registra un mensaje de error/log.
+    En SAM, el movimiento a la tabla histórica suele ser automático tras alcanzar un estado final.
+    """
+    query = """
+        UPDATE dbo.Ejecuciones
+        SET Estado = ?,
+            FechaFin = GETDATE(),
+            FechaActualizacion = GETDATE(),
+            CallbackInfo = ?
+        WHERE DeploymentId = ?
+    """
+    try:
+        # Usamos CallbackInfo para guardar el mensaje si no hay una columna MensajeError explícita
+        # o si queremos que el sistema lo trate como procesado por callback.
+        db.ejecutar_consulta(query, (estado_final, mensaje, deployment_id), es_select=False)
+        logger.info(f"Ejecución {deployment_id} actualizada a {estado_final} en BD local.")
+        return True
+    except Exception as e:
+        logger.error(f"Error actualizando ejecución {deployment_id} en BD: {e}")
+        return False

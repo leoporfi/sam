@@ -32,6 +32,7 @@ BEGIN
     EjecucionesConEstado AS (
         SELECT
             e.EjecucionId AS Id,
+            e.DeploymentId,
             r.Robot,
             eq.Equipo,
             e.Estado,

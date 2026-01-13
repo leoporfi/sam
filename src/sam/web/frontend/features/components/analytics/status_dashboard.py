@@ -24,6 +24,10 @@ def StatusDashboard(scroll_to=None):
     # Nuevo estado para el filtro
     critical_only, set_critical_only = use_state(True)
 
+    # Estado para el proceso de destrabar
+    unlocking_id, set_unlocking_id = use_state(None)
+    unlock_result, set_unlock_result = use_state(None)
+
     api_client = get_api_client()
 
     async def fetch_status():
@@ -50,6 +54,35 @@ def StatusDashboard(scroll_to=None):
     def handle_refresh(event=None):
         """Wrapper para manejar el click del botón de actualizar."""
         asyncio.create_task(fetch_status())
+
+    async def handle_unlock(deployment_id):
+        """Solicita al backend destrabar una ejecución."""
+        if not deployment_id:
+            return
+
+        set_unlocking_id(deployment_id)
+        set_unlock_result(None)
+
+        try:
+            logger.info(f"Solicitando destrabar ejecución: {deployment_id}")
+            # Corregido: APIClient.post requiere el argumento 'data'
+            res = await api_client.post(f"/api/executions/{deployment_id}/unlock", data={})
+
+            if res.get("success"):
+                set_unlock_result(
+                    {"type": "success", "message": res.get("message", "Ejecución destrabada correctamente.")}
+                )
+                # Refrescar datos después de un pequeño delay
+                await asyncio.sleep(1.5)
+                await fetch_status()
+            else:
+                set_unlock_result({"type": "error", "message": res.get("message", "Error al destrabar ejecución.")})
+
+        except Exception as e:
+            logger.error(f"Error al destrabar ejecución {deployment_id}: {e}")
+            set_unlock_result({"type": "error", "message": f"Error: {str(e)}"})
+        finally:
+            set_unlocking_id(None)
 
     def format_duration(minutes):
         """Formatea minutos a 'dd hh:mm:ss' o 'hh:mm:ss'."""
@@ -145,6 +178,23 @@ def StatusDashboard(scroll_to=None):
             },
             "ℹ️ Estado operativo: Muestra ejecuciones en curso y alertas críticas recientes. Incluye datos de la tabla actual y del histórico reciente para asegurar visibilidad de fallos.",
         ),
+        # Alerta de resultado de destrabar
+        html.div(
+            {
+                "class_name": f"dashboard-alert dashboard-alert-{'green' if unlock_result['type'] == 'success' else 'red'}",
+                "style": {"display": "flex", "justify-content": "space-between", "align-items": "center"},
+            },
+            html.span(unlock_result["message"]),
+            html.button(
+                {
+                    "on_click": lambda e: set_unlock_result(None),
+                    "style": {"padding": "0.2rem 0.5rem", "font-size": "0.8rem", "margin": "0"},
+                },
+                "Cerrar",
+            ),
+        )
+        if unlock_result
+        else "",
         html.div(
             {
                 "class_name": "status-cards dashboard-grid",
@@ -440,6 +490,7 @@ def StatusDashboard(scroll_to=None):
                         html.th("Fecha Inicio"),
                         html.th("Mensaje"),
                         html.th("Origen"),
+                        html.th("Acción") if active_tab == "demoras" else "",
                     )
                 ),
                 html.tbody(
@@ -531,6 +582,35 @@ def StatusDashboard(scroll_to=None):
                                     item.get("Origen", "N/A"),
                                 )
                             ),
+                            html.td(
+                                html.button(
+                                    {
+                                        "class_name": "outline secondary",
+                                        "style": {
+                                            "padding": "0.2rem 0.5rem",
+                                            "font-size": "0.75rem",
+                                            "margin": "0",
+                                            "border-color": "var(--pico-color-orange-500)",
+                                            "color": "var(--pico-color-orange-500)",
+                                        },
+                                        "on_click": lambda e,
+                                        d=(item.get("DeploymentId") or item.get("Id")): asyncio.create_task(
+                                            handle_unlock(d)
+                                        ),
+                                        "disabled": unlocking_id == (item.get("DeploymentId") or item.get("Id")),
+                                    },
+                                    html.i(
+                                        {"class_name": "fa-solid fa-hand-sparkles", "style": {"margin-right": "5px"}}
+                                    )
+                                    if unlocking_id != (item.get("DeploymentId") or item.get("Id"))
+                                    else html.i({"class_name": "fa-solid fa-spinner fa-spin"}),
+                                    " Destrabar"
+                                    if unlocking_id != (item.get("DeploymentId") or item.get("Id"))
+                                    else " Procesando...",
+                                )
+                                if active_tab == "demoras"
+                                else ""
+                            ),
                         )
                         for item in current_data
                     ]
@@ -538,7 +618,7 @@ def StatusDashboard(scroll_to=None):
                     else [
                         html.tr(
                             html.td(
-                                {"colspan": 7, "style": {"text-align": "center"}},
+                                {"colspan": 8, "style": {"text-align": "center"}},
                                 "No hay items en esta categoría.",
                             )
                         )

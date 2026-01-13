@@ -29,11 +29,12 @@ if __name__ == "__main__":
         sys.path.insert(0, src_path)
 
 from sam.common.a360_client import AutomationAnywhereClient
+from sam.common.apigw_client import ApiGatewayClient
 from sam.common.config_loader import ConfigLoader
 from sam.common.config_manager import ConfigManager
 from sam.common.database import DatabaseConnector
 from sam.common.logging_setup import setup_logging
-from sam.web.backend.dependencies import aa_client_provider
+from sam.web.backend.dependencies import aa_client_provider, apigw_client_provider
 from sam.web.main import create_app
 
 # --- Globales del Servicio ---
@@ -108,7 +109,12 @@ def _setup_dependencies() -> Dict[str, Any]:
     # 3. Inyectamos la dependencia en el proveedor global
     aa_client_provider.set_aa_client(aa_client)
 
-    return {"db_connector": _db_connector, "aa_client": aa_client}
+    logging.debug("Creando dependencia ApiGatewayClient...")
+    apigw_config = ConfigManager.get_apigw_config()
+    apigw_client = ApiGatewayClient(apigw_config)
+    apigw_client_provider.set_apigw_client(apigw_client)
+
+    return {"db_connector": _db_connector, "aa_client": aa_client, "apigw_client": apigw_client}
 
 
 def _run_service(deps: Dict[str, Any]) -> None:
