@@ -1,4 +1,5 @@
 # sam/web/backend/api.py
+import asyncio
 import logging
 from typing import Optional
 
@@ -367,12 +368,68 @@ async def unlock_execution(
     try:
         # Usamos el internal_id si lo tenemos, sino el deployment_id como fallback
         id_to_stop = internal_id if internal_id else deployment_id
-        success_stop = await aa_client.detener_deployment(id_to_stop)
-        if success_stop:
-            actions_taken.append("A360_STOP_SUCCESS")
-        else:
-            actions_taken.append("A360_STOP_FAILED")
 
+        # Enviar comando de detención
+        stop_command_sent = await aa_client.detener_deployment(id_to_stop)
+
+        if stop_command_sent:
+            actions_taken.append("A360_STOP_COMMAND_SENT")
+            logger.info(f"[UNLOCK] Comando de detención enviado. Esperando confirmación para {deployment_id}...")
+
+            # Esperar confirmación de detención (Polling)
+            max_retries = 12
+            delay = 5  # 5 segundos * 12 intentos = 60 segundos máx de espera
+            confirmed_stopped = False
+
+            for i in range(max_retries):
+                await asyncio.sleep(delay)
+                try:
+                    # Consultar estado actual
+                    # Nota: obtener_detalles_por_deployment_ids usa el deployment_id (UUID), no el interno
+                    detalles_actualizados = await aa_client.obtener_detalles_por_deployment_ids([deployment_id])
+
+                    if detalles_actualizados:
+                        estado_actual = detalles_actualizados[0].get("status")
+                        logger.info(f"[UNLOCK] Estado actual en A360 (intento {i + 1}/{max_retries}): {estado_actual}")
+
+                        # Estados que indican que la ejecución ya no está corriendo.
+                        # NOTA: "UPDATE", "RUNNING", "PAUSED", "QUEUED", "DEPLOYED" son estados activos.
+                        final_states = [
+                            "STOPPED",  # Estado genérico de parada
+                            "COMPLETED",
+                            "FAILED",
+                            "DEPLOY_FAILED",
+                            "RUN_FAILED",
+                            "ABORTED",
+                            "RUN_ABORTED",
+                            "TIMED_OUT",
+                            "RUN_TIMED_OUT",
+                            "UNKNOWN",
+                        ]
+
+                        if estado_actual in final_states:
+                            confirmed_stopped = True
+                            actions_taken.append(f"A360_STOP_CONFIRMED_{estado_actual}")
+                            break
+                    else:
+                        logger.warning(f"[UNLOCK] No se obtuvieron detalles para {deployment_id} en intento {i + 1}")
+
+                except Exception as e:
+                    logger.warning(f"[UNLOCK] Error verificando estado en intento {i + 1}: {e}")
+
+            if confirmed_stopped:
+                success_stop = True
+                actions_taken.append("A360_STOP_SUCCESS")
+            else:
+                logger.error(f"[UNLOCK] Timeout esperando confirmación de stop para {deployment_id}")
+                actions_taken.append("A360_STOP_CONFIRMATION_TIMEOUT")
+                # Si no se confirma el stop, NO procedemos a notificar éxito
+                success_stop = False
+        else:
+            actions_taken.append("A360_STOP_REQUEST_FAILED")
+
+        # Si falló el stop (ya sea el comando o la confirmación), intentamos medidas drásticas
+        if not success_stop:
             # 4. Si falla el stop, intentar reset del device y mover a histórico
             if device_id:
                 logger.info(f"[UNLOCK] Intentando reset de device {device_id}...")
@@ -395,7 +452,7 @@ async def unlock_execution(
                 actions_taken.append(f"A360_HISTORIC_ERROR: {str(e)[:50]}")
 
     except Exception as e:
-        logger.error(f"[UNLOCK] Error durante acciones de detención en A360: {e}")
+        logger.error(f"[UNLOCK] Error crítico durante acciones de detención en A360: {e}")
         actions_taken.append(f"A360_ACTION_ERROR: {str(e)[:50]}")
 
     # 6. Notificar al callback local (él debería encargarse de actualizar la BD)
