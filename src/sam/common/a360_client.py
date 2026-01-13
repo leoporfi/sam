@@ -89,30 +89,61 @@ class AutomationAnywhereClient:
         if not self._token:
             await self._asegurar_validez_del_token()
 
-        try:
-            # Primer intento de la petición
-            response = await self._client.request(method, endpoint, **kwargs)
-            response.raise_for_status()
-            return response.json() if response.content else {}
-        except httpx.HTTPStatusError as e:
-            status_code = e.response.status_code
+        max_retries = 3
+        retry_delay = 2.0
 
-            # Loguear errores conocidos como WARNING
-            if status_code in (400, 412):
-                logger.warning(f"Error {status_code} en {endpoint}: {e.response.text}")
+        for attempt in range(max_retries + 1):
+            try:
+                # Realizar la petición
+                response = await self._client.request(method, endpoint, **kwargs)
+                response.raise_for_status()
+                return response.json() if response.content else {}
 
-            # Lógica de refresco de token para 401
-            if status_code == 401:
-                logger.warning("Recibido error 401. Intentando reautenticar...")
-                await self._asegurar_validez_del_token(is_retry=True)
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
 
-                logger.debug(f"Reintentando petición a {endpoint} with nuevo token...")
-                response_retry = await self._client.request(method, endpoint, **kwargs)
-                response_retry.raise_for_status()
-                return response_retry.json() if response_retry.content else {}
+                # 1. Manejo de 401 (Token expirado)
+                if status_code == 401:
+                    if attempt < max_retries:
+                        logger.warning("Recibido error 401. Intentando reautenticar...")
+                        await self._asegurar_validez_del_token(is_retry=True)
+                        # No aumentamos el delay para 401, reintentamos inmediatamente con nuevo token
+                        continue
+                    else:
+                        logger.error("Error 401 persistente tras reintentos.")
+                        raise
 
-            # Re-lanzar para que el llamador maneje otros errores
-            raise
+                # 2. Manejo de errores de servidor (502, 503, 504)
+                if status_code in (502, 503, 504):
+                    if attempt < max_retries:
+                        logger.warning(
+                            f"Error {status_code} en {endpoint}. Reintentando ({attempt + 1}/{max_retries}) en {retry_delay}s..."
+                        )
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2  # Backoff exponencial
+                        continue
+                    else:
+                        logger.error(f"Error {status_code} persistente en {endpoint} tras {max_retries} reintentos.")
+                        raise
+
+                # 3. Loguear errores conocidos de cliente como WARNING (no reintentables)
+                if status_code in (400, 412):
+                    logger.warning(f"Error {status_code} en {endpoint}: {e.response.text}")
+
+                # Re-lanzar cualquier otro error
+                raise
+
+            except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.PoolTimeout) as e:
+                # 4. Manejo de Timeouts de red
+                if attempt < max_retries:
+                    logger.warning(
+                        f"Timeout ({type(e).__name__}) en {endpoint}. Reintentando ({attempt + 1}/{max_retries}) en {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                logger.error(f"Timeout persistente en {endpoint} tras {max_retries} reintentos.")
+                raise
 
     async def _obtener_lista_paginada_entidades(self, endpoint: str, payload: Dict) -> List[Dict]:
         """
