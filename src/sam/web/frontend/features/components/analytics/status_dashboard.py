@@ -3,9 +3,10 @@
 import asyncio
 import logging
 
-from reactpy import component, html, use_effect, use_state
+from reactpy import component, html, use_context, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.notifications import NotificationContext
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,26 @@ def StatusDashboard(scroll_to=None):
     # Nuevo estado para el filtro
     critical_only, set_critical_only = use_state(True)
 
+    # Estados para filtros (valores en inputs)
+    filter_robot, set_filter_robot = use_state("")
+    filter_equipo, set_filter_equipo = use_state("")
+    filter_limit, set_filter_limit = use_state("100")
+
+    # Estados para filtros aplicados (valores que se envían al backend)
+    applied_robot, set_applied_robot = use_state("")
+    applied_equipo, set_applied_equipo = use_state("")
+    applied_limit, set_applied_limit = use_state(100)
+
     # Estado para el proceso de destrabar
     unlocking_id, set_unlocking_id = use_state(None)
-    unlock_result, set_unlock_result = use_state(None)
+
+    # Estado para el modal de confirmación
+    show_confirm_modal, set_show_confirm_modal = use_state(False)
+    pending_unlock_id, set_pending_unlock_id = use_state(None)
+
+    # Obtener contexto de notificaciones
+    notification_ctx = use_context(NotificationContext)
+    show_notification = notification_ctx["show_notification"] if notification_ctx else None
 
     api_client = get_api_client()
 
@@ -40,8 +58,15 @@ def StatusDashboard(scroll_to=None):
             set_status_data(data)
 
             # 2. Fetch Recent Executions
-            # Pasamos el filtro critical_only
-            exec_params = {"limit": 50, "critical_only": critical_only}
+            # Pasamos el filtro critical_only y los filtros aplicados
+            exec_params = {"limit": applied_limit, "critical_only": critical_only}
+
+            # Agregar filtros opcionales solo si tienen valor
+            if applied_robot:
+                exec_params["robot_name"] = applied_robot
+            if applied_equipo:
+                exec_params["equipo_name"] = applied_equipo
+
             exec_data = await api_client.get("/api/analytics/executions", params=exec_params)
             set_executions_data(exec_data)
 
@@ -55,32 +80,66 @@ def StatusDashboard(scroll_to=None):
         """Wrapper para manejar el click del botón de actualizar."""
         asyncio.create_task(fetch_status())
 
+    def handle_apply_filters(event=None):
+        """Aplica los filtros y refresca los datos."""
+        # Convertir limit a int, con valor por defecto si es inválido
+        try:
+            limit_value = int(filter_limit) if filter_limit else 100
+            if limit_value <= 0:
+                limit_value = 100
+        except ValueError:
+            limit_value = 100
+
+        # Actualizar los filtros aplicados
+        set_applied_robot(filter_robot.strip())
+        set_applied_equipo(filter_equipo.strip())
+        set_applied_limit(limit_value)
+
+        # Refrescar datos con los nuevos filtros
+        asyncio.create_task(fetch_status())
+
+    def request_unlock_confirmation(deployment_id):
+        """Abre el modal de confirmación para destrabar."""
+        set_pending_unlock_id(deployment_id)
+        set_show_confirm_modal(True)
+
+    def cancel_unlock():
+        """Cierra el modal de confirmación."""
+        set_show_confirm_modal(False)
+        set_pending_unlock_id(None)
+
+    async def confirm_unlock():
+        """Ejecuta la acción de destrabar después de la confirmación."""
+        if pending_unlock_id:
+            set_show_confirm_modal(False)
+            await handle_unlock(pending_unlock_id)
+            set_pending_unlock_id(None)
+
     async def handle_unlock(deployment_id):
         """Solicita al backend destrabar una ejecución."""
         if not deployment_id:
             return
 
         set_unlocking_id(deployment_id)
-        set_unlock_result(None)
 
         try:
             logger.info(f"Solicitando destrabar ejecución: {deployment_id}")
-            # Corregido: APIClient.post requiere el argumento 'data'
             res = await api_client.post(f"/api/executions/{deployment_id}/unlock", data={})
 
             if res.get("success"):
-                set_unlock_result(
-                    {"type": "success", "message": res.get("message", "Ejecución destrabada correctamente.")}
-                )
+                if show_notification:
+                    show_notification(res.get("message", "Ejecución destrabada correctamente."), "success")
                 # Refrescar datos después de un pequeño delay
                 await asyncio.sleep(1.5)
                 await fetch_status()
             else:
-                set_unlock_result({"type": "error", "message": res.get("message", "Error al destrabar ejecución.")})
+                if show_notification:
+                    show_notification(res.get("message", "Error al destrabar ejecución."), "error")
 
         except Exception as e:
             logger.error(f"Error al destrabar ejecución {deployment_id}: {e}")
-            set_unlock_result({"type": "error", "message": f"Error: {str(e)}"})
+            if show_notification:
+                show_notification(f"Error: {str(e)}", "error")
         finally:
             set_unlocking_id(None)
 
@@ -160,6 +219,53 @@ def StatusDashboard(scroll_to=None):
 
     return html.div(
         {"class_name": "status-dashboard"},
+        # --- MODAL DE CONFIRMACIÓN ---
+        html.dialog(
+            {"open": show_confirm_modal},
+            html.article(
+                html.header(
+                    html.button({"aria-label": "Close", "class_name": "close", "on_click": lambda e: cancel_unlock()}),
+                    html.h3("⚠️ Confirmar Acción Manual"),
+                ),
+                html.p(
+                    "Estás a punto de destrabar manualmente esta ejecución. ",
+                    html.strong("Esta acción NO detiene el proceso en Automation Anywhere."),
+                ),
+                html.p("Solo se actualizará el estado en la base de datos local para liberar el equipo y el robot."),
+                html.div(
+                    {
+                        "class_name": "alert alert-warning",
+                        "style": {
+                            "background-color": "#fff3cd",
+                            "color": "#856404",
+                            "padding": "1rem",
+                            "border-radius": "0.5rem",
+                            "margin-bottom": "1rem",
+                        },
+                    },
+                    html.strong("IMPORTANTE: "),
+                    "Antes de continuar, verifica manualmente en la Control Room de Automation Anywhere que la ejecución se haya detenido o completado.",
+                ),
+                html.footer(
+                    html.button(
+                        {
+                            "class_name": "secondary",
+                            "on_click": lambda e: cancel_unlock(),
+                            "style": {"margin-right": "1rem"},
+                        },
+                        "Cancelar",
+                    ),
+                    html.button(
+                        {
+                            "on_click": lambda e: asyncio.create_task(confirm_unlock()),
+                        },
+                        "Confirmar y Destrabar",
+                    ),
+                ),
+            ),
+        )
+        if show_confirm_modal
+        else "",
         html.header(
             {
                 "class_name": "dashboard-header",
@@ -178,23 +284,6 @@ def StatusDashboard(scroll_to=None):
             },
             "ℹ️ Estado operativo: Muestra ejecuciones en curso y alertas críticas recientes. Incluye datos de la tabla actual y del histórico reciente para asegurar visibilidad de fallos.",
         ),
-        # Alerta de resultado de destrabar
-        html.div(
-            {
-                "class_name": f"dashboard-alert dashboard-alert-{'green' if unlock_result['type'] == 'success' else 'red'}",
-                "style": {"display": "flex", "justify-content": "space-between", "align-items": "center"},
-            },
-            html.span(unlock_result["message"]),
-            html.button(
-                {
-                    "on_click": lambda e: set_unlock_result(None),
-                    "style": {"padding": "0.2rem 0.5rem", "font-size": "0.8rem", "margin": "0"},
-                },
-                "Cerrar",
-            ),
-        )
-        if unlock_result
-        else "",
         html.div(
             {
                 "class_name": "status-cards dashboard-grid",
@@ -349,6 +438,83 @@ def StatusDashboard(scroll_to=None):
                             "style": {"padding": "0.4rem", "border": "none"},
                         },
                         html.i({"class_name": "fa-solid fa-rotate"}),
+                    ),
+                ),
+            ),
+            # --- FILTROS ---
+            html.div(
+                {
+                    "class_name": "filters dashboard-filters",
+                    "style": {"margin-bottom": "1rem"},
+                },
+                html.div(
+                    {
+                        "style": {
+                            "display": "grid",
+                            "grid-template-columns": "1fr 1fr 1fr auto",
+                            "gap": "1rem",
+                            "align-items": "end",
+                        }
+                    },
+                    # Filtro Robot
+                    html.div(
+                        html.label(
+                            {"for": "filter-robot"},
+                            "Robot:",
+                        ),
+                        html.input(
+                            {
+                                "id": "filter-robot",
+                                "type": "text",
+                                "placeholder": "Nombre del robot...",
+                                "value": filter_robot,
+                                "on_change": lambda e: set_filter_robot(e["target"]["value"]),
+                            }
+                        ),
+                    ),
+                    # Filtro Equipo
+                    html.div(
+                        html.label(
+                            {"for": "filter-equipo"},
+                            "Equipo:",
+                        ),
+                        html.input(
+                            {
+                                "id": "filter-equipo",
+                                "type": "text",
+                                "placeholder": "Nombre del equipo...",
+                                "value": filter_equipo,
+                                "on_change": lambda e: set_filter_equipo(e["target"]["value"]),
+                            }
+                        ),
+                    ),
+                    # Filtro Limit
+                    html.div(
+                        html.label(
+                            {"for": "filter-limit"},
+                            "Límite:",
+                        ),
+                        html.input(
+                            {
+                                "id": "filter-limit",
+                                "type": "number",
+                                "placeholder": "100",
+                                "value": filter_limit,
+                                "min": "1",
+                                "max": "500",
+                                "on_change": lambda e: set_filter_limit(e["target"]["value"]),
+                            }
+                        ),
+                    ),
+                    # Botón Aplicar
+                    html.button(
+                        {
+                            "on_click": handle_apply_filters,
+                            "type": "button",
+                            "title": "Aplicar filtros y actualizar",
+                        },
+                        html.i({"class_name": "fa-solid fa-filter"}),
+                        " Aplicar",
                     ),
                 ),
             ),
@@ -594,9 +760,7 @@ def StatusDashboard(scroll_to=None):
                                             "color": "var(--pico-color-orange-500)",
                                         },
                                         "on_click": lambda e,
-                                        d=(item.get("DeploymentId") or item.get("Id")): asyncio.create_task(
-                                            handle_unlock(d)
-                                        ),
+                                        d=(item.get("DeploymentId") or item.get("Id")): request_unlock_confirmation(d),
                                         "disabled": unlocking_id == (item.get("DeploymentId") or item.get("Id")),
                                     },
                                     html.i(

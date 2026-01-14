@@ -1,5 +1,5 @@
 # sam/web/backend/api.py
-import asyncio
+
 import logging
 from typing import Dict, List, Optional
 
@@ -331,8 +331,10 @@ def get_tiempos_ejecucion_dashboard(
 
 @router.get("/api/analytics/executions", tags=["Analytics"])
 def get_recent_executions(
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=500),
     critical_only: bool = Query(True),
+    robot_name: Optional[str] = Query(None, description="Filtrar por nombre de robot"),
+    equipo_name: Optional[str] = Query(None, description="Filtrar por nombre de equipo"),
     db: DatabaseConnector = Depends(get_db),
 ):
     """
@@ -358,6 +360,8 @@ def get_recent_executions(
             critical_only=critical_only,
             umbral_fijo_minutos=umbral_fijo_minutos,
             factor_umbral_dinamico=factor_umbral_dinamico,
+            robot_name=robot_name,
+            equipo_name=equipo_name,
         )
     except Exception as e:
         logger.error(f"Error obteniendo ejecuciones recientes: {e}", exc_info=True)
@@ -368,18 +372,19 @@ def get_recent_executions(
 async def unlock_execution(
     deployment_id: str,
     db: DatabaseConnector = Depends(get_db),
-    aa_client: AutomationAnywhereClient = Depends(get_aa_client),
     apigw_client: ApiGatewayClient = Depends(get_apigw_client),
 ):
     """
     Orquesta el proceso de destrabar una ejecución 'trabada'.
-    Flujo:
-    1. Obtener ID interno de A360.
-    2. Intentar detener en A360 (/v3/activity/manage) usando ID interno.
-    3. Si falla, resetear device en A360 (/v2/devices/reset) y mover a histórico (/v1/activity/auditunknown).
-    4. Notificar vía callback local (apiinternos) para sincronizar estado.
+    Flujo Simplificado (Solicitud Usuario):
+    1. Obtener información de la ejecución.
+    2. Notificar vía callback local (apiinternos) con estado final (RUN_ABORTED) para que actualice la BD.
+    3. Fallback: Si falla el callback, actualizar la BD local directamente.
+
+    NOTA: Ya no se intenta detener en A360 porque no se dispone del ID interno necesario.
+    El usuario debe verificar manualmente en A360 que la ejecución esté detenida.
     """
-    logger.info(f"[UNLOCK] Iniciando proceso para deployment: {deployment_id}")
+    logger.info(f"[UNLOCK] Iniciando proceso de destrabado manual para deployment: {deployment_id}")
 
     # 1. Obtener información de la ejecución desde la BD local
     info = db_service.obtener_info_ejecucion(db, deployment_id)
@@ -391,109 +396,7 @@ async def unlock_execution(
     user_id = info.get("UserId")
     actions_taken = []
 
-    # 2. Obtener el ID interno de A360 primero
-    internal_id = None
-    try:
-        detalles = await aa_client.obtener_detalles_por_deployment_ids([deployment_id])
-        if detalles:
-            internal_id = detalles[0].get("id")
-            logger.info(f"[UNLOCK] ID interno de A360 encontrado: {internal_id}")
-    except Exception as e:
-        logger.warning(f"[UNLOCK] No se pudo obtener el ID interno de A360: {e}")
-
-    # 3. Intentar detener el deployment en A360
-    success_stop = False
-    try:
-        # Usamos el internal_id si lo tenemos, sino el deployment_id como fallback
-        id_to_stop = internal_id if internal_id else deployment_id
-
-        # Enviar comando de detención
-        stop_command_sent = await aa_client.detener_deployment(id_to_stop)
-
-        if stop_command_sent:
-            actions_taken.append("A360_STOP_COMMAND_SENT")
-            logger.info(f"[UNLOCK] Comando de detención enviado. Esperando confirmación para {deployment_id}...")
-
-            # Esperar confirmación de detención (Polling)
-            max_retries = 12
-            delay = 5  # 5 segundos * 12 intentos = 60 segundos máx de espera
-            confirmed_stopped = False
-
-            for i in range(max_retries):
-                await asyncio.sleep(delay)
-                try:
-                    # Consultar estado actual
-                    # Nota: obtener_detalles_por_deployment_ids usa el deployment_id (UUID), no el interno
-                    detalles_actualizados = await aa_client.obtener_detalles_por_deployment_ids([deployment_id])
-
-                    if detalles_actualizados:
-                        estado_actual = detalles_actualizados[0].get("status")
-                        logger.info(f"[UNLOCK] Estado actual en A360 (intento {i + 1}/{max_retries}): {estado_actual}")
-
-                        # Estados que indican que la ejecución ya no está corriendo.
-                        # NOTA: "UPDATE", "RUNNING", "PAUSED", "QUEUED", "DEPLOYED" son estados activos.
-                        final_states = [
-                            "STOPPED",  # Estado genérico de parada
-                            "COMPLETED",
-                            "FAILED",
-                            "DEPLOY_FAILED",
-                            "RUN_FAILED",
-                            "ABORTED",
-                            "RUN_ABORTED",
-                            "TIMED_OUT",
-                            "RUN_TIMED_OUT",
-                            "UNKNOWN",
-                        ]
-
-                        if estado_actual in final_states:
-                            confirmed_stopped = True
-                            actions_taken.append(f"A360_STOP_CONFIRMED_{estado_actual}")
-                            break
-                    else:
-                        logger.warning(f"[UNLOCK] No se obtuvieron detalles para {deployment_id} en intento {i + 1}")
-
-                except Exception as e:
-                    logger.warning(f"[UNLOCK] Error verificando estado en intento {i + 1}: {e}")
-
-            if confirmed_stopped:
-                success_stop = True
-                actions_taken.append("A360_STOP_SUCCESS")
-            else:
-                logger.error(f"[UNLOCK] Timeout esperando confirmación de stop para {deployment_id}")
-                actions_taken.append("A360_STOP_CONFIRMATION_TIMEOUT")
-                # Si no se confirma el stop, NO procedemos a notificar éxito
-                success_stop = False
-        else:
-            actions_taken.append("A360_STOP_REQUEST_FAILED")
-
-        # Si falló el stop (ya sea el comando o la confirmación), intentamos medidas drásticas
-        if not success_stop:
-            # 4. Si falla el stop, intentar reset del device y mover a histórico
-            if device_id:
-                logger.info(f"[UNLOCK] Intentando reset de device {device_id}...")
-                try:
-                    await aa_client.reset_device(str(device_id))
-                    actions_taken.append("A360_DEVICE_RESET_SUCCESS")
-                except Exception as e:
-                    logger.error(f"[UNLOCK] Error al resetear device {device_id}: {e}")
-                    actions_taken.append(f"A360_DEVICE_RESET_ERROR: {str(e)[:50]}")
-
-            # 5. Mover a histórico en A360 (auditunknown) solo si el stop falló
-            try:
-                success_historic = await aa_client.mover_a_historico_a360(deployment_id)
-                if success_historic:
-                    actions_taken.append("A360_HISTORIC_MOVE_SUCCESS")
-                else:
-                    actions_taken.append("A360_HISTORIC_MOVE_FAILED")
-            except Exception as e:
-                logger.error(f"[UNLOCK] Error al mover a histórico en A360: {e}")
-                actions_taken.append(f"A360_HISTORIC_ERROR: {str(e)[:50]}")
-
-    except Exception as e:
-        logger.error(f"[UNLOCK] Error crítico durante acciones de detención en A360: {e}")
-        actions_taken.append(f"A360_ACTION_ERROR: {str(e)[:50]}")
-
-    # 6. Notificar al callback local (él debería encargarse de actualizar la BD)
+    # 2. Notificar al callback local (él debería encargarse de actualizar la BD)
     success_callback = False
     try:
         callback_url = ConfigManager.get_aa360_web_config().get("callback_url_deploy")
@@ -506,23 +409,27 @@ async def unlock_execution(
                 "status": "RUN_ABORTED",
                 "deviceId": str(device_id) if device_id else None,
                 "userId": str(user_id) if user_id else None,
-                "botOutput": {"message": "Destrabado manualmente"},
+                "botOutput": {"message": "Destrabado manualmente por usuario web"},
             }
             success_callback = await apigw_client.notificar_callback(callback_url, payload)
             if success_callback:
                 actions_taken.append("LOCAL_CALLBACK_NOTIFIED")
+                logger.info(f"[UNLOCK] Callback notificado exitosamente para {deployment_id}")
             else:
                 actions_taken.append("LOCAL_CALLBACK_FAILED")
+                logger.warning(f"[UNLOCK] Falló la notificación al callback para {deployment_id}")
     except Exception as e:
         logger.error(f"[UNLOCK] Error al notificar callback: {e}")
         actions_taken.append(f"CALLBACK_ERROR: {str(e)[:50]}")
 
-    # 7. Fallback: Si el callback falló, actualizamos la BD local directamente
+    # 3. Fallback: Si el callback falló, actualizamos la BD local directamente
     if not success_callback:
-        logger.warning(f"[UNLOCK] Callback falló para {deployment_id}. Forzando actualización manual en BD.")
+        logger.warning(
+            f"[UNLOCK] Callback falló o no configurado para {deployment_id}. Forzando actualización manual en BD."
+        )
         try:
             db_service.mover_ejecucion_a_historico(
-                db, deployment_id, "RUN_ABORTED", "Destrabado manualmente (Fallback)"
+                db, deployment_id, "RUN_ABORTED", "Destrabado manualmente (Fallback Web)"
             )
             actions_taken.append("LOCAL_DB_UPDATED_FALLBACK")
         except Exception as e:
@@ -535,7 +442,7 @@ async def unlock_execution(
         "success": True,
         "deployment_id": deployment_id,
         "actions": actions_taken,
-        "message": "Proceso de destrabado completado. El estado debería actualizarse en breve.",
+        "message": "Solicitud de destrabado enviada. El estado se actualizará en breve.",
     }
 
 

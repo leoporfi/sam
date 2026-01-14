@@ -99,54 +99,6 @@ def get_sync_status(db: DatabaseConnector) -> Dict:
     return {"last_sync": None}
 
 
-async def sync_robots_only(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:
-    """
-    Sincroniza únicamente la tabla Robots con A360.
-    """
-    logger.info("Iniciando sincronización de robots desde A360...")
-    try:
-        # El cliente aa_client ya viene creado e inyectado
-        robots_api = await aa_client.obtener_robots()
-        logger.info(f"Datos recibidos de A360: {len(robots_api)} robots.")
-
-        # Mover la escritura a DB a un hilo aparte para NO bloquear el loop
-        await asyncio.to_thread(db.merge_robots, robots_api)
-
-        logger.info(f"Sincronización de robots completada. {len(robots_api)} robots procesados.")
-        return {"robots_sincronizados": len(robots_api)}
-    except Exception as e:
-        logger.critical(f"Error durante sincronización de robots: {type(e).__name__} - {e}", exc_info=True)
-        raise
-
-
-async def sync_equipos_only(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:
-    """
-    Sincroniza únicamente la tabla Equipos con A360.
-    """
-    logger.info("Iniciando sincronización de equipos desde A360...")
-    try:
-        # El cliente aa_client ya viene creado e inyectado
-        sincronizador = SincronizadorComun(db_connector=db, aa_client=aa_client)
-
-        devices_task = aa_client.obtener_devices()
-        users_task = aa_client.obtener_usuarios_detallados()
-        devices_api, users_api = await asyncio.gather(devices_task, users_task)
-
-        logger.info(f"Datos recibidos de A360: {len(devices_api)} dispositivos, {len(users_api)} usuarios.")
-
-        # Procesamiento en CPU (podría bloquear un poco, pero es rápido)
-        equipos_finales = sincronizador._procesar_y_mapear_equipos(devices_api, users_api)
-
-        # DB Write en hilo aparte
-        await asyncio.to_thread(db.merge_equipos, equipos_finales)
-
-        logger.info(f"Sincronización de equipos completada. {len(equipos_finales)} equipos procesados.")
-        return {"equipos_sincronizados": len(equipos_finales)}
-    except Exception as e:
-        logger.critical(f"Error durante sincronización de equipos: {type(e).__name__} - {e}", exc_info=True)
-        raise
-
-
 # Robots
 def get_robots(
     db: DatabaseConnector,
@@ -1119,6 +1071,8 @@ def get_recent_executions(
     critical_only: bool = True,
     umbral_fijo_minutos: int = 25,
     factor_umbral_dinamico: float = 1.5,
+    robot_name: Optional[str] = None,
+    equipo_name: Optional[str] = None,
 ) -> Dict[str, List[Dict]]:
     """
     Obtiene las ejecuciones recientes usando SP.
@@ -1131,6 +1085,13 @@ def get_recent_executions(
             "UmbralFijoMinutos": umbral_fijo_minutos,
             "FactorUmbralDinamico": factor_umbral_dinamico,
         }
+
+        # Agregar filtros opcionales solo si tienen valor
+        if robot_name:
+            params["RobotName"] = robot_name
+        if equipo_name:
+            params["EquipoName"] = equipo_name
+
         # El SP retorna DOS result sets:
         # 0: Fallos
         # 1: Demoras y Huérfanas

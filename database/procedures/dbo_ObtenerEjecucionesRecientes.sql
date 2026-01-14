@@ -11,7 +11,9 @@ ALTER PROCEDURE [dbo].[ObtenerEjecucionesRecientes]
     @Limit INT = 50,
     @CriticalOnly BIT = 1,
     @UmbralFijoMinutos INT = 25,
-    @FactorUmbralDinamico FLOAT = 1.5
+    @FactorUmbralDinamico FLOAT = 1.5,
+    @RobotName NVARCHAR(255) = NULL,
+    @EquipoName NVARCHAR(255) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -111,6 +113,8 @@ BEGIN
         LEFT JOIN dbo.Robots r ON e.RobotId = r.RobotId
         LEFT JOIN dbo.Equipos eq ON e.EquipoId = eq.EquipoId
         LEFT JOIN TiemposPromedio tp ON e.RobotId = tp.RobotId
+        WHERE (@RobotName IS NULL OR r.Robot LIKE '%' + @RobotName + '%')
+          AND (@EquipoName IS NULL OR eq.Equipo LIKE '%' + @EquipoName + '%')
     )
     -- Guardar resultados en tabla temporal para poder separar
     SELECT
