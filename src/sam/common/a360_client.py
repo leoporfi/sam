@@ -282,6 +282,35 @@ class AutomationAnywhereClient:
         logger.info(f"Se obtuvieron detalles para {len(all_details)} de {len(deployment_ids)} deployments solicitados.")
         return all_details
 
+    async def obtener_ejecuciones_activas(self) -> List[Dict]:
+        """
+        Obtiene todas las ejecuciones que están en estados activos (no finales).
+        Estados considerados activos: DEPLOYED, QUEUED, PENDING_EXECUTION, UPDATE, RUNNING, RUN_PAUSED.
+        """
+        logger.info("Obteniendo todas las ejecuciones activas de A360 (Estrategia BY_STATUS)...")
+        active_statuses = [
+            "DEPLOYED",
+            "QUEUED",
+            "PENDING_EXECUTION",
+            "UPDATE",
+            "RUNNING",
+            "RUN_PAUSED",
+        ]
+
+        payload = {
+            "filter": {
+                "operator": "or",
+                "operands": [{"operator": "eq", "field": "status", "value": status} for status in active_statuses],
+            }
+        }
+
+        # Usamos el método paginado para asegurarnos de traer TODAS las ejecuciones activas
+        # aunque sean más de 100 (límite por página por defecto)
+        ejecuciones_activas = await self._obtener_lista_paginada_entidades(self._ENDPOINT_ACTIVITY_LIST_V3, payload)
+
+        logger.info(f"Se encontraron {len(ejecuciones_activas)} ejecuciones activas en total.")
+        return ejecuciones_activas
+
     async def desplegar_bot_v3(
         self,
         file_id: int,

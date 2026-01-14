@@ -67,15 +67,93 @@ class Conciliador:
                 logger.info("No se encontraron DeploymentIds válidos en las ejecuciones activas.")
                 return
 
-            logger.info(f"Consultando estado de {len(deployment_ids)} deployment(s) en A360...")
-            detalles_api = await self._aa_client.obtener_detalles_por_deployment_ids(deployment_ids)
+            estrategia = self._config.get("conciliador_estrategia", "BY_ID")
 
-            self._actualizar_estados_encontrados(detalles_api, mapa_deploy_a_ejecucion)
-            self._gestionar_deployments_perdidos(deployment_ids, detalles_api)
+            if estrategia == "BY_STATUS":
+                await self._conciliar_por_estado(ejecuciones_en_curso)
+            else:
+                # Estrategia Clásica (BY_ID)
+                logger.info(f"Consultando estado de {len(deployment_ids)} deployment(s) en A360 (Estrategia BY_ID)...")
+                detalles_api = await self._aa_client.obtener_detalles_por_deployment_ids(deployment_ids)
+
+                self._actualizar_estados_encontrados(detalles_api, mapa_deploy_a_ejecucion)
+                self._gestionar_deployments_perdidos(deployment_ids, detalles_api)
+
             self._marcar_unknown_por_antiguedad()
 
         except Exception as e:
             logger.error(f"Error grave durante el ciclo de conciliación: {e}", exc_info=True)
+
+    async def _conciliar_por_estado(self, ejecuciones_en_curso: list):
+        """
+        Estrategia 'BY_STATUS':
+        1. Obtiene TODAS las ejecuciones activas de A360.
+        2. Si una ejecución local (en curso) ESTÁ en la lista -> Actualiza estado (RUNNING, QUEUED, etc).
+        3. Si una ejecución local (en curso) NO ESTÁ en la lista -> Infiere que terminó.
+        """
+        logger.info("Iniciando conciliación con estrategia BY_STATUS (Listar Activos)...")
+
+        try:
+            # 1. Obtener lista global de activos
+            activas_api = await self._aa_client.obtener_ejecuciones_activas()
+        except Exception as e:
+            logger.error(f"Fallo al obtener ejecuciones activas: {e}")
+            return
+
+        # Mapa para búsqueda rápida: deploymentId -> data
+        # activas_api es una lista de dicts.
+        ids_activos_api = {item.get("deploymentId") for item in activas_api if item.get("deploymentId")}
+
+        # 2. Identificar cuáles de las locales siguen activas y cuáles desaparecieron
+        mapa_deploy_a_ejecucion = {
+            imp["DeploymentId"]: imp["EjecucionId"]
+            for imp in ejecuciones_en_curso
+            if imp.get("DeploymentId") and imp.get("EjecucionId")
+        }
+
+        # A) Las que siguen activas: Actualizamos sus estados (RUNNING, etc.) usando la info de la API
+        # Filtramos 'activas_api' para quedarnos solo con las que nos interesan (las que tenemos en DB)
+        detalles_relevantes = [item for item in activas_api if item.get("deploymentId") in mapa_deploy_a_ejecucion]
+
+        if detalles_relevantes:
+            logger.debug(f"Actualizando {len(detalles_relevantes)} ejecuciones que siguen activas...")
+            self._actualizar_estados_encontrados(detalles_relevantes, mapa_deploy_a_ejecucion)
+
+        # B) Las que desaparecieron: Inferimos finalización
+        ids_locales = set(mapa_deploy_a_ejecucion.keys())
+        ids_desaparecidos = ids_locales - ids_activos_api
+
+        if ids_desaparecidos:
+            logger.info(
+                f"Se detectaron {len(ids_desaparecidos)} ejecuciones que ya no están activas en A360. Infiriendo finalización."
+            )
+            self._marcar_como_inferidas(ids_desaparecidos, mapa_deploy_a_ejecucion)
+
+    def _marcar_como_inferidas(self, ids_desaparecidos: set, mapa_deploy_a_ejecucion: dict):
+        """Marca las ejecuciones desaparecidas con el estado inferido configurado."""
+        estado_inferido = self._config.get("conciliador_estado_inferido", "COMPLETED_INFERRED")
+        mensaje_inferido = self._config.get(
+            "conciliador_mensaje_inferido", "Finalizado (Inferido por ausencia en lista de activos)"
+        )
+
+        updates_inferidos = []
+        for dep_id in ids_desaparecidos:
+            ejecucion_id = mapa_deploy_a_ejecucion.get(dep_id)
+            if ejecucion_id:
+                updates_inferidos.append((estado_inferido, mensaje_inferido, ejecucion_id))
+
+        if updates_inferidos:
+            query = """
+                UPDATE dbo.Ejecuciones
+                SET Estado = ?,
+                    FechaFin = GETDATE(),
+                    FechaActualizacion = GETDATE(),
+                    CallbackInfo = ?,
+                    IntentosConciliadorFallidos = 0
+                WHERE EjecucionId = ? AND CallbackInfo IS NULL;
+            """
+            count = self._db_connector.ejecutar_consulta_multiple(query, updates_inferidos, usar_fast_executemany=False)
+            logger.info(f"Se actualizaron {count} ejecuciones a estado '{estado_inferido}'.")
 
     def _actualizar_estados_encontrados(self, detalles_api: list, mapa_deploy_a_ejecucion: dict):
         """Actualiza la BD con los estados de los deployments encontrados en la API."""
