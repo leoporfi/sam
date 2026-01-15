@@ -38,10 +38,13 @@ def BalanceadorDashboard():
 
             data = await api_client.get("/api/analytics/balanceador", params=params)
             set_dashboard_data(data)
+            set_loading(False)
+        except asyncio.CancelledError:
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             set_error(str(e))
             logger.error(f"Error obteniendo dashboard de balanceador: {e}")
-        finally:
             set_loading(False)
 
     def handle_refresh(event=None):

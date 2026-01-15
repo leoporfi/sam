@@ -80,10 +80,13 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
             if on_refresh and new_data:
                 on_refresh(new_data)
 
+            set_loading(False)
+        except asyncio.CancelledError:
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             set_error(str(e))
             logger.error(f"Error general en AnalyticsSummary: {e}")
-        finally:
             set_loading(False)
 
     @use_effect(dependencies=[])

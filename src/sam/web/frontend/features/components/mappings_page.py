@@ -56,13 +56,13 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                 list(set(existing_providers + ["A360", "Orquestador", "RPA360", "Tisam", "General"]))
             )
             set_known_providers(all_providers)
+            set_loading(False)
         except asyncio.CancelledError:
-            raise
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             print(f"Error cargando datos de mapeo: {e}")
-        finally:
-            if not asyncio.current_task().cancelled():
-                set_loading(False)
+            set_loading(False)
 
     @use_effect(dependencies=[])
     def init_data_load():

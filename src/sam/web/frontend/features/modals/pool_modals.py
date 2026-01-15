@@ -41,14 +41,14 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
             notification_ctx["show_notification"](
                 f"Pool {'actualizado' if is_edit_mode else 'creado'} con éxito.", "success"
             )
+            set_is_loading(False)
             on_close()
         except asyncio.CancelledError:
-            raise
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             notification_ctx["show_notification"](str(e), "error")
-        finally:
-            if not asyncio.current_task().cancelled():
-                set_is_loading(False)
+            set_is_loading(False)
 
     if not is_open:
         return None
@@ -148,13 +148,14 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
                 set_assigned_robots([r for r in data.get("assigned", []) if r["Tipo"] == "Robot"])
                 set_available_equipos([e for e in data.get("available", []) if e["Tipo"] == "Equipo"])
                 set_assigned_equipos([e for e in data.get("assigned", []) if e["Tipo"] == "Equipo"])
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                notification_ctx["show_notification"](f"Error al cargar asignaciones: {e}", "error")
-            finally:
                 if not asyncio.current_task().cancelled():
                     set_is_loading(False)
+            except asyncio.CancelledError:
+                # Silenciar errores de cancelación y NO actualizar estado
+                pass
+            except Exception as e:
+                notification_ctx["show_notification"](f"Error al cargar asignaciones: {e}", "error")
+                set_is_loading(False)
 
         if pool and pool.get("PoolId"):
             task = asyncio.create_task(fetch_data())
@@ -168,14 +169,14 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
             await api_client.update_pool_assignments(pool["PoolId"], robot_ids, team_ids)
             await on_save_success()
             notification_ctx["show_notification"]("Asignaciones guardadas con éxito.", "success")
+            set_is_loading(False)
             on_close()
         except asyncio.CancelledError:
-            raise
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             notification_ctx["show_notification"](f"Error al guardar asignaciones: {e}", "error")
-        finally:
-            if not asyncio.current_task().cancelled():
-                set_is_loading(False)
+            set_is_loading(False)
 
     if not is_open or not pool:
         return html.dialog({"open": False, "style": {"display": "none"}})

@@ -120,16 +120,16 @@ def use_schedules(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
             if is_mounted.current:
                 set_schedules(data.get("schedules", []))
                 set_total(data.get("total_count", 0))
+            set_loading(False)
 
         except asyncio.CancelledError:
-            raise
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             if is_mounted.current:
                 set_error(str(e))
                 show(f"Error al cargar programaciones: {e}", "error")
-        finally:
-            if is_mounted.current and not asyncio.current_task().cancelled():
-                set_loading(False)
+            set_loading(False)
 
     @use_effect(dependencies=[filters, page])
     def _load_on_filters_or_page_change():

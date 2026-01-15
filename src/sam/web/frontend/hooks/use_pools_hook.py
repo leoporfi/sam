@@ -91,14 +91,14 @@ def use_pools_management(api_client: Optional[APIClient] = None) -> Dict[str, An
             data = await api_client.get_pools()
             if is_mounted.current:
                 set_pools(data.get("pools", []))
+            set_loading(False)
         except asyncio.CancelledError:
-            raise
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             if is_mounted.current:
                 set_error(str(e))
-        finally:
-            if is_mounted.current and not asyncio.current_task().cancelled():
-                set_loading(False)
+            set_loading(False)
 
     @use_effect(dependencies=[])  # solo al montar
     def setup_load():

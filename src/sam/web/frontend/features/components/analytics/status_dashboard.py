@@ -70,11 +70,13 @@ def StatusDashboard(scroll_to=None):
 
             exec_data = await api_client.get("/api/analytics/executions", params=exec_params)
             set_executions_data(exec_data)
-
+            set_loading(False)
+        except asyncio.CancelledError:
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             set_error(str(e))
             logger.error(f"Error obteniendo estado: {e}")
-        finally:
             set_loading(False)
 
     def handle_refresh(event=None):

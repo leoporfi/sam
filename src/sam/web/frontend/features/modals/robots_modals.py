@@ -202,9 +202,9 @@ def RobotEditModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
                 await api_service.create_robot(payload_to_create)
                 show_notification("Robot creado con éxito.", "success")
             await on_save_success()
+            set_is_loading(False)
         except Exception as e:
             show_notification(str(e), "error")
-        finally:
             set_is_loading(False)
 
     if not is_open or robot is None:
@@ -566,13 +566,13 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
                 unique_assigned_devices = get_highest_priority_assignment(assigned_res)
                 set_assigned_devices(unique_assigned_devices)
                 set_available_devices(available_res)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                show_notification(f"Error al cargar datos: {e}", "error")
-            finally:
                 if not asyncio.current_task().cancelled():
                     set_is_loading(False)
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                show_notification(f"Error al cargar datos: {e}", "error")
+                set_is_loading(False)
 
         task = asyncio.create_task(fetch_data())
         return lambda: task.cancel()
@@ -616,10 +616,11 @@ def AssignmentsModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Call
             await api_service.update_robot_assignments(robot["RobotId"], ids_to_assign, ids_to_unassign)
             await on_save_success()
             show_notification("Se actualizó la asignación correctamente", "success")
+            set_is_loading(False)
+            set_confirmation_data(None)
             on_close()
         except Exception as e:
             show_notification(f"Error al guardar: {e}", "error")
-        finally:
             set_is_loading(False)
             set_confirmation_data(None)
 
@@ -788,13 +789,13 @@ def SchedulesModal(robot: Dict[str, Any] | None, is_open: bool, on_close: Callab
             set_all_robot_devices(unique_list)
             # Usamos la lista única también para available_devices para asegurar consistencia en selectores
             set_available_devices(unique_list)
+            set_available_devices(unique_list)
+            set_is_loading(False)
         except asyncio.CancelledError:
-            raise
+            pass
         except Exception as e:
             show_notification(str(e), "error")
-        finally:
-            if not asyncio.current_task().cancelled():
-                set_is_loading(False)
+            set_is_loading(False)
 
     async def handle_successful_change():
         await on_save_success()
