@@ -58,6 +58,8 @@ class Desplegador:
         # --- SISTEMA DE ALERTAS MEJORADO ---
         self._server_error_history: List[ServerErrorPattern] = []
         self._in_recovery_mode: bool = False
+        self._system_is_down: bool = False
+        self._recovery_lock = asyncio.Lock()
         self._recovery_start_time: Optional[datetime] = None
         self._alert_history: Dict[str, List[datetime]] = {}
 
@@ -79,6 +81,8 @@ class Desplegador:
 
         if not robots_a_ejecutar:
             logger.info("No hay robots para ejecutar en este ciclo.")
+            # Verificar si el sistema se recuperó aunque no haya robots para lanzar
+            await self._check_and_notify_system_recovery(force_health_check=True)
             return
 
         # Bot input por defecto (valor de configuración)
@@ -195,6 +199,9 @@ class Desplegador:
                     marca_tiempo_programada=hora,
                     estado="DEPLOYED",
                 )
+
+                # Si el despliegue es exitoso, verificar si venimos de una caída del sistema
+                await self._check_and_notify_system_recovery(force_health_check=False)
 
                 return {"status": "exitoso", "robot_id": robot_id, "equipo_id": equipo_id}
 
@@ -405,8 +412,9 @@ class Desplegador:
                                 "Verificar servicios de A360 en el servidor",
                             ],
                         )
-                        # Salir de modo recovery para permitir futuras alertas si esto persiste
+                        # Salir de modo recovery pero marcar como caído para notificar cuando vuelva
                         self._in_recovery_mode = False
+                        self._system_is_down = True
 
                     elif recovery_status == "NORMAL":
                         # Verificar salud real del servidor para distinguir caída de error aislado
@@ -433,6 +441,7 @@ class Desplegador:
                                         "Contactar a Infraestructura inmediatamente",
                                     ],
                                 )
+                                self._system_is_down = True
                         else:
                             # Servidor SÍ responde -> Error 500 es específico de este request (Robot/Usuario)
                             equipo_alertado_key = f"{status_code}_{equipo_id}"
@@ -628,3 +637,59 @@ class Desplegador:
         last = history[-2] if count >= 2 else history[0]
         diff_min = int((datetime.now() - last).total_seconds() / 60)
         return f"Esta alerta se ha disparado {count} veces. Última vez hace {diff_min} minutos."
+
+    async def _check_and_notify_system_recovery(self, force_health_check: bool = False):
+        """
+        Verifica si el sistema se ha recuperado de una caída crítica y notifica.
+        Se dispara ante un éxito real o periódicamente mediante health check si el sistema está caído.
+        """
+        if not (self._system_is_down or self._in_recovery_mode):
+            return
+
+        async with self._recovery_lock:
+            # Doble chequeo dentro del lock
+            if not (self._system_is_down or self._in_recovery_mode):
+                return
+
+            if force_health_check:
+                # Si no hubo un éxito real (ej: ciclo sin robots), verificamos proactivamente
+                logger.debug("Verificando recuperación proactiva del servidor A360...")
+                is_healthy = await self._aa_client.check_health()
+                if not is_healthy:
+                    return
+
+            # Si llegamos aquí, el sistema está respondiendo nuevamente
+            logger.info("¡SISTEMA RECUPERADO! Enviando notificación de normalización...")
+
+            context = AlertContext(
+                alert_level=AlertLevel.MEDIUM,
+                alert_scope=AlertScope.SYSTEM,
+                alert_type=AlertType.RECOVERY,
+                subject="Servicio de Automation Anywhere NORMALIZADO",
+                summary="El servidor A360 ha vuelto a responder correctamente. Los despliegues se han reanudado.",
+                technical_details={
+                    "Estado": "Operativo",
+                    "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "Detección": "Éxito en Despliegue" if not force_health_check else "Health Check Exitoso",
+                },
+                actions=[
+                    "No se requiere acción adicional.",
+                    "Se han reseteado los contadores de errores temporales de equipos.",
+                ],
+            )
+
+            alert_sent = self._notificador.send_alert_v2(context)
+            if alert_sent:
+                # Resetear estados de falla del sistema
+                self._system_is_down = False
+                self._in_recovery_mode = False
+                self._recovery_start_time = None
+                self._server_error_history.clear()
+
+                # Limpiar alertas de equipos para permitir nuevas notificaciones si vuelven a fallar
+                self._equipos_alertados_400.clear()
+                self._equipos_alertados_500.clear()
+
+                logger.info("Notificación de normalización enviada y estados reseteados.")
+            else:
+                logger.error("No se pudo enviar la alerta de normalización, se reintentará en el próximo éxito.")

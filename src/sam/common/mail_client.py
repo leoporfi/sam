@@ -77,8 +77,8 @@ class EmailAlertClient:
             msg = MIMEMultipart()
             msg["From"] = self.from_email
             msg["To"] = ", ".join(self.recipients)  # Convertir lista a string para el header
-            prefix = "[CRÍTICO]" if is_critical else "[ALERTA]"
-            msg["Subject"] = f"{self.service_name} {prefix} {subject}"  # Añadir identificador del servicio
+            prefix = "CRÍTICO" if is_critical else "ALERTA"
+            msg["Subject"] = f"{self.service_name} - {prefix} - {subject}"  # Añadir identificador del servicio
 
             # Escapar HTML en subject y message para prevenir inyección
             subject_escaped = html.escape(subject)
@@ -153,9 +153,9 @@ class EmailAlertClient:
             msg["From"] = self.from_email
             msg["To"] = ", ".join(self.recipients)
 
-            # Construir subject: [SEVERIDAD] [ALCANCE] [NATURALEZA] Título
-            subject_prefix = f"[{context.alert_level.value}] [{context.alert_scope.value}] [{context.alert_type.value}]"
-            full_subject = f"{self.service_name.capitalize()} {subject_prefix} {context.subject}"
+            # Construir subject: SEVERIDAD - ALCANCE - NATURALEZA - Título
+            subject_prefix = f"{context.alert_level.value} - {context.alert_scope.value} - {context.alert_type.value}"
+            full_subject = f"{self.service_name.capitalize()} - {subject_prefix} - {context.subject}"
             msg["Subject"] = full_subject
 
             # Generar cuerpo HTML
