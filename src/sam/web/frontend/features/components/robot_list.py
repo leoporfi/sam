@@ -141,6 +141,8 @@ def RobotsDashboard(
         loading=loading and not robots,
         error=error,
         data=robots,
+        skeleton_type="card",
+        skeleton_rows=6,
         empty_message="No se encontraron robots.",
         children=html._(
             pagination_component,
@@ -219,14 +221,23 @@ def RobotTable(
 
 @component
 def RobotRow(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
+    is_processing, set_is_processing = use_state(False)
+
     async def handle_toggle_active(event):
-        await on_action("toggle_active", robot)
+        set_is_processing(True)
+        try:
+            await on_action("toggle_active", robot)
+        finally:
+            set_is_processing(False)
 
     async def handle_toggle_online(event):
+        set_is_processing(True)
         try:
             await on_action("toggle_online", robot)
         except Exception as e:
             print(f"Error toggling online status: {e}")
+        finally:
+            set_is_processing(False)
 
     async def handle_edit(event):
         await on_action("edit", robot)
@@ -254,6 +265,8 @@ def RobotRow(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
                         "role": "switch",
                         "checked": robot["Activo"],
                         "on_change": event(handle_toggle_active),
+                        "aria-busy": str(is_processing).lower(),
+                        "disabled": is_processing,
                     }
                 )
             )
@@ -267,7 +280,8 @@ def RobotRow(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
                         "role": "switch",
                         "checked": robot["EsOnline"],
                         "on_change": event(handle_toggle_online),
-                        "disabled": is_programado,  # Deshabilitar si está programado
+                        "disabled": is_programado or is_processing,  # Deshabilitar si está programado o procesando
+                        "aria-busy": str(is_processing).lower(),
                         "title": "No se puede marcar como Online si tiene programaciones"
                         if is_programado
                         else "Marcar como Online/Offline",
@@ -317,14 +331,23 @@ def RobotRow(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
 
 @component
 def RobotCard(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
+    is_processing, set_is_processing = use_state(False)
+
     async def handle_toggle_active(event):
-        await on_action("toggle_active", robot)
+        set_is_processing(True)
+        try:
+            await on_action("toggle_active", robot)
+        finally:
+            set_is_processing(False)
 
     async def handle_toggle_online(event):
+        set_is_processing(True)
         try:
             await on_action("toggle_online", robot)
         except Exception as e:
             print(f"Error toggling online status: {e}")
+        finally:
+            set_is_processing(False)
 
     async def handle_edit(event):
         await on_action("edit", robot)
@@ -357,6 +380,8 @@ def RobotCard(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
                             "role": "switch",
                             "checked": robot["Activo"],
                             "on_change": event(handle_toggle_active),
+                            "aria-busy": str(is_processing).lower(),
+                            "disabled": is_processing,
                         }
                     ),
                     "Activo",
@@ -369,6 +394,8 @@ def RobotCard(robot: Robot, on_action: Callable[[str, Dict[str, Any]], Any]):
                             "role": "switch",
                             "checked": robot["EsOnline"],
                             "on_change": event(handle_toggle_online),
+                            "aria-busy": str(is_processing).lower(),
+                            "disabled": is_processing,
                         }
                     ),
                     "Online",

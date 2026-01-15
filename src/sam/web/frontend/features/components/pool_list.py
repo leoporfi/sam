@@ -93,6 +93,8 @@ def PoolsDashboard(
         loading=loading and not pools_data,
         error=error,
         data=pools_data,
+        skeleton_type="card",
+        skeleton_rows=6,
         empty_message="No se encontraron pools.",
         children=html._(
             html.div(

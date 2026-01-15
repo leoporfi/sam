@@ -121,9 +121,11 @@ def EquipoEditModal(
                 show_notification("Equipo creado con éxito.", "success")
 
             await on_save_success()  # Refrescar lista en la página
+            set_is_loading(False)
             on_close()
         except asyncio.CancelledError:
-            raise
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             error_message = str(e)
             # Intentar extraer el 'detail' si es una APIException
@@ -131,9 +133,7 @@ def EquipoEditModal(
                 error_message = e.message.split("Error en la API:", 1)[-1].strip()
             set_error(f"Error al guardar: {error_message}")
             show_notification(f"Error al guardar: {error_message}", "error")
-        finally:
-            if not asyncio.current_task().cancelled():
-                set_is_loading(False)
+            set_is_loading(False)
 
     # No renderizar si no está abierto
     if not is_open:
@@ -245,10 +245,10 @@ def EquipoEditModal(
                         {
                             "type": "submit",
                             "form": "equipo-form",
-                            "aria-busy": is_loading,
+                            "aria-busy": str(is_loading).lower(),
                             "disabled": is_loading,
                         },
-                        "Guardar",
+                        "Procesando..." if is_loading else "Guardar",
                     ),
                 )
             ),

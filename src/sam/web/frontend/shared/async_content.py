@@ -12,6 +12,7 @@ Uso:
         loading=is_loading,
         error=error_message,
         data=robots,
+        skeleton_type="table",
         children=RobotList(robots=robots)
     )
 """
@@ -27,6 +28,8 @@ def AsyncContent(
     error: Optional[str] = None,
     data: Optional[List] = None,
     loading_component=None,
+    skeleton_type: Optional[str] = None,  # "table", "card", "text"
+    skeleton_rows: int = 5,
     error_component=None,
     empty_component=None,
     empty_message: str = "No hay datos disponibles",
@@ -58,6 +61,14 @@ def AsyncContent(
     if loading:
         if loading_component:
             return loading_component
+
+        if skeleton_type == "table":
+            return SkeletonTable(rows=skeleton_rows)
+        elif skeleton_type == "card":
+            return SkeletonCardGrid(count=skeleton_rows)
+        elif skeleton_type == "text":
+            return SkeletonText(lines=skeleton_rows)
+
         from .common_components import LoadingSpinner as CommonLoadingSpinner
 
         return CommonLoadingSpinner()
@@ -141,4 +152,67 @@ def EmptyState(message: str = "No hay datos disponibles"):
             "📭",
         ),
         html.p(message),
+    )
+
+
+@component
+def SkeletonText(lines: int = 3):
+    """Muestra líneas de texto tipo skeleton."""
+    return html.div(*[html.div({"class_name": "skeleton skeleton-text"}) for _ in range(lines)])
+
+
+@component
+def SkeletonTable(rows: int = 5, cols: int = 5):
+    """Muestra una tabla tipo skeleton."""
+    return html.article(
+        html.table(
+            html.thead(
+                html.tr(
+                    *[
+                        html.th(html.div({"class_name": "skeleton skeleton-text", "style": {"width": "80%"}}))
+                        for _ in range(cols)
+                    ]
+                )
+            ),
+            html.tbody(
+                *[
+                    html.tr(
+                        {"class_name": "skeleton-table-row"},
+                        *[
+                            html.td(html.div({"class_name": "skeleton skeleton-text", "style": {"width": "90%"}}))
+                            for _ in range(cols)
+                        ],
+                    )
+                    for _ in range(rows)
+                ]
+            ),
+        )
+    )
+
+
+@component
+def SkeletonCard():
+    """Muestra una tarjeta tipo skeleton."""
+    return html.article(
+        {"class_name": "skeleton-card"},
+        html.div({"class_name": "skeleton skeleton-title"}),
+        html.div({"class_name": "skeleton skeleton-text"}),
+        html.div({"class_name": "skeleton skeleton-text", "style": {"width": "80%"}}),
+        html.footer(
+            html.div(
+                {"class_name": "grid"},
+                html.div({"class_name": "skeleton skeleton-button"}),
+                html.div({"class_name": "skeleton skeleton-button"}),
+            )
+        ),
+    )
+
+
+@component
+def SkeletonCardGrid(count: int = 6):
+    """Muestra una grilla de tarjetas tipo skeleton."""
+    # Usamos las clases de custom.css para mantener la grilla responsive
+    return html.div(
+        {"class_name": "cards-container", "style": {"display": "grid"}},  # Forzar display grid para el skeleton
+        *[SkeletonCard() for _ in range(count)],
     )

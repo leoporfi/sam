@@ -6,6 +6,7 @@ import logging
 from reactpy import component, html, use_context, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.async_content import SkeletonCardGrid, SkeletonTable
 from sam.web.frontend.shared.notifications import NotificationContext
 
 logger = logging.getLogger(__name__)
@@ -69,11 +70,13 @@ def StatusDashboard(scroll_to=None):
 
             exec_data = await api_client.get("/api/analytics/executions", params=exec_params)
             set_executions_data(exec_data)
-
+            set_loading(False)
+        except asyncio.CancelledError:
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             set_error(str(e))
             logger.error(f"Error obteniendo estado: {e}")
-        finally:
             set_loading(False)
 
     def handle_refresh(event=None):
@@ -183,7 +186,15 @@ def StatusDashboard(scroll_to=None):
         return cleanup
 
     if loading and not status_data:
-        return html.div({"class_name": "status-dashboard loading"}, html.p("Cargando estado del sistema..."))
+        return html.div(
+            {"class_name": "status-dashboard"},
+            html.header(
+                {"class_name": "dashboard-header"},
+                html.h2({"class_name": "dashboard-title"}, "Estado Actual del Sistema"),
+            ),
+            SkeletonCardGrid(count=4),
+            html.div({"style": {"margin-top": "2rem"}}, SkeletonTable(rows=5, cols=7)),
+        )
 
     if error:
         return html.div(

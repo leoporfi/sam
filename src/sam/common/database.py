@@ -286,7 +286,15 @@ class DatabaseConnector:
                     return UpdateStatus.ALREADY_PROCESSED
 
                 # 2. Si no es un estado final, actualizar
-                query = "UPDATE dbo.Ejecuciones SET Estado = ?, FechaFin = GETDATE(), FechaActualizacion = GETDATE(), CallbackInfo = ? WHERE DeploymentId = ?;"
+                query = """
+                    UPDATE dbo.Ejecuciones
+                    SET Estado = ?,
+                        FechaFin = GETDATE(),
+                        FechaInicioReal = COALESCE(FechaInicioReal, GETDATE()),
+                        FechaActualizacion = GETDATE(),
+                        CallbackInfo = ?
+                    WHERE DeploymentId = ?;
+                """
                 params = (estado_callback, callback_payload_str, deployment_id)
                 cursor.execute(query, params)
                 return UpdateStatus.UPDATED

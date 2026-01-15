@@ -96,3 +96,6 @@ CLICKABLE = "clickable"
 OUTLINE = "outline"
 SECONDARY = "secondary"
 PRIMARY = "primary"
+# Carga
+LOADING_OVERLAY_CONTAINER = "loading-overlay-container"
+LOADING_OVERLAY = "loading-overlay"

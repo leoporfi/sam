@@ -4,6 +4,7 @@ import logging
 from reactpy import component, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.async_content import SkeletonCardGrid
 
 logger = logging.getLogger(__name__)
 
@@ -79,10 +80,13 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
             if on_refresh and new_data:
                 on_refresh(new_data)
 
+            set_loading(False)
+        except asyncio.CancelledError:
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             set_error(str(e))
             logger.error(f"Error general en AnalyticsSummary: {e}")
-        finally:
             set_loading(False)
 
     @use_effect(dependencies=[])
@@ -95,8 +99,9 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
 
     if loading:
         return html.div(
-            {"class_name": "analytics-summary loading", "style": {"text-align": "center", "padding": "2rem"}},
-            html.span({"aria-busy": "true"}, "Cargando resumen..."),
+            {"class_name": "analytics-summary-container"},
+            html.h2("Resumen General"),
+            SkeletonCardGrid(count=6),
         )
 
     # --- Procesamiento de datos para visualización ---

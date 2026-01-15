@@ -117,16 +117,16 @@ def use_equipos(api_client: Optional[APIClient] = None) -> Dict[str, Any]:
             if is_mounted.current:
                 set_equipos(data.get("equipos", []))
                 set_total_count(data.get("total_count", 0))
+            set_loading(False)
 
         except asyncio.CancelledError:
-            raise
+            # Silenciar errores de cancelación y NO actualizar estado
+            pass
         except Exception as e:
             if is_mounted.current:
                 set_error(str(e))
                 show_notification(f"Error al cargar equipos: {e}", "error")
-        finally:
-            if is_mounted.current and not asyncio.current_task().cancelled():
-                set_loading(False)
+            set_loading(False)
 
     # --- Lógica centralizada de Monitoreo ---
     async def monitor_active_sync():

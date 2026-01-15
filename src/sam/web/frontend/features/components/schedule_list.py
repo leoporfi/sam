@@ -6,6 +6,7 @@ Este módulo contiene los componentes para listar, mostrar y gestionar programac
 siguiendo el estándar de ReactPy de SAM.
 """
 
+import asyncio
 from typing import Any, Callable, Dict, List, Optional
 
 from reactpy import component, event, html, use_state
@@ -161,6 +162,8 @@ def SchedulesDashboard(
         loading=loading,
         error=error,
         data=schedules,
+        skeleton_type="card",
+        skeleton_rows=6,
         empty_message="No se encontraron programaciones.",
         children=html._(
             pagination_component,
@@ -194,6 +197,7 @@ def SchedulesTable(
     on_assign_equipos: Callable,
     on_delete: Callable,
 ):
+    is_processing, set_is_processing = use_state(False)
     headers = ["Robot", "Tipo", "Hora", "Días / Fecha", "Tol.", "Equipos", "Activo", "Acciones"]
 
     return html.article(
@@ -246,8 +250,18 @@ def SchedulesTable(
                                         "type": "checkbox",
                                         "role": "switch",
                                         "checked": s["Activo"],
+                                        "aria-busy": str(is_processing).lower(),
+                                        "disabled": is_processing,
                                         "on_change": event(
-                                            lambda e, sid=s["ProgramacionId"]: on_toggle(sid, e["target"]["checked"])
+                                            lambda e, sid=s["ProgramacionId"]: asyncio.create_task(
+                                                (
+                                                    lambda: (
+                                                        set_is_processing(True),
+                                                        on_toggle(sid, e["target"]["checked"]),
+                                                        set_is_processing(False),
+                                                    )
+                                                )()
+                                            )
                                         ),
                                     }
                                 ),
@@ -306,6 +320,7 @@ def SchedulesTable(
 def ScheduleCard(
     schedule: ScheduleData, on_toggle: Callable, on_edit: Callable, on_assign_equipos: Callable, on_delete: Callable
 ):
+    is_processing, set_is_processing = use_state(False)
     return html.article(
         {"key": schedule["ProgramacionId"], "class_name": SCHEDULE_CARD},
         html.header(
@@ -380,8 +395,18 @@ def ScheduleCard(
                             "type": "checkbox",
                             "role": "switch",
                             "checked": schedule["Activo"],
+                            "aria-busy": str(is_processing).lower(),
+                            "disabled": is_processing,
                             "on_click": event(
-                                lambda e, sid=schedule["ProgramacionId"]: on_toggle(sid, e["target"]["checked"])
+                                lambda e, sid=schedule["ProgramacionId"]: asyncio.create_task(
+                                    (
+                                        lambda: (
+                                            set_is_processing(True),
+                                            on_toggle(sid, e["target"]["checked"]),
+                                            set_is_processing(False),
+                                        )
+                                    )()
+                                )()
                             ),
                         }
                     ),

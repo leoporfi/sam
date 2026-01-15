@@ -122,6 +122,8 @@ def EquiposDashboard(equipos_state: Dict):
         loading=equipos_state["loading"] and not equipos_state["equipos"],
         error=equipos_state["error"],
         data=equipos_state["equipos"],
+        skeleton_type="card",
+        skeleton_rows=6,
         empty_message="No se encontraron equipos.",
         children=html._(
             pagination_component,
@@ -249,6 +251,8 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
     # Desactivar el switch de balanceo SOLO si el equipo tiene una asignación PROGRAMADA
     is_programado = equipo.get("EsProgramado", False)
     balanceo_disabled = is_programado
+    is_processing, set_is_processing = use_state(False)
+
     balanceo_title = (
         "No se puede balancear un equipo con asignación programada."
         if is_programado
@@ -256,13 +260,21 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
     )
 
     async def handle_toggle_activo(event):
-        await on_action(equipo["EquipoId"], "Activo_SAM", not equipo["Activo_SAM"])
+        set_is_processing(True)
+        try:
+            await on_action(equipo["EquipoId"], "Activo_SAM", not equipo["Activo_SAM"])
+        finally:
+            set_is_processing(False)
 
     async def handle_toggle_balanceo(event):
         # Evitar acción si está desactivado
-        if balanceo_disabled:
+        if balanceo_disabled or is_processing:
             return
-        await on_action(equipo["EquipoId"], "PermiteBalanceoDinamico", not equipo["PermiteBalanceoDinamico"])
+        set_is_processing(True)
+        try:
+            await on_action(equipo["EquipoId"], "PermiteBalanceoDinamico", not equipo["PermiteBalanceoDinamico"])
+        finally:
+            set_is_processing(False)
 
     return html.tr(
         {"key": equipo["EquipoId"]},
@@ -277,6 +289,8 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
                         "role": "switch",
                         "checked": equipo["Activo_SAM"],
                         "on_change": event(handle_toggle_activo),
+                        "aria-busy": str(is_processing).lower(),
+                        "disabled": is_processing,
                     }
                 )
             )
@@ -290,7 +304,8 @@ def EquipoRow(equipo: Equipo, on_action: Callable):
                         "role": "switch",
                         "checked": equipo["PermiteBalanceoDinamico"],
                         "on_change": event(handle_toggle_balanceo),
-                        "disabled": balanceo_disabled,
+                        "disabled": balanceo_disabled or is_processing,
+                        "aria-busy": str(is_processing).lower(),
                         "title": balanceo_title,
                     }
                 )
@@ -330,6 +345,8 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
     """
     is_programado = equipo.get("EsProgramado", False)  # Nuevo campo del SP
     balanceo_disabled = is_programado
+    is_processing, set_is_processing = use_state(False)
+
     balanceo_title = (
         "No se puede balancear un equipo con asignación programada."
         if is_programado
@@ -337,12 +354,20 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
     )
 
     async def handle_toggle_activo(event):
-        await on_action(equipo["EquipoId"], "Activo_SAM", not equipo["Activo_SAM"])
+        set_is_processing(True)
+        try:
+            await on_action(equipo["EquipoId"], "Activo_SAM", not equipo["Activo_SAM"])
+        finally:
+            set_is_processing(False)
 
     async def handle_toggle_balanceo(event):
-        if balanceo_disabled:
+        if balanceo_disabled or is_processing:
             return
-        await on_action(equipo["EquipoId"], "PermiteBalanceoDinamico", not equipo["PermiteBalanceoDinamico"])
+        set_is_processing(True)
+        try:
+            await on_action(equipo["EquipoId"], "PermiteBalanceoDinamico", not equipo["PermiteBalanceoDinamico"])
+        finally:
+            set_is_processing(False)
 
     return html.article(
         {"key": equipo["EquipoId"], "class_name": ROBOT_CARD},
@@ -399,7 +424,8 @@ def EquipoCard(equipo: Equipo, on_action: Callable):
                             "role": "switch",
                             "checked": equipo["PermiteBalanceoDinamico"],
                             "on_change": event(handle_toggle_balanceo),
-                            "disabled": balanceo_disabled,
+                            "disabled": balanceo_disabled or is_processing,
+                            "aria-busy": str(is_processing).lower(),
                             "title": balanceo_title,
                         }
                     ),
