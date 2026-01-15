@@ -1,6 +1,6 @@
 [project]
 name = "sam"
-version = "1.6.4"
+dynamic = ["version"]
 description = "Sistema Automático de Robots - RPA Orchestration"
 requires-python = ">=3.9"
 dependencies = [
@@ -54,3 +54,6 @@ sam-lanzador = "sam.lanzador.run_lanzador:main"
 sam-balanceador = "sam.balanceador.run_balanceador:main"
 sam-callback = "sam.callback.run_callback:main"
 sam-web = "sam.web.run_dashboard:main"
+
+[tool.hatch.version]
+path = "src/sam/__init__.py"
