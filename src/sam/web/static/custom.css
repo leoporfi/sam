@@ -960,15 +960,16 @@ dialog header h2,
 .skeleton {
   position: relative;
   overflow: hidden;
-  background-color: var(--pico-muted-border-color);
-  border-radius: 4px;
+  background-color: rgba(var(--pico-muted-border-color-rgb), 0.15);
+  border-radius: 6px;
   display: inline-block;
-  min-height: 1.2em;
+  min-height: 1.25em;
   width: 100%;
   vertical-align: middle;
-  animation: skeleton-pulse 2s infinite ease-in-out;
+  animation: skeleton-pulse 1.8s infinite ease-in-out;
 }
 
+/* Haz de luz (Shimmer) */
 .skeleton::after {
   content: "";
   position: absolute;
@@ -977,35 +978,71 @@ dialog header h2,
   bottom: 0;
   left: 0;
   transform: translateX(-100%);
-  background-image: linear-gradient(
-    110deg,
-    rgba(255, 255, 255, 0) 30%,
-    rgba(255, 255, 255, 0.5) 50%,
-    rgba(255, 255, 255, 0) 70%
-  );
-  animation: shimmer-sweep 1.2s infinite ease-out;
+  background-image: linear-gradient(90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.3) 40%,
+      rgba(255, 255, 255, 0.6) 50%,
+      rgba(255, 255, 255, 0.3) 60%,
+      rgba(255, 255, 255, 0) 100%);
+  animation: shimmer-sweep 1s infinite linear;
+  z-index: 1;
 }
 
 [data-theme="dark"] .skeleton {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 [data-theme="dark"] .skeleton::after {
-  background-image: linear-gradient(
-    110deg,
-    rgba(255, 255, 255, 0) 30%,
-    rgba(255, 255, 255, 0.2) 50%,
-    rgba(255, 255, 255, 0) 70%
-  );
+  background-image: linear-gradient(90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.15) 40%,
+      rgba(255, 255, 255, 0.3) 50%,
+      rgba(255, 255, 255, 0.15) 60%,
+      rgba(255, 255, 255, 0) 100%);
 }
 
 @keyframes shimmer-sweep {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 @keyframes skeleton-pulse {
-  0% { background-color: var(--pico-muted-border-color); }
-  50% { background-color: var(--pico-card-border-color); }
-  100% { background-color: var(--pico-muted-border-color); }
+  0% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.6;
+  }
+}
+
+.skeleton-text {
+  height: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.skeleton-title {
+  height: 1.5rem;
+  margin-bottom: 1.2rem;
+  width: 65%;
+}
+
+.skeleton-button {
+  height: 2.8rem;
+  border-radius: var(--pico-border-radius);
+}
+
+.skeleton-circle {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
 }
