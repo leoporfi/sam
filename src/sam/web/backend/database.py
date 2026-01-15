@@ -73,7 +73,20 @@ async def sync_equipos_only(db: DatabaseConnector, aa_client: AutomationAnywhere
 
         devices_task = aa_client.obtener_devices()
         users_task = aa_client.obtener_usuarios_detallados()
-        devices_api, users_api = await asyncio.gather(devices_task, users_task)
+        # Ejecutar tareas en paralelo pero manejar excepciones individualmente
+        results = await asyncio.gather(devices_task, users_task, return_exceptions=True)
+
+        devices_api = results[0]
+        users_api = results[1]
+
+        # Verificar si devices falló (crítico)
+        if isinstance(devices_api, Exception):
+            raise devices_api
+
+        # Verificar si users falló (no crítico, loguear warning)
+        if isinstance(users_api, Exception):
+            logger.warning(f"No se pudieron obtener usuarios de A360 (posible falta de permisos): {users_api}")
+            users_api = []
 
         logger.info(f"Datos recibidos de A360: {len(devices_api)} dispositivos, {len(users_api)} usuarios.")
 
