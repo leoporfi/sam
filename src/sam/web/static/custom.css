@@ -896,51 +896,6 @@ dialog header h2,
 /* 10. SKELETONS & LOADING STATES                                             */
 /* -------------------------------------------------------------------------- */
 
-.skeleton {
-  background-color: var(--pico-muted-border-color);
-  background-image: linear-gradient(90deg,
-      rgba(255, 255, 255, 0) 0,
-      rgba(255, 255, 255, 0.3) 50%,
-      rgba(255, 255, 255, 0) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite linear, pulse 2s infinite ease-in-out;
-  border-radius: 4px;
-  display: inline-block;
-  min-height: 1em;
-  width: 100%;
-}
-
-[data-theme="dark"] .skeleton {
-  background-color: rgba(255, 255, 255, 0.1);
-  background-image: linear-gradient(90deg,
-      rgba(255, 255, 255, 0) 0,
-      rgba(255, 255, 255, 0.15) 50%,
-      rgba(255, 255, 255, 0) 100%);
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-@keyframes pulse {
-  0% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.6;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
 
 .skeleton-text {
   height: 0.8rem;
@@ -996,4 +951,61 @@ dialog header h2,
   z-index: 50;
   border-radius: inherit;
   animation: fadeIn 0.2s ease;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 10. SKELETONS & LOADING STATES                                             */
+/* -------------------------------------------------------------------------- */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--pico-muted-border-color);
+  border-radius: 4px;
+  display: inline-block;
+  min-height: 1.2em;
+  width: 100%;
+  vertical-align: middle;
+  animation: skeleton-pulse 2s infinite ease-in-out;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  animation: shimmer-sweep 1.2s infinite ease-out;
+}
+
+[data-theme="dark"] .skeleton {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .skeleton::after {
+  background-image: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.2) 50%,
+    rgba(255, 255, 255, 0) 70%
+  );
+}
+
+@keyframes shimmer-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes skeleton-pulse {
+  0% { background-color: var(--pico-muted-border-color); }
+  50% { background-color: var(--pico-card-border-color); }
+  100% { background-color: var(--pico-muted-border-color); }
 }
