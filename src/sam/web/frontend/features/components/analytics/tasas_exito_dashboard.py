@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from reactpy import component, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.async_content import SkeletonTable
 from sam.web.frontend.shared.common_components import LoadingOverlay
 
 from .chart_components import BarChart, PieChart
@@ -66,7 +67,14 @@ def TasasExitoDashboard():
     sort_by, set_sort_by = use_state("tasa_asc")  # tasa_asc, errores_desc
 
     if loading and not dashboard_data:
-        return html.div({"class_name": "tasas-exito-dashboard loading"}, html.p("Cargando análisis de éxito..."))
+        return html.div(
+            {"class_name": "tasas-exito-dashboard"},
+            html.header(
+                {"class_name": "dashboard-header"},
+                html.h2({"class_name": "dashboard-title"}, "Análisis de Tasas de Éxito y Errores"),
+            ),
+            SkeletonTable(rows=10, cols=6),
+        )
 
     if error:
         return html.div(

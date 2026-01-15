@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from reactpy import component, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.async_content import SkeletonCardGrid, SkeletonTable
 from sam.web.frontend.shared.common_components import LoadingOverlay
 
 from .chart_components import BarChart
@@ -53,7 +54,15 @@ def BalanceadorDashboard():
         return lambda: task.cancel() if not task.done() else None
 
     if loading and not dashboard_data:
-        return html.div({"class_name": "balanceador-dashboard loading"}, html.p("Cargando dashboard..."))
+        return html.div(
+            {"class_name": "balanceador-dashboard"},
+            html.header(
+                {"class_name": "dashboard-header"},
+                html.h2({"class_name": "dashboard-title"}, "Análisis del Balanceador de Equipos"),
+            ),
+            SkeletonCardGrid(count=3),
+            html.div({"style": {"margin-top": "2rem"}}, SkeletonTable(rows=5, cols=6)),
+        )
 
     if error:
         return html.div(

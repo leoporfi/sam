@@ -6,6 +6,7 @@ import logging
 from reactpy import component, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.async_content import SkeletonTable
 from sam.web.frontend.shared.common_components import LoadingOverlay
 from sam.web.frontend.shared.formatters import format_minutes_to_hhmmss
 
@@ -50,7 +51,14 @@ def UtilizationDashboard():
         return lambda: task.cancel() if not task.done() else None
 
     if loading and not dashboard_data:
-        return html.div({"class_name": "utilization-dashboard loading"}, html.p("Cargando análisis de utilización..."))
+        return html.div(
+            {"class_name": "utilization-dashboard"},
+            html.header(
+                {"class_name": "dashboard-header"},
+                html.h2({"class_name": "dashboard-title"}, "Análisis de Utilización de Recursos"),
+            ),
+            SkeletonTable(rows=10, cols=6),
+        )
 
     if error:
         return html.div(

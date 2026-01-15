@@ -245,10 +245,10 @@ def EquipoEditModal(
                         {
                             "type": "submit",
                             "form": "equipo-form",
-                            "aria-busy": is_loading,
+                            "aria-busy": str(is_loading).lower(),
                             "disabled": is_loading,
                         },
-                        "Guardar",
+                        "Procesando..." if is_loading else "Guardar",
                     ),
                 )
             ),

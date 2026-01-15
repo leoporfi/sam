@@ -95,7 +95,15 @@ def PoolEditModal(pool: Dict, is_open: bool, on_close: Callable, on_save: Callab
                         },
                         "Cancelar",
                     ),
-                    html.button({"type": "submit", "form": "pool-form", "aria-busy": is_loading}, "Guardar"),
+                    html.button(
+                        {
+                            "type": "submit",
+                            "form": "pool-form",
+                            "aria-busy": str(is_loading).lower(),
+                            "disabled": is_loading,
+                        },
+                        "Procesando..." if is_loading else "Guardar",
+                    ),
                 ),
             ),
         ),

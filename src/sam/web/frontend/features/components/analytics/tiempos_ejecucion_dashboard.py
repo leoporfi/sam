@@ -7,6 +7,7 @@ import logging
 from reactpy import component, html, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.async_content import SkeletonTable
 from sam.web.frontend.shared.common_components import LoadingOverlay
 from sam.web.frontend.shared.formatters import format_minutes_to_hhmmss
 
@@ -58,7 +59,12 @@ def TiemposEjecucionDashboard():
 
     if loading and not dashboard_data:
         return html.div(
-            {"class_name": "tiempos-ejecucion-dashboard loading"}, html.p("Cargando análisis de tiempos...")
+            {"class_name": "tiempos-ejecucion-dashboard"},
+            html.header(
+                {"class_name": "dashboard-header"},
+                html.h2({"class_name": "dashboard-title"}, "Análisis de Tiempos de Ejecución"),
+            ),
+            SkeletonTable(rows=10, cols=7),
         )
 
     if error:

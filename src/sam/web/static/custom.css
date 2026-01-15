@@ -789,3 +789,97 @@ dialog header h2,
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* -------------------------------------------------------------------------- */
+/* 10. SKELETONS & LOADING STATES                                             */
+/* -------------------------------------------------------------------------- */
+
+.skeleton {
+  background-color: var(--pico-muted-border-color);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.2) 20%,
+    rgba(255, 255, 255, 0.5) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+  border-radius: 4px;
+  display: inline-block;
+  min-height: 1em;
+  width: 100%;
+}
+
+[data-theme="dark"] .skeleton {
+  background-color: rgba(255, 255, 255, 0.1);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.05) 20%,
+    rgba(255, 255, 255, 0.1) 60%,
+    rgba(255, 255, 255, 0)
+  );
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-text {
+  height: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-title {
+  height: 1.2rem;
+  margin-bottom: 1rem;
+  width: 60%;
+}
+
+.skeleton-button {
+  height: 2.5rem;
+  border-radius: var(--pico-border-radius);
+}
+
+.skeleton-circle {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+}
+
+/* Skeleton Table */
+.skeleton-table-row td {
+  padding: 1rem 0.5rem;
+}
+
+/* Skeleton Card */
+.skeleton-card {
+  padding: var(--pico-spacing);
+  border: 1px solid var(--pico-card-border-color);
+  border-radius: var(--pico-border-radius);
+  background-color: var(--pico-card-background-color);
+}
+
+/* Overlay Loading */
+.loading-overlay-container {
+  position: relative;
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(var(--pico-background-color-rgb), 0.7);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  border-radius: inherit;
+  animation: fadeIn 0.2s ease;
+}

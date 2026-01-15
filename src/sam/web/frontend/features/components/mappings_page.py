@@ -9,7 +9,8 @@ from reactpy.core.vdom import make_vdom_constructor
 from sam.web.frontend.api.api_client import get_api_client
 from sam.web.frontend.hooks.use_equipos_hook import use_equipos
 from sam.web.frontend.hooks.use_robots_hook import use_robots
-from sam.web.frontend.shared.common_components import LoadingSpinner, PageWithLayout
+from sam.web.frontend.shared.async_content import SkeletonTable
+from sam.web.frontend.shared.common_components import PageWithLayout
 from sam.web.frontend.state.app_context import use_app_context
 
 # Definición manual de la etiqueta datalist
@@ -189,7 +190,7 @@ def MappingsPage(theme_is_dark: bool, on_theme_toggle):
                     "Crear",
                 ),
             ),
-            LoadingSpinner()
+            SkeletonTable(rows=5, cols=4)
             if loading
             else html.article(
                 html.table(

@@ -6,6 +6,7 @@ import logging
 from reactpy import component, html, use_context, use_effect, use_state
 
 from sam.web.frontend.api.api_client import get_api_client
+from sam.web.frontend.shared.async_content import SkeletonCardGrid, SkeletonTable
 from sam.web.frontend.shared.notifications import NotificationContext
 
 logger = logging.getLogger(__name__)
@@ -183,7 +184,15 @@ def StatusDashboard(scroll_to=None):
         return cleanup
 
     if loading and not status_data:
-        return html.div({"class_name": "status-dashboard loading"}, html.p("Cargando estado del sistema..."))
+        return html.div(
+            {"class_name": "status-dashboard"},
+            html.header(
+                {"class_name": "dashboard-header"},
+                html.h2({"class_name": "dashboard-title"}, "Estado Actual del Sistema"),
+            ),
+            SkeletonCardGrid(count=4),
+            html.div({"style": {"margin-top": "2rem"}}, SkeletonTable(rows=5, cols=7)),
+        )
 
     if error:
         return html.div(
