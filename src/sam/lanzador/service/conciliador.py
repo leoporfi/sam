@@ -147,6 +147,7 @@ class Conciliador:
                 UPDATE dbo.Ejecuciones
                 SET Estado = ?,
                     FechaFin = GETDATE(),
+                    FechaInicioReal = COALESCE(FechaInicioReal, GETDATE()),
                     FechaActualizacion = GETDATE(),
                     CallbackInfo = ?,
                     IntentosConciliadorFallidos = 0
@@ -190,17 +191,30 @@ class Conciliador:
                 continue
 
             fecha_fin_dt = self._convertir_utc_a_local_sam(end_date_str)
-            fecha_inicio_real_dt = self._convertir_utc_a_local_sam(start_date_str)
+            fecha_inicio_api_dt = self._convertir_utc_a_local_sam(start_date_str)
 
-            updates_params.append((final_status_db, fecha_fin_dt, fecha_inicio_real_dt, ejecucion_id))
+            # Lógica para FechaInicioReal:
+            # 1. Si la API da una fecha, usamos esa.
+            # 2. Si no da fecha pero el estado es de ejecución (RUNNING, etc), usamos GETDATE() como fallback.
+            # 3. Si está en cola (QUEUED, PENDING), no forzamos GETDATE().
+            if fecha_inicio_api_dt:
+                fecha_inicio_final = fecha_inicio_api_dt
+            elif final_status_db in ["RUNNING", "COMPLETED", "RUN_COMPLETED", "RUN_FAILED", "RUN_ABORTED"]:
+                # Estado implica que empezó o terminó, si no hay fecha en API, usamos la actual como fallback
+                fecha_inicio_final = datetime.now()
+            else:
+                # Sigue en cola o pendiente, mantenemos lo que haya en DB (NULL probablemente)
+                fecha_inicio_final = None
 
-        # Actualizar estados finales (COMPLETED, RUN_FAILED, etc.)
+            updates_params.append((final_status_db, fecha_fin_dt, fecha_inicio_final, ejecucion_id))
+
+        # Actualizar estados (Tanto finales como en curso)
         if updates_params:
             query = """
                 UPDATE dbo.Ejecuciones
                 SET Estado = ?,
                     FechaFin = ?,
-                    FechaInicioReal = ?,
+                    FechaInicioReal = COALESCE(?, FechaInicioReal),
                     FechaActualizacion = GETDATE(),
                     IntentosConciliadorFallidos = 0
                 WHERE EjecucionId = ? AND CallbackInfo IS NULL;
@@ -208,7 +222,7 @@ class Conciliador:
             affected_count = self._db_connector.ejecutar_consulta_multiple(
                 query, updates_params, usar_fast_executemany=False
             )
-            logger.debug(f"Se actualizaron {affected_count} registros a estados finales desde la API.")
+            logger.debug(f"Se actualizaron {affected_count} registros (estados y fechas) desde la API.")
 
         # Actualizar los que reportaron UNKNOWN (sin marcar como final)
         if updates_unknown_params:
@@ -281,6 +295,7 @@ class Conciliador:
             UPDATE dbo.Ejecuciones
             SET Estado = 'UNKNOWN',
                 FechaFin = GETDATE(),
+                FechaInicioReal = COALESCE(FechaInicioReal, GETDATE()),
                 FechaActualizacion = GETDATE()
             WHERE EjecucionId IN ({placeholders});
         """
