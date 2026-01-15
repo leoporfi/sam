@@ -217,6 +217,11 @@ def StatusDashboard(scroll_to=None):
     elif active_tab == "huerfanas":
         current_data = huerfanas
 
+    def handle_key_down(event):
+        """Dispara la búsqueda al presionar Enter."""
+        if event["key"] == "Enter":
+            handle_apply_filters()
+
     return html.div(
         {"class_name": "status-dashboard"},
         # --- MODAL DE CONFIRMACIÓN ---
@@ -469,6 +474,7 @@ def StatusDashboard(scroll_to=None):
                                 "placeholder": "Nombre del robot...",
                                 "value": filter_robot,
                                 "on_change": lambda e: set_filter_robot(e["target"]["value"]),
+                                "on_key_down": handle_key_down,
                             }
                         ),
                     ),
@@ -485,6 +491,7 @@ def StatusDashboard(scroll_to=None):
                                 "placeholder": "Nombre del equipo...",
                                 "value": filter_equipo,
                                 "on_change": lambda e: set_filter_equipo(e["target"]["value"]),
+                                "on_key_down": handle_key_down,
                             }
                         ),
                     ),
@@ -503,6 +510,7 @@ def StatusDashboard(scroll_to=None):
                                 "min": "1",
                                 "max": "500",
                                 "on_change": lambda e: set_filter_limit(e["target"]["value"]),
+                                "on_key_down": handle_key_down,
                             }
                         ),
                     ),

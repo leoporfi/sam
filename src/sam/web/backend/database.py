@@ -914,9 +914,6 @@ def ejecutar_sp_multiple_result_sets(db: DatabaseConnector, sp_name: str, params
                         rows = cursor.fetchall()
                         result_set = [dict(zip(columns, row)) for row in rows]
                         result_sets.append(result_set)
-                    else:
-                        # Result set sin columnas (puede ser un mensaje o resultado vacío)
-                        result_sets.append([])
 
                     # Intentar obtener el siguiente result set
                     if not cursor.nextset():
@@ -1071,6 +1068,8 @@ def get_recent_executions(
     critical_only: bool = True,
     umbral_fijo_minutos: int = 25,
     factor_umbral_dinamico: float = 1.5,
+    piso_umbral_dinamico_minutos: int = 10,
+    filtro_ejecuciones_cortas_minutos: int = 2,
     robot_name: Optional[str] = None,
     equipo_name: Optional[str] = None,
 ) -> Dict[str, List[Dict]]:
@@ -1084,6 +1083,8 @@ def get_recent_executions(
             "CriticalOnly": critical_only,
             "UmbralFijoMinutos": umbral_fijo_minutos,
             "FactorUmbralDinamico": factor_umbral_dinamico,
+            "PisoUmbralDinamicoMinutos": piso_umbral_dinamico_minutos,
+            "FiltroEjecucionesCortasMinutos": filtro_ejecuciones_cortas_minutos,
         }
 
         # Agregar filtros opcionales solo si tienen valor

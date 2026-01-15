@@ -13,13 +13,16 @@ ALTER PROCEDURE [dbo].[ObtenerEjecucionesRecientes]
     @UmbralFijoMinutos INT = 25,
     @FactorUmbralDinamico FLOAT = 1.5,
     @RobotName NVARCHAR(255) = NULL,
-    @EquipoName NVARCHAR(255) = NULL
+    @EquipoName NVARCHAR(255) = NULL,
+    @PisoUmbralDinamicoMinutos INT = 10,
+    @FiltroEjecucionesCortasMinutos INT = 2
 AS
 BEGIN
     SET NOCOUNT ON;
 
     WITH TiemposPromedio AS (
         -- Calcular tiempo promedio por robot (solo si tiene suficiente historial)
+        -- Filtramos ejecuciones menores a 2 min para evitar que ejecuciones 'vacías' sesguen el promedio
         SELECT
             RobotId,
             AVG(DATEDIFF(MINUTE, FechaInicio, FechaFin)) AS TiempoPromedioMinutos,
@@ -27,7 +30,7 @@ BEGIN
         FROM dbo.Ejecuciones
         WHERE FechaFin IS NOT NULL
           AND Estado = 'RUN_COMPLETED'
-          AND DATEDIFF(MINUTE, FechaInicio, FechaFin) > 0
+          AND DATEDIFF(MINUTE, FechaInicio, FechaFin) >= @FiltroEjecucionesCortasMinutos
         GROUP BY RobotId
         HAVING COUNT(*) >= 5
     ),
@@ -48,7 +51,12 @@ BEGIN
                 -- RUNNING o DEPLOYED demorados
                 WHEN e.Estado IN ('RUNNING', 'DEPLOYED') AND (
                     (tp.TiempoPromedioMinutos IS NOT NULL AND
-                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > tp.TiempoPromedioMinutos * @FactorUmbralDinamico)
+                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) >
+                        CASE
+                            WHEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
+                            THEN @PisoUmbralDinamicoMinutos
+                            ELSE tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                        END)
                     OR
                     (tp.TiempoPromedioMinutos IS NULL AND
                      DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > @UmbralFijoMinutos)
@@ -75,13 +83,23 @@ BEGIN
                 -- Mensaje para Demoras
                 WHEN e.Estado IN ('RUNNING', 'DEPLOYED') AND (
                     (tp.TiempoPromedioMinutos IS NOT NULL AND
-                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > tp.TiempoPromedioMinutos * @FactorUmbralDinamico)
+                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) >
+                        CASE
+                            WHEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
+                            THEN @PisoUmbralDinamicoMinutos
+                            ELSE tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                        END)
                     OR
                     (tp.TiempoPromedioMinutos IS NULL AND
                      DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > @UmbralFijoMinutos)
                 ) THEN 'Excede umbral de ' + CAST(CAST(
                     CASE
-                        WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                        WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN
+                            CASE
+                                WHEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
+                                THEN @PisoUmbralDinamicoMinutos
+                                ELSE tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                            END
                         ELSE @UmbralFijoMinutos
                     END AS DECIMAL(10,1)) AS VARCHAR(10)) + ' min'
 
@@ -99,12 +117,21 @@ BEGIN
                 ELSE NULL
             END AS MensajeError,
             CASE
-                WHEN tp.TiempoPromedioMinutos IS NOT NULL
-                THEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN
+                    CASE
+                        WHEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
+                        THEN @PisoUmbralDinamicoMinutos
+                        ELSE tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                    END
                 ELSE @UmbralFijoMinutos
             END AS UmbralUtilizadoMinutos,
             CASE
-                WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN 'Dinámico'
+                WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN
+                    CASE
+                        WHEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
+                        THEN 'Dinámico (Piso)'
+                        ELSE 'Dinámico'
+                    END
                 ELSE 'Fijo'
             END AS TipoUmbral,
             tp.TiempoPromedioMinutos AS TiempoPromedioRobotMinutos,

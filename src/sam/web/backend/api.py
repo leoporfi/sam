@@ -349,10 +349,14 @@ def get_recent_executions(
         # Leer configuraciones del sistema
         umbral_fijo = db_service.get_system_config(db, "UMBRAL_EJECUCION_DEMORADA_MINUTOS")
         factor_dinamico = db_service.get_system_config(db, "FACTOR_UMBRAL_DINAMICO")
+        piso_dinamico = db_service.get_system_config(db, "PISO_UMBRAL_DINAMICO_MINUTOS")
+        filtro_cortas = db_service.get_system_config(db, "FILTRO_EJECUCIONES_CORTAS_MINUTOS")
 
         # Valores por defecto si no existen en la configuración
         umbral_fijo_minutos = int(umbral_fijo) if umbral_fijo else 25
         factor_umbral_dinamico = float(factor_dinamico) if factor_dinamico else 1.5
+        piso_umbral_dinamico_minutos = int(piso_dinamico) if piso_dinamico else 10
+        filtro_ejecuciones_cortas_minutos = int(filtro_cortas) if filtro_cortas else 2
 
         return db_service.get_recent_executions(
             db,
@@ -360,6 +364,8 @@ def get_recent_executions(
             critical_only=critical_only,
             umbral_fijo_minutos=umbral_fijo_minutos,
             factor_umbral_dinamico=factor_umbral_dinamico,
+            piso_umbral_dinamico_minutos=piso_umbral_dinamico_minutos,
+            filtro_ejecuciones_cortas_minutos=filtro_ejecuciones_cortas_minutos,
             robot_name=robot_name,
             equipo_name=equipo_name,
         )

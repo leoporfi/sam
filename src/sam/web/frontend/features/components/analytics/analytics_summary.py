@@ -35,7 +35,7 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
 
             # Ejecutar peticiones en paralelo
             status_task = api_client.get("/api/analytics/status")
-            critical_task = api_client.get("/api/analytics/executions", params={"limit": 50, "critical_only": True})
+            critical_task = api_client.get("/api/analytics/executions", params={"limit": 500, "critical_only": True})
             # Para tiempos, traemos un resumen general (sin filtros específicos de percentiles por ahora)
             performance_task = api_client.get("/api/analytics/tiempos-ejecucion")
             success_task = api_client.get("/api/analytics/tasas-exito")
