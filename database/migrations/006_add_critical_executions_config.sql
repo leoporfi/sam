@@ -1,10 +1,8 @@
 -- Migration: Add configuration for critical executions detection
 -- Date: 2026-01-07
 -- Description: Adds UMBRAL_EJECUCION_DEMORADA_MINUTOS and FACTOR_UMBRAL_DINAMICO to ConfiguracionSistema
-
 USE [SAM]
 GO
-
 -- Check if configurations already exist before inserting
 IF NOT EXISTS (SELECT 1 FROM dbo.ConfiguracionSistema WHERE Clave = 'UMBRAL_EJECUCION_DEMORADA_MINUTOS')
 BEGIN
@@ -22,7 +20,6 @@ BEGIN
     PRINT 'Configuración UMBRAL_EJECUCION_DEMORADA_MINUTOS ya existe.';
 END
 GO
-
 IF NOT EXISTS (SELECT 1 FROM dbo.ConfiguracionSistema WHERE Clave = 'FACTOR_UMBRAL_DINAMICO')
 BEGIN
     INSERT INTO dbo.ConfiguracionSistema (Clave, Valor, Descripcion, FechaActualizacion)
@@ -39,6 +36,5 @@ BEGIN
     PRINT 'Configuración FACTOR_UMBRAL_DINAMICO ya existe.';
 END
 GO
-
 PRINT 'Migración completada: Configuraciones para detección de ejecuciones críticas.';
 GO

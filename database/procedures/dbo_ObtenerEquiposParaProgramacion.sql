@@ -1,18 +1,8 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerEquiposParaProgramacion]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerEquiposParaProgramacion] AS'
-END
-GO
-ALTER PROCEDURE [dbo].[ObtenerEquiposParaProgramacion]
+CREATE PROCEDURE [dbo].[ObtenerEquiposParaProgramacion]
     @ProgramacionId INT
 AS
 BEGIN
     SET NOCOUNT ON;
-
     -- 1. Equipos Asignados a esta programación
     SELECT
         e.EquipoId AS ID,
@@ -23,7 +13,6 @@ BEGIN
     FROM dbo.Equipos e
     INNER JOIN dbo.Asignaciones a ON e.EquipoId = a.EquipoId
     WHERE a.ProgramacionId = @ProgramacionId;
-
     -- 2. Equipos Disponibles
     -- Excluyendo:
     -- - Asignados a esta programación (ya devueltos arriba)
@@ -59,4 +48,3 @@ BEGIN
       AND e.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservadosODinamicos)
     ORDER BY e.Equipo ASC;
 END
-GO

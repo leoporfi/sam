@@ -1,6 +1,5 @@
 -- Script Maestro de Despliegue de SPs de Analítica
 -- Generado automáticamente
-
 -- Inicio de dbo_Analisis_TasasExito.sql
 -- =============================================
 -- Stored Procedure: AnalisisTasasExito
@@ -24,14 +23,11 @@ CREATE OR ALTER PROCEDURE [dbo].[Analisis_TasasExito]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     -- Si no se especifican fechas, usar los últimos 30 días
     IF @FechaInicio IS NULL
         SET @FechaInicio = DATEADD(DAY, -30, GETDATE());
-
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
-
     -- CTE para unir ejecuciones actuales e históricas
     -- Solo incluimos ejecuciones finalizadas (éxito o error)
     WITH TodasEjecuciones AS (
@@ -43,9 +39,7 @@ BEGIN
         WHERE FechaInicio >= @FechaInicio AND FechaInicio <= @FechaFin
           AND (@RobotId IS NULL OR RobotId = @RobotId)
           AND Estado IN ('RUN_COMPLETED', 'COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
-
         UNION ALL
-
         SELECT
             RobotId,
             EquipoId,
@@ -55,7 +49,6 @@ BEGIN
           AND (@RobotId IS NULL OR RobotId = @RobotId)
           AND Estado IN ('RUN_COMPLETED', 'COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
     )
-
     -- Result Set 1: Resumen Global de Estados
     SELECT
         Estado,
@@ -64,7 +57,6 @@ BEGIN
     FROM TodasEjecuciones
     GROUP BY Estado
     ORDER BY Cantidad DESC;
-
     -- Result Set 2: Top Tipos de Error/Fallo
     -- Analiza solo los estados de error/fallo de A360
     WITH TodasEjecucionesErrores AS (
@@ -74,9 +66,7 @@ BEGIN
         WHERE FechaInicio >= @FechaInicio AND FechaInicio <= @FechaFin
           AND (@RobotId IS NULL OR RobotId = @RobotId)
           AND Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
-
         UNION ALL
-
         SELECT
             Estado
         FROM dbo.Ejecuciones_Historico
@@ -90,7 +80,6 @@ BEGIN
     FROM TodasEjecucionesErrores
     GROUP BY Estado
     ORDER BY Cantidad DESC;
-
     -- Result Set 3: Detalle por Robot
     -- Redefinir el CTE TodasEjecuciones para esta consulta
     WITH TodasEjecuciones AS (
@@ -102,9 +91,7 @@ BEGIN
         WHERE FechaInicio >= @FechaInicio AND FechaInicio <= @FechaFin
           AND (@RobotId IS NULL OR RobotId = @RobotId)
           AND Estado IN ('RUN_COMPLETED', 'COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
-
         UNION ALL
-
         SELECT
             RobotId,
             EquipoId,
@@ -135,11 +122,9 @@ BEGIN
         CAST(Exitos * 100.0 / NULLIF(Total, 0) AS DECIMAL(5,2)) AS TasaExito
     FROM StatsPorRobot
     ORDER BY TasaExito ASC;
-
 END;
 GO
 GO
-
 -- Inicio de dbo_Analisis_UtilizacionRecursos.sql
 CREATE OR ALTER PROCEDURE [dbo].[Analisis_UtilizacionRecursos]
     @FechaInicio DATETIME = NULL,
@@ -147,22 +132,17 @@ CREATE OR ALTER PROCEDURE [dbo].[Analisis_UtilizacionRecursos]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     -- Si no se especifican fechas, usar los últimos 30 días
     IF @FechaInicio IS NULL
         SET @FechaInicio = DATEADD(DAY, -30, GETDATE());
-
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
-
     -- Calcular tiempo total disponible en minutos
     DECLARE @MinutosTotales INT;
     SET @MinutosTotales = DATEDIFF(MINUTE, @FechaInicio, @FechaFin);
-
     -- Evitar división por cero
     IF @MinutosTotales <= 0
         SET @MinutosTotales = 1;
-
     -- CTE para unir ejecuciones actuales e históricas
     WITH TodasEjecuciones AS (
         SELECT
@@ -173,9 +153,7 @@ BEGIN
         FROM dbo.Ejecuciones
         WHERE FechaInicio >= @FechaInicio AND FechaInicio <= @FechaFin
           AND FechaFin IS NOT NULL -- Solo ejecuciones finalizadas
-
         UNION ALL
-
         SELECT
             EquipoId,
             RobotId,
@@ -212,7 +190,6 @@ BEGIN
 END;
 GO
 GO
-
 -- Inicio de dbo_Analisis_PatronesTemporales.sql
 CREATE OR ALTER PROCEDURE [dbo].[Analisis_PatronesTemporales]
     @FechaInicio DATETIME = NULL,
@@ -221,14 +198,11 @@ CREATE OR ALTER PROCEDURE [dbo].[Analisis_PatronesTemporales]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     -- Si no se especifican fechas, usar los últimos 90 días para tener una buena muestra
     IF @FechaInicio IS NULL
         SET @FechaInicio = DATEADD(DAY, -90, GETDATE());
-
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
-
     -- CTE para unir ejecuciones actuales e históricas
     WITH TodasEjecuciones AS (
         SELECT
@@ -238,9 +212,7 @@ BEGIN
         FROM dbo.Ejecuciones
         WHERE FechaInicio >= @FechaInicio AND FechaInicio <= @FechaFin
           AND (@RobotId IS NULL OR RobotId = @RobotId)
-
         UNION ALL
-
         SELECT
             RobotId,
             FechaInicio,
@@ -260,7 +232,6 @@ BEGIN
 END;
 GO
 GO
-
 -- Inicio de dbo_Analisis_TiemposEjecucion.sql
 CREATE OR ALTER PROCEDURE [dbo].[Analisis_TiemposEjecucion]
     @ExcluirPorcentajeInferior DECIMAL(3,2) = 0.15,  -- 15% por defecto
@@ -271,14 +242,12 @@ CREATE OR ALTER PROCEDURE [dbo].[Analisis_TiemposEjecucion]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     -- Validar parámetros
     IF @ExcluirPorcentajeInferior >= @ExcluirPorcentajeSuperior
     BEGIN
         RAISERROR('El porcentaje inferior debe ser menor que el superior', 16, 1);
         RETURN;
     END;
-
     -- Análisis de tiempos de ejecución por robot excluyendo extremos
     -- INCLUYE: Datos actuales e históricos, FechaInicioReal, y número de repeticiones
     WITH EjecucionesUnificadas AS (
@@ -298,9 +267,7 @@ BEGIN
             AND e.FechaInicio >= DATEADD(MONTH, -@MesesHaciaAtras, GETDATE())
             AND (@IncluirSoloCompletadas = 0 OR e.Estado IN ('COMPLETED', 'RUN_COMPLETED'))
             AND DATEDIFF(SECOND, e.FechaInicio, e.FechaFin) > 0
-
         UNION ALL
-
         -- Datos históricos
         SELECT
             eh.EjecucionId,
@@ -406,38 +373,31 @@ BEGIN
         COUNT(*) AS EjecucionesAnalizadas,
         MAX(tf.TotalRegistros) AS TotalEjecucionesOriginales,
         CAST((COUNT(*) * 100.0 / MAX(tf.TotalRegistros)) AS DECIMAL(5,2)) AS PorcentajeIncluido,
-
         -- MÉTRICAS DE TIEMPO POR REPETICIÓN (lo más importante)
         AVG(CAST(tf.DuracionPorRepeticionMinutos AS FLOAT)) AS TiempoPromedioPorRepeticionMinutos,
         AVG(CAST(tf.DuracionPorRepeticionSegundos AS FLOAT)) AS TiempoPromedioPorRepeticionSegundos,
         MAX(tf.DuracionPorRepeticionMinutos) AS TiempoMaximoPorRepeticionMinutos,
         MIN(tf.DuracionPorRepeticionMinutos) AS TiempoMinimoPorRepeticionMinutos,
         CONVERT(VARCHAR(8), DATEADD(SECOND, AVG(CAST(tf.DuracionPorRepeticionSegundos AS FLOAT)), 0), 108) AS TiempoPromedioPorRepeticionFormateado,
-
         -- MÉTRICAS DE TIEMPO TOTAL (por ejecución completa)
         AVG(CAST(tf.DuracionTotalMinutos AS FLOAT)) AS TiempoPromedioTotalMinutos,
         AVG(CAST(tf.DuracionTotalSegundos AS FLOAT)) AS TiempoPromedioTotalSegundos,
         SUM(CAST(tf.DuracionTotalMinutos AS FLOAT)) AS TiempoTotalAcumuladoMinutos,
-
         -- MÉTRICAS DE REPETICIONES
         AVG(CAST(tf.NumRepeticiones AS FLOAT)) AS PromedioRepeticiones,
         MAX(tf.NumRepeticiones) AS MaxRepeticiones,
         MIN(tf.NumRepeticiones) AS MinRepeticiones,
-
         -- MÉTRICAS DE LATENCIA (delay entre disparo e inicio real)
         AVG(CAST(tf.LatenciaInicioSegundos AS FLOAT)) AS LatenciaPromedioSegundos,
         AVG(CAST(tf.LatenciaInicioSegundos AS FLOAT) / 60.0) AS LatenciaPromedioMinutos,
         MAX(tf.LatenciaInicioSegundos) AS LatenciaMaximaSegundos,
         COUNT(CASE WHEN tf.LatenciaInicioSegundos IS NOT NULL THEN 1 END) AS EjecucionesConLatencia,
-
         -- ESTADÍSTICAS
         STDEV(CAST(tf.DuracionPorRepeticionSegundos AS FLOAT)) AS DesviacionEstandarSegundos,
         CONCAT('P', CAST(@ExcluirPorcentajeInferior * 100 AS INT), ' - P', CAST(@ExcluirPorcentajeSuperior * 100 AS INT)) AS RangoPercentiles,
-
         -- INFORMACIÓN DE ORIGEN DE DATOS
         SUM(CASE WHEN tf.Origen = 'ACTUAL' THEN 1 ELSE 0 END) AS EjecucionesActuales,
         SUM(CASE WHEN tf.Origen = 'HISTORICA' THEN 1 ELSE 0 END) AS EjecucionesHistoricas,
-
         GETDATE() AS FechaAnalisis
     FROM TiemposFiltrados tf
     INNER JOIN dbo.Robots r ON r.RobotId = tf.RobotId
@@ -446,7 +406,6 @@ BEGIN
 END;
 GO
 GO
-
 -- Inicio de dbo_Analisis_Dispersion.sql
 CREATE OR ALTER PROCEDURE [dbo].[Analisis_Dispersion]
     @pRobot VARCHAR(100),
@@ -456,20 +415,16 @@ CREATE OR ALTER PROCEDURE [dbo].[Analisis_Dispersion]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     DECLARE @RobotId INT;
-
     -- Resolver RobotId a partir del nombre
     SELECT @RobotId = RobotId
     FROM   dbo.Robots
     WHERE  Robot = @pRobot;
-
     IF @RobotId IS NULL
     BEGIN
         RAISERROR('El robot ''%s'' no existe en la tabla maestra.', 16, 1, @pRobot);
         RETURN;
     END;
-
     /* 1. CTE base de ejecuciones */
     ;WITH Ejecs AS
     (
@@ -507,7 +462,6 @@ BEGIN
         FROM Filtradas
     )
     SELECT * INTO #ConDelta FROM ConDelta;
-
     /* 2. RESUMEN: agrupado por equipo + robot */
     SELECT
             r.Robot,
@@ -524,9 +478,7 @@ BEGIN
     INNER JOIN dbo.Robots r ON r.RobotId = cd.RobotId
     WHERE   cd.DeltaSec IS NOT NULL
     GROUP BY r.Robot, e.Equipo;
-
 	SELECT * FROM #Resumen ORDER BY Robot, Equipo;
-
     /* 3. DETALLE */
     SELECT
             cd.EjecucionID,
@@ -546,12 +498,10 @@ BEGIN
     INNER JOIN dbo.Robots r ON r.RobotId = cd.RobotId
     WHERE   cd.DeltaSec IS NOT NULL
     ORDER BY e.Equipo, cd.FechaInicio;
-
     DROP TABLE #Resumen;
     DROP TABLE #ConDelta;
 END;
 GO
-
 -- Inicio de dbo_Analisis_Balanceador.sql
 --              Proporciona métricas de rendimiento y actividad del sistema
 -- Modified:    2025-10-16 - Corrección de duplicación de robots
@@ -564,14 +514,11 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
-
     -- Establecer fechas por defecto si no se proporcionan
     IF @FechaInicio IS NULL
         SET @FechaInicio = DATEADD(DAY, -30, GETDATE());
-
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
-
     BEGIN TRY
         -- =============================================
         -- RESULT SET 1: MÉTRICAS GENERALES (CORREGIDO)
@@ -579,7 +526,6 @@ BEGIN
         SELECT
             'METRICAS_GENERALES' AS TipoResultado,
             COUNT(*) AS TotalAcciones,
-
             -- Clasificación con prioridad: DESASIGNAR primero, luego ASIGNAR
             -- Esto evita que "DESASIGNAR" se cuente como "ASIGNAR"
             SUM(CASE
@@ -587,12 +533,10 @@ BEGIN
                 WHEN AccionTomada LIKE 'ASIGNAR%' OR AccionTomada LIKE '%AGREGAR%' THEN 1
                 ELSE 0
             END) AS TotalAsignaciones,
-
             SUM(CASE
                 WHEN AccionTomada LIKE 'DESASIGNAR%' OR AccionTomada LIKE '%QUITAR%' THEN 1
                 ELSE 0
             END) AS TotalDesasignaciones,
-
             -- Nueva métrica: acciones no clasificadas
             SUM(CASE
                 WHEN AccionTomada NOT LIKE 'ASIGNAR%'
@@ -602,19 +546,16 @@ BEGIN
                 THEN 1
                 ELSE 0
             END) AS AccionesOtras,
-
             -- Métricas basadas en el delta real de equipos
             SUM(CASE WHEN (EquiposAsignadosDespues - EquiposAsignadosAntes) > 0 THEN 1 ELSE 0 END) AS AsignacionesReales,
             SUM(CASE WHEN (EquiposAsignadosDespues - EquiposAsignadosAntes) < 0 THEN 1 ELSE 0 END) AS DesasignacionesReales,
             SUM(CASE WHEN (EquiposAsignadosDespues - EquiposAsignadosAntes) = 0 THEN 1 ELSE 0 END) AS AccionesSinCambio,
-
             AVG(CAST(EquiposAsignadosDespues - EquiposAsignadosAntes AS FLOAT)) AS PromedioMovimientoNeto,
             COUNT(DISTINCT RobotId) AS RobotsAfectados,
             AVG(CAST(TicketsPendientes AS FLOAT)) AS PromedioTicketsPendientes
         FROM HistoricoBalanceo
         WHERE FechaBalanceo BETWEEN @FechaInicio AND @FechaFin
             AND (@PoolId IS NULL OR PoolId = @PoolId);
-
         -- =============================================
         -- RESULT SET 2: TRAZABILIDAD PARA EL GRÁFICO
         -- =============================================
@@ -634,7 +575,6 @@ BEGIN
         WHERE H.FechaBalanceo BETWEEN @FechaInicio AND @FechaFin
             AND (@PoolId IS NULL OR H.PoolId = @PoolId)
         ORDER BY H.FechaBalanceo ASC;
-
         -- =============================================
         -- RESULT SET 3: RESUMEN DIARIO
         -- =============================================
@@ -654,7 +594,6 @@ BEGIN
             AND (@PoolId IS NULL OR PoolId = @PoolId)
         GROUP BY CAST(FechaBalanceo AS DATE)
         ORDER BY Fecha ASC;
-
         -- =============================================
         -- RESULT SET 4: ANÁLISIS POR ROBOT (CORREGIDO)
         -- =============================================
@@ -694,7 +633,6 @@ BEGIN
             AND (@PoolId IS NULL OR R.PoolId = @PoolId)
             AND Stats.TotalAcciones IS NOT NULL  -- Solo incluir robots con actividad
         ORDER BY Stats.TotalAcciones DESC;
-
         -- =============================================
         -- RESULT SET 5: ESTADO ACTUAL DEL SISTEMA (CORREGIDO)
         -- =============================================
@@ -714,7 +652,6 @@ BEGIN
              INNER JOIN Robots R ON E.RobotId = R.RobotId
              WHERE E.Estado IN ('DEPLOYED', 'RUNNING', 'QUEUED', 'PENDING_EXECUTION')
              AND (@PoolId IS NULL OR R.PoolId = @PoolId)) AS EjecucionesActivas;
-
         -- =============================================
         -- RESULT SET 6: DETECCIÓN DE THRASHING
         -- =============================================
@@ -741,7 +678,6 @@ BEGIN
         WHERE MinutosDesdeUltimaAccion <= 5
             AND ((AccionTomada LIKE '%ASIGNAR%' AND AccionAnterior LIKE '%DESASIGNAR%')
                  OR (AccionTomada LIKE '%DESASIGNAR%' AND AccionAnterior LIKE '%ASIGNAR%'));
-
     END TRY
     BEGIN CATCH
         -- Manejo de errores
@@ -752,20 +688,16 @@ BEGIN
             ISNULL(CONVERT(NVARCHAR(20), @FechaFin, 120), 'NULL'),
             ISNULL(CAST(@PoolId AS NVARCHAR(10)), 'NULL')
         );
-
         INSERT INTO dbo.ErrorLog (Usuario, SPNombre, ErrorMensaje, Parametros)
         VALUES (SUSER_NAME(), 'ObtenerDashboardBalanceador', @ErrorMessage, @Parametros);
-
         THROW;
     END CATCH
 END
 GO
-
 -- Inicio de dbo_Analisis_Callbacks.sql
 -- Autor: Sistema SAM
 -- Fecha: 2025-09-25
 -- =============================================
-
 CREATE OR ALTER PROCEDURE [dbo].[Analisis_Callbacks]
     @FechaInicio DATETIME2(0) = NULL,
     @FechaFin DATETIME2(0) = NULL,
@@ -775,56 +707,45 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
-
     -- Establecer fechas por defecto si no se proporcionan
     IF @FechaInicio IS NULL
         SET @FechaInicio = DATEADD(DAY, -7, GETDATE()); -- Últimos 7 días por defecto
-
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
-
     BEGIN TRY
         -- =============================================
         -- RESULT SET 1: MÉTRICAS GENERALES DEL SISTEMA
         -- =============================================
         SELECT
             'METRICAS_GENERALES' AS TipoResultado,
-
             -- Totales por mecanismo de finalización
             COUNT(*) AS TotalEjecuciones,
             SUM(EsCallbackExitoso) AS CallbacksExitosos,
             SUM(EsConciliadorExitoso) AS ConciliadorExitosos,
             SUM(EsConciliadorAgotado) AS ConciliadorAgotados,
             COUNT(CASE WHEN MecanismoFinalizacion = 'ACTIVA' THEN 1 END) AS EjecucionesActivas,
-
             -- Porcentajes de efectividad
             CAST(SUM(EsCallbackExitoso) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeCallbackExitoso,
             CAST(SUM(EsConciliadorExitoso) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeConciliadorExitoso,
             CAST(SUM(EsConciliadorAgotado) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeConciliadorAgotado,
-
             -- Métricas de rendimiento
             AVG(CAST(LatenciaActualizacionMinutos AS FLOAT)) AS LatenciaPromedioMinutos,
             MAX(LatenciaActualizacionMinutos) AS LatenciaMaximaMinutos,
             MIN(LatenciaActualizacionMinutos) AS LatenciaMinimaMinutos,
-
             -- Indicadores de problemas
             SUM(CallbackFallidoIndicador) AS CallbacksFallidos,
             SUM(ConciliadorProblemaIndicador) AS ProblemasConciliador,
             CAST(SUM(CallbackFallidoIndicador) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeCallbacksFallidos,
-
             -- Métricas de duración de ejecuciones
             AVG(CAST(DuracionEjecucionMinutos AS FLOAT)) AS DuracionPromedioMinutos,
             MAX(DuracionEjecucionMinutos) AS DuracionMaximaMinutos,
-
             -- Salud del sistema
             SUM(EjecucionExitosa) AS EjecucionesExitosas,
             SUM(EjecucionFallida) AS EjecucionesFallidas,
             CAST(SUM(EjecucionExitosa) * 100.0 / NULLIF(SUM(EjecucionExitosa) + SUM(EjecucionFallida), 0) AS DECIMAL(5,2)) AS PorcentajeExito
-
         FROM dbo.AnalisisRendimientoCallbacks
         WHERE FechaInicio BETWEEN @FechaInicio AND @FechaFin
             AND (@RobotId IS NULL OR RobotId = @RobotId);
-
         -- =============================================
         -- RESULT SET 2: DISTRIBUCIÓN POR CLASIFICACIÓN DE RENDIMIENTO
         -- =============================================
@@ -846,7 +767,6 @@ BEGIN
                 WHEN 'REGULAR' THEN 3
                 WHEN 'DEFICIENTE' THEN 4
             END;
-
         -- =============================================
         -- RESULT SET 3: ANÁLISIS POR ROBOT
         -- =============================================
@@ -871,7 +791,6 @@ BEGIN
         GROUP BY R.RobotId, R.Robot
         HAVING COUNT(*) >= 5 -- Solo robots con al menos 5 ejecuciones
         ORDER BY COUNT(*) DESC;
-
         -- =============================================
         -- RESULT SET 4: TENDENCIA DIARIA
         -- =============================================
@@ -891,7 +810,6 @@ BEGIN
             AND (@RobotId IS NULL OR RobotId = @RobotId)
         GROUP BY CAST(FechaInicio AS DATE)
         ORDER BY Fecha ASC;
-
         -- =============================================
         -- RESULT SET 5: ANÁLISIS HORARIO (si se solicita)
         -- =============================================
@@ -912,7 +830,6 @@ BEGIN
             GROUP BY DATEPART(HOUR, FechaInicio)
             ORDER BY Hora;
         END
-
         -- =============================================
         -- RESULT SET 6: CASOS PROBLEMÁTICOS RECIENTES
         -- =============================================
@@ -950,7 +867,6 @@ BEGIN
                  OR A.MecanismoFinalizacion = 'CONCILIADOR_AGOTADO'
                  OR A.ClasificacionRendimiento = 'DEFICIENTE')
         ORDER BY A.FechaInicio DESC;
-
     END TRY
     BEGIN CATCH
         -- Manejo de errores
@@ -962,15 +878,12 @@ BEGIN
             ISNULL(CAST(@RobotId AS NVARCHAR(10)), 'NULL'),
             ISNULL(CAST(@IncluirDetalleHorario AS NVARCHAR(1)), 'NULL')
         );
-
         INSERT INTO dbo.ErrorLog (Usuario, SPNombre, ErrorMensaje, Parametros)
         VALUES (SUSER_NAME(), 'ObtenerDashboardCallbacks', @ErrorMessage, @Parametros);
-
         THROW;
     END CATCH
 END
 GO
-
 -- Inicio de dbo_Analisis_Latencia.sql
 CREATE OR ALTER PROCEDURE [dbo].[Analisis_Latencia]
     @Scope VARCHAR(20) = 'TODAS', -- 'ACTUALES', 'HISTORICAS', 'TODAS'
@@ -979,17 +892,13 @@ CREATE OR ALTER PROCEDURE [dbo].[Analisis_Latencia]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     -- Validar parámetros
     IF @Scope NOT IN ('ACTUALES', 'HISTORICAS', 'TODAS')
         SET @Scope = 'TODAS';
-
     IF @FechaDesde IS NULL
         SET @FechaDesde = DATEADD(DAY, -30, GETDATE()); -- Default últimos 30 días
-
     IF @FechaHasta IS NULL
         SET @FechaHasta = GETDATE();
-
     -- CTE para unificar datos
     WITH AllExecutions AS (
         SELECT
@@ -1003,9 +912,7 @@ BEGIN
             'ACTUAL' AS Origen
         FROM dbo.Ejecuciones
         WHERE (@Scope IN ('ACTUALES', 'TODAS'))
-
         UNION ALL
-
         SELECT
             EjecucionId,
             RobotId,
@@ -1035,11 +942,9 @@ BEGIN
         FechaLanzamientoSAM BETWEEN @FechaDesde AND @FechaHasta
         AND FechaInicioA360 IS NOT NULL -- Solo analizar si tenemos el dato real
     ORDER BY FechaLanzamientoSAM DESC;
-
 END
 GO
 GO
-
 -- Inicio de dbo_Mantenimiento_MoverAHistorico.sql
 CREATE OR ALTER PROCEDURE [dbo].[Mantenimiento_MoverAHistorico]
     @BatchSizeParam INT = 1000,         -- Tamaño del lote para mover/eliminar
@@ -1049,34 +954,26 @@ CREATE OR ALTER PROCEDURE [dbo].[Mantenimiento_MoverAHistorico]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     DECLARE @usuario VARCHAR(255) = SUSER_SNAME();
-
     -- =================================================================================
     -- PARTE 1: MOVER REGISTROS DE 'Ejecuciones' A 'Ejecuciones_Historico'
     -- =================================================================================
-
     DECLARE @rowsAffected INT = @BatchSizeParam;
     DECLARE @totalRowsMoved INT = 0;
     DECLARE @iterationCount INT = 0;
-
     DECLARE @EstadosFinalizados TABLE (Estado NVARCHAR(20) PRIMARY KEY);
     INSERT INTO @EstadosFinalizados (Estado) VALUES
     ('DEPLOY_FAILED'), ('RUN_ABORTED'), ('COMPLETED'),
     ('RUN_COMPLETED'), ('RUN_FAILED'), ('UNKNOWN');
-
     PRINT 'Iniciando proceso de movimiento de ejecuciones a la tabla histórica.';
     PRINT 'Tamaño de lote: ' + CAST(@BatchSizeParam AS VARCHAR(10));
-
     -- Bucle para procesar por lotes, ahora con el límite de iteraciones como parámetro de seguridad
     WHILE @rowsAffected = @BatchSizeParam AND @iterationCount < @MaxIterationsParam
     BEGIN
         SET @iterationCount = @iterationCount + 1;
-
         BEGIN TRY
             -- Usamos una tabla temporal para el lote, más segura que verificar con OBJECT_ID y hacer DROP/CREATE
             IF OBJECT_ID('tempdb..#LoteActual') IS NOT NULL DROP TABLE #LoteActual;
-
             -- Paso 1: Seleccionar el lote a procesar
             SELECT TOP (@BatchSizeParam)
                 EjecucionId,
@@ -1098,14 +995,10 @@ BEGIN
                 Estado IN (SELECT Estado FROM @EstadosFinalizados)
                 AND COALESCE(FechaFin, FechaInicio) < DATEADD(day, -@DiasRetencionMover, GETDATE())
             ORDER BY EjecucionId; -- Orden determinístico es crucial
-
             SET @rowsAffected = @@ROWCOUNT;
-
             IF @rowsAffected = 0 BREAK;
-
             -- Paso 2 y 3 en una sola transacción para garantizar consistencia
             BEGIN TRANSACTION T_Move;
-
             INSERT INTO dbo.Ejecuciones_Historico (
                 EjecucionId,
 				DeploymentId,
@@ -1136,20 +1029,14 @@ BEGIN
                 IntentosConciliadorFallidos,
                 CallbackInfo
             FROM #LoteActual;
-
             DELETE e
             FROM dbo.Ejecuciones e
             INNER JOIN #LoteActual l ON e.EjecucionID = l.EjecucionID;
-
             COMMIT TRANSACTION T_Move;
-
             SET @totalRowsMoved = @totalRowsMoved + @rowsAffected;
-
             IF @iterationCount % 10 = 0
                 PRINT 'Procesados ' + CAST(@totalRowsMoved AS VARCHAR(10)) + ' registros en ' + CAST(@iterationCount AS VARCHAR(10)) + ' lotes.';
-
             IF @rowsAffected = @BatchSizeParam WAITFOR DELAY '00:00:02';
-
         END TRY
         BEGIN CATCH
             IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
@@ -1161,7 +1048,6 @@ BEGIN
 				ERROR_MESSAGE() + ' (Iteración: ' + CAST(@iterationCount AS VARCHAR) + ')',
 				'Lote: ' + CAST(@BatchSizeParam AS VARCHAR) + ', Registros movidos hasta ahora: ' + CAST(@totalRowsMoved AS VARCHAR)
 			);
-
             IF ERROR_NUMBER() = 9002 -- Log lleno
             BEGIN
                 PRINT 'Error de log lleno detectado. Abortando proceso.';
@@ -1174,47 +1060,34 @@ BEGIN
             END
         END CATCH
     END
-
     PRINT 'Movimiento finalizado. Total de registros movidos: ' + CAST(@totalRowsMoved AS VARCHAR(10));
     IF @iterationCount >= @MaxIterationsParam
         PRINT 'ADVERTENCIA: El proceso se detuvo al alcanzar el límite máximo de iteraciones (' + CAST(@MaxIterationsParam AS VARCHAR) + '). Podrían quedar registros por mover.';
-
     -- =================================================================================
     -- PARTE 2: PURGAR REGISTROS ANTIGUOS DE 'Ejecuciones_Historico'
     -- =================================================================================
-
     DECLARE @purgeDate DATE = DATEADD(day, -@DiasRetencionPurga, GETDATE());
     DECLARE @totalRowsPurged INT = 0;
     DECLARE @purgeIterations INT = 0;
-
     PRINT 'Iniciando purga de registros históricos con más de ' + CAST(@DiasRetencionPurga AS VARCHAR) + ' días de antigüedad.';
-
     SET @rowsAffected = @BatchSizeParam;
     WHILE @rowsAffected = @BatchSizeParam AND @purgeIterations < @MaxIterationsParam
     BEGIN
         SET @purgeIterations = @purgeIterations + 1;
-
         BEGIN TRY
             BEGIN TRANSACTION T_Purge;
-
             DELETE TOP (@BatchSizeParam)
             FROM dbo.Ejecuciones_Historico
             WHERE FechaInicio < @purgeDate;
-
             SET @rowsAffected = @@ROWCOUNT;
             COMMIT TRANSACTION T_Purge;
-
             SET @totalRowsPurged = @totalRowsPurged + @rowsAffected;
-
             IF @purgeIterations % 10 = 0 AND @rowsAffected > 0
                 PRINT 'Purgados ' + CAST(@totalRowsPurged AS VARCHAR(10)) + ' registros históricos.';
-
             IF @rowsAffected = @BatchSizeParam WAITFOR DELAY '00:00:01';
-
         END TRY
         BEGIN CATCH
             IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-
             INSERT INTO dbo.ErrorLog (FechaHora, Usuario, SPNombre, ErrorMensaje, Parametros)
             VALUES (
 				GETDATE(),
@@ -1223,7 +1096,6 @@ BEGIN
                 ERROR_MESSAGE() + ' (Iteración purga: ' + CAST(@purgeIterations AS VARCHAR) + ')',
                 'Fecha límite: ' + CONVERT(VARCHAR, @purgeDate, 120)
 			);
-
             IF ERROR_NUMBER() = 9002
             BEGIN
                 PRINT 'Error de log lleno en purga. Abortando proceso.';
@@ -1236,16 +1108,13 @@ BEGIN
             END
         END CATCH
     END
-
     PRINT 'Purga finalizada. Total de registros eliminados del histórico: ' + CAST(@totalRowsPurged AS VARCHAR(10));
      IF @purgeIterations >= @MaxIterationsParam
         PRINT 'ADVERTENCIA: La purga se detuvo al alcanzar el límite máximo de iteraciones (' + CAST(@MaxIterationsParam AS VARCHAR) + '). Podrían quedar registros por purgar.';
-
     -- Estadísticas finales
     PRINT '=== RESUMEN DE EJECUCIÓN ===';
     PRINT 'Registros movidos a histórico: ' + CAST(@totalRowsMoved AS VARCHAR(10));
     PRINT 'Registros purgados del histórico: ' + CAST(@totalRowsPurged AS VARCHAR(10));
     PRINT 'Proceso SAM completado exitosamente.';
-
 END
 GO

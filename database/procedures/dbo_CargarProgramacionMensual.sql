@@ -1,9 +1,3 @@
-SET ANSI_NULLS ON
-SET QUOTED_IDENTIFIER ON
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[CargarProgramacionMensual]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CargarProgramacionMensual] AS'
-END
 -- =============================================
 -- Author:      <Author,,Name>
 -- Create date: <Create Date,,>
@@ -18,7 +12,7 @@ END
 --   - Se manejan advertencias para equipos no encontrados.
 --   - Se mantiene la lógica de transacción y actualización de Robot.EsOnline.
 -- =============================================
-ALTER PROCEDURE [dbo].[CargarProgramacionMensual]
+CREATE PROCEDURE dbo.CargarProgramacionMensual
     @Robot NVARCHAR(100),
     @Equipos NVARCHAR(MAX), -- Comma-separated team names
     @DiaDelMes INT,
@@ -27,7 +21,6 @@ ALTER PROCEDURE [dbo].[CargarProgramacionMensual]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     DECLARE @RobotId INT;
     DECLARE @NewProgramacionId INT;
     DECLARE @CurrentEquipoId INT;
@@ -36,56 +29,43 @@ BEGIN
     DECLARE @ErrorSeverity INT;
     DECLARE @ErrorState INT;
     DECLARE @HoraInicioStr NVARCHAR(MAX);
-
     -- Convert HoraInicio TIME to NVARCHAR(MAX) for Programaciones table if its type is NVARCHAR(MAX)
     SET @HoraInicioStr = CONVERT(NVARCHAR(8), @HoraInicio); -- HH:MM:SS format
-
     BEGIN TRY
         BEGIN TRANSACTION;
-
         -- Obtener RobotId
         SELECT @RobotId = RobotId FROM dbo.Robots WHERE Robot = @Robot;
-
         IF @RobotId IS NULL
         BEGIN
             RAISERROR('El robot especificado no existe.', 16, 1);
             RETURN;
         END
-
         -- Insertar en Programaciones
         -- Note: Assuming Programaciones.HoraInicio is NVARCHAR(MAX). If it's TIME, use @HoraInicio directly.
         INSERT INTO dbo.Programaciones (RobotId, TipoProgramacion, DiaDelMes, HoraInicio, Tolerancia, Activo, FechaCreacion)
         VALUES (@RobotId, 'Mensual', @DiaDelMes, @HoraInicioStr, @Tolerancia, 1, GETDATE());
-
         -- Obtener el ProgramacionId recién insertado
         SET @NewProgramacionId = SCOPE_IDENTITY();
-
         IF @NewProgramacionId IS NULL
         BEGIN
             RAISERROR('No se pudo obtener el ID de la nueva programación.', 16, 1);
             RETURN;
         END
-
         -- Actualizar el estado del Robot
         UPDATE dbo.Robots
         SET EsOnline = 0
         WHERE RobotId = @RobotId;
-
         -- Procesar cada equipo en la lista @Equipos
         DECLARE team_cursor CURSOR FOR
         SELECT LTRIM(RTRIM(value))
         FROM STRING_SPLIT(@Equipos, ',');
-
         OPEN team_cursor;
         FETCH NEXT FROM team_cursor INTO @CurrentEquipoNombre;
-
         WHILE @@FETCH_STATUS = 0
         BEGIN
             SET @CurrentEquipoId = NULL;
-
             -- Obtener EquipoId para el equipo actual
             SELECT @CurrentEquipoId = EquipoId FROM dbo.Equipos WHERE Equipo = @CurrentEquipoNombre;
-
             IF @CurrentEquipoId IS NOT NULL
             BEGIN
                 -- Verificar si la asignación ya existe
@@ -104,7 +84,6 @@ BEGIN
                     INSERT INTO dbo.Asignaciones (RobotId, EquipoId, EsProgramado, ProgramacionId, Reservado, AsignadoPor, FechaAsignacion)
                     VALUES (@RobotId, @CurrentEquipoId, 1, @NewProgramacionId, 0, 'SP_Programacion_Mensual', GETDATE());
                 END
-
                 -- Actualizar el equipo para que no permita balanceo dinámico
                 UPDATE dbo.Equipos
                 SET PermiteBalanceoDinamico = 0
@@ -114,33 +93,26 @@ BEGIN
             BEGIN
                 PRINT 'Warning: Equipo ' + @CurrentEquipoNombre + ' no encontrado y no será asignado.';
             END
-
             FETCH NEXT FROM team_cursor INTO @CurrentEquipoNombre;
         END
-
         CLOSE team_cursor;
         DEALLOCATE team_cursor;
-
         COMMIT TRANSACTION;
         PRINT 'Programación mensual cargada y equipos asignados/actualizados exitosamente para el robot ' + @Robot;
-
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0
             ROLLBACK TRANSACTION;
-
         SELECT
             @ErrorMessage = ERROR_MESSAGE(),
             @ErrorSeverity = ERROR_SEVERITY(),
             @ErrorState = ERROR_STATE();
-
         -- Registrar el error en la tabla ErrorLog
         DECLARE @Parametros NVARCHAR(MAX);
         SET @Parametros = '@Robot = ' + @Robot +
                         ', @Equipos = ' + @Equipos +
                         ', @HoraInicio = ' + CONVERT(NVARCHAR(8), @HoraInicio, 108) +
                         ', @Tolerancia = ' + CAST(@Tolerancia AS NVARCHAR(10));
-
         -- Luego:
         INSERT INTO ErrorLog (Usuario, SPNombre, ErrorMensaje, Parametros)
         VALUES (
@@ -149,11 +121,8 @@ BEGIN
             ERROR_MESSAGE(),
             @Parametros
         );
-
-
         -- Mostrar un mensaje de error
         PRINT 'Error: ' + ERROR_MESSAGE();
-
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END

@@ -1450,7 +1450,6 @@ wheels = [
 
 [[package]]
 name = "sam"
-version = "1.6.3"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

@@ -1,4 +1,5 @@
-CREATE OR ALTER PROCEDURE [dbo].[Analisis_Dispersion]
+-- Inicio de dbo_Analisis_Dispersion.sql
+CREATE   PROCEDURE [dbo].[Analisis_Dispersion]
     @pRobot VARCHAR(100),
     @pFecha DATE = NULL,
     @pTop   INT  = NULL,
@@ -6,20 +7,16 @@ CREATE OR ALTER PROCEDURE [dbo].[Analisis_Dispersion]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     DECLARE @RobotId INT;
-
     -- Resolver RobotId a partir del nombre
     SELECT @RobotId = RobotId
     FROM   dbo.Robots
     WHERE  Robot = @pRobot;
-
     IF @RobotId IS NULL
     BEGIN
         RAISERROR('El robot ''%s'' no existe en la tabla maestra.', 16, 1, @pRobot);
         RETURN;
     END;
-
     /* 1. CTE base de ejecuciones */
     ;WITH Ejecs AS
     (
@@ -57,7 +54,6 @@ BEGIN
         FROM Filtradas
     )
     SELECT * INTO #ConDelta FROM ConDelta;
-
     /* 2. RESUMEN: agrupado por equipo + robot */
     SELECT
             r.Robot,
@@ -74,9 +70,7 @@ BEGIN
     INNER JOIN dbo.Robots r ON r.RobotId = cd.RobotId
     WHERE   cd.DeltaSec IS NOT NULL
     GROUP BY r.Robot, e.Equipo;
-
 	SELECT * FROM #Resumen ORDER BY Robot, Equipo;
-
     /* 3. DETALLE */
     SELECT
             cd.EjecucionID,
@@ -96,7 +90,6 @@ BEGIN
     INNER JOIN dbo.Robots r ON r.RobotId = cd.RobotId
     WHERE   cd.DeltaSec IS NOT NULL
     ORDER BY e.Equipo, cd.FechaInicio;
-
     DROP TABLE #Resumen;
     DROP TABLE #ConDelta;
 END;

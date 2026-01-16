@@ -1,21 +1,18 @@
-CREATE OR ALTER PROCEDURE [dbo].[Analisis_Latencia]
+-- Inicio de dbo_Analisis_Latencia.sql
+CREATE   PROCEDURE [dbo].[Analisis_Latencia]
     @Scope VARCHAR(20) = 'TODAS', -- 'ACTUALES', 'HISTORICAS', 'TODAS'
     @FechaDesde DATETIME = NULL,
     @FechaHasta DATETIME = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
-
     -- Validar parámetros
     IF @Scope NOT IN ('ACTUALES', 'HISTORICAS', 'TODAS')
         SET @Scope = 'TODAS';
-
     IF @FechaDesde IS NULL
         SET @FechaDesde = DATEADD(DAY, -30, GETDATE()); -- Default últimos 30 días
-
     IF @FechaHasta IS NULL
         SET @FechaHasta = GETDATE();
-
     -- CTE para unificar datos
     WITH AllExecutions AS (
         SELECT
@@ -29,9 +26,7 @@ BEGIN
             'ACTUAL' AS Origen
         FROM dbo.Ejecuciones
         WHERE (@Scope IN ('ACTUALES', 'TODAS'))
-
         UNION ALL
-
         SELECT
             EjecucionId,
             RobotId,
@@ -61,6 +56,4 @@ BEGIN
         FechaLanzamientoSAM BETWEEN @FechaDesde AND @FechaHasta
         AND FechaInicioA360 IS NOT NULL -- Solo analizar si tenemos el dato real
     ORDER BY FechaLanzamientoSAM DESC;
-
 END
-GO
