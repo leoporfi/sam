@@ -1,3 +1,6 @@
+-- Script Maestro de Despliegue de SPs de Analítica
+-- Generado automáticamente
+-- Inicio de dbo_Analisis_TasasExito.sql
 -- =============================================
 -- Stored Procedure: AnalisisTasasExito
 -- Descripción: Análisis de tasas de éxito y tipos de error
@@ -13,21 +16,18 @@
 --   ERROR:  RUN_FAILED, DEPLOY_FAILED, RUN_ABORTED
 --   OTROS:  RUNNING, DEPLOYED, QUEUED (se excluyen del análisis)
 -- =============================================
-CREATE OR ALTER PROCEDURE [dbo].[Analisis_TasasExito]
+CREATE   PROCEDURE [dbo].[Analisis_TasasExito]
     @FechaInicio DATETIME = NULL,
     @FechaFin DATETIME = NULL,
     @RobotId INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
-
     -- Si no se especifican fechas, usar los últimos 30 días
     IF @FechaInicio IS NULL
         SET @FechaInicio = DATEADD(DAY, -30, GETDATE());
-
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
-
     -- CTE para unir ejecuciones actuales e históricas
     -- Solo incluimos ejecuciones finalizadas (éxito o error)
     WITH TodasEjecuciones AS (
@@ -39,9 +39,7 @@ BEGIN
         WHERE FechaInicio >= @FechaInicio AND FechaInicio <= @FechaFin
           AND (@RobotId IS NULL OR RobotId = @RobotId)
           AND Estado IN ('RUN_COMPLETED', 'COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
-
         UNION ALL
-
         SELECT
             RobotId,
             EquipoId,
@@ -51,7 +49,6 @@ BEGIN
           AND (@RobotId IS NULL OR RobotId = @RobotId)
           AND Estado IN ('RUN_COMPLETED', 'COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
     )
-
     -- Result Set 1: Resumen Global de Estados
     SELECT
         Estado,
@@ -60,7 +57,6 @@ BEGIN
     FROM TodasEjecuciones
     GROUP BY Estado
     ORDER BY Cantidad DESC;
-
     -- Result Set 2: Top Tipos de Error/Fallo
     -- Analiza solo los estados de error/fallo de A360
     WITH TodasEjecucionesErrores AS (
@@ -70,9 +66,7 @@ BEGIN
         WHERE FechaInicio >= @FechaInicio AND FechaInicio <= @FechaFin
           AND (@RobotId IS NULL OR RobotId = @RobotId)
           AND Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
-
         UNION ALL
-
         SELECT
             Estado
         FROM dbo.Ejecuciones_Historico
@@ -86,7 +80,6 @@ BEGIN
     FROM TodasEjecucionesErrores
     GROUP BY Estado
     ORDER BY Cantidad DESC;
-
     -- Result Set 3: Detalle por Robot
     -- Redefinir el CTE TodasEjecuciones para esta consulta
     WITH TodasEjecuciones AS (
@@ -98,9 +91,7 @@ BEGIN
         WHERE FechaInicio >= @FechaInicio AND FechaInicio <= @FechaFin
           AND (@RobotId IS NULL OR RobotId = @RobotId)
           AND Estado IN ('RUN_COMPLETED', 'COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
-
         UNION ALL
-
         SELECT
             RobotId,
             EquipoId,
@@ -131,6 +122,4 @@ BEGIN
         CAST(Exitos * 100.0 / NULLIF(Total, 0) AS DECIMAL(5,2)) AS TasaExito
     FROM StatsPorRobot
     ORDER BY TasaExito ASC;
-
 END;
-GO

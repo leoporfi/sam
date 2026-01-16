@@ -22,6 +22,24 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 
+def log_audit(
+    db: DatabaseConnector,
+    accion: str,
+    entidad: str,
+    entidad_id: str,
+    detalle: str,
+    host: str,
+    usuario: str = "WebApp",
+):
+    """Registra una acción en la tabla de auditoría."""
+    try:
+        query = "EXEC dbo.RegistrarAuditoria @Accion=?, @Entidad=?, @EntidadId=?, @Detalle=?, @Host=?, @Usuario=?"
+        params = (accion, entidad, entidad_id, detalle, host, usuario)
+        db.ejecutar_consulta(query, params, es_select=False)
+    except Exception as e:
+        logger.error(f"Error al registrar auditoría: {e}", exc_info=True)
+
+
 # Sincronización con A360
 async def sync_with_a360(db: DatabaseConnector, aa_client: AutomationAnywhereClient) -> Dict:
     """

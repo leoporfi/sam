@@ -1,15 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ValidarSolapamientoVentanas]') AND type in (N'P', N'PC'))
-BEGIN
-    EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ValidarSolapamientoVentanas] AS'
-END
-GO
-
-ALTER PROCEDURE [dbo].[ValidarSolapamientoVentanas]
+CREATE PROCEDURE [dbo].[ValidarSolapamientoVentanas]
     @EquipoId INT,
     @HoraInicio TIME,
     @HoraFin TIME = NULL,
@@ -26,7 +15,6 @@ ALTER PROCEDURE [dbo].[ValidarSolapamientoVentanas]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     ---------------------------------------------------------------------------
     -- 1. PREPARACIÓN DE DATOS
     ---------------------------------------------------------------------------
@@ -34,7 +22,6 @@ BEGIN
     -- El SP padre (CrearProgramacion) debe calcular @HoraFin usando la Tolerancia
     -- antes de llamar a este procedimiento.
     DECLARE @HoraFinCalculada TIME = ISNULL(@HoraFin, '23:59:59');
-
     ---------------------------------------------------------------------------
     -- 2. BUSCAR CONFLICTOS
     ---------------------------------------------------------------------------
@@ -66,7 +53,6 @@ BEGIN
         A.EquipoId = @EquipoId
         AND P.Activo = 1
         AND (@ProgramacionId IS NULL OR P.ProgramacionId <> @ProgramacionId)
-
         -----------------------------------------------------------------------
         -- 3. VALIDACIÓN DE FECHAS (VIGENCIA)
         -----------------------------------------------------------------------
@@ -78,7 +64,6 @@ BEGIN
             AND
             (@FechaFinVentana IS NULL OR P.FechaInicioVentana IS NULL OR @FechaFinVentana >= P.FechaInicioVentana)
         )
-
         -----------------------------------------------------------------------
         -- 4. VALIDACIÓN DE HORARIOS (TIEMPO)
         -----------------------------------------------------------------------
@@ -89,7 +74,6 @@ BEGIN
             AND
             @HoraFinCalculada > P.HoraInicio
         )
-
         -----------------------------------------------------------------------
         -- 5. VALIDACIÓN DE TIPOS Y PATRONES (LÓGICA CRUZADA)
         -----------------------------------------------------------------------
@@ -98,9 +82,7 @@ BEGIN
             -- Una programación Diaria ejecuta todos los días, por lo que colisiona
             -- con cualquier otra programación que tenga solapamiento de horario.
             (@TipoProgramacion = 'Diaria' OR P.TipoProgramacion = 'Diaria')
-
             OR
-
             -- CASO B: SEMANAL vs SEMANAL
             -- Dos programaciones semanales chocan solo si tienen al menos un día en común.
             -- Ejemplo: Lu,Ma,Mi choca con Mi,Ju,Vi (tienen Mi en común)
@@ -111,17 +93,13 @@ BEGIN
                 JOIN STRING_SPLIT(P.DiasSemana, ',') s2 ON LTRIM(RTRIM(s1.value)) = LTRIM(RTRIM(s2.value))
              )
             )
-
             OR
-
             -- CASO C: MENSUAL vs MENSUAL
             -- Dos programaciones mensuales chocan solo si ejecutan el mismo día del mes.
             -- Ejemplo: día 5 choca con día 5, pero no con día 10
             (@TipoProgramacion = 'Mensual' AND P.TipoProgramacion = 'Mensual'
              AND @DiaDelMes = P.DiaDelMes)
-
             OR
-
             -- CASO D: RANGO MENSUAL vs RANGO MENSUAL
             -- Dos rangos mensuales chocan si sus intervalos de días se solapan.
             (@TipoProgramacion = 'RangoMensual' AND P.TipoProgramacion = 'RangoMensual'
@@ -136,15 +114,12 @@ BEGIN
                  (@UltimosDiasMes IS NOT NULL AND P.UltimosDiasMes IS NOT NULL)
              )
             )
-
             OR
-
             -- CASO E: ESPECÍFICA vs ESPECÍFICA
             -- Dos programaciones específicas chocan solo si son para la misma fecha exacta.
             (@TipoProgramacion = 'Especifica' AND P.TipoProgramacion = 'Especifica'
              AND P.FechaEspecifica = @FechaEspecifica
             )
-
             -----------------------------------------------------------------------
             -- NOTA SOBRE LIMITACIONES:
             -----------------------------------------------------------------------
@@ -162,6 +137,4 @@ BEGIN
             -- todos los demás tipos. El resto de validaciones híbridas se gestionan
             -- manualmente o mediante políticas de uso.
         );
-
 END
-GO

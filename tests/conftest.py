@@ -33,10 +33,8 @@ def setup_and_mock_config(pytestconfig):
     def mock_get(key, default=None):
         return mock_settings.get(key, default)
 
-    # Aplicamos el patch a los métodos de ConfigManager
-    patch("sam.common.config_manager.ConfigManager.get_str", side_effect=mock_get).start()
-    patch("sam.common.config_manager.ConfigManager.get_int", return_value=30).start()
-    patch("sam.common.config_manager.ConfigManager.get_bool", return_value=True).start()
+    # Aplicamos el patch al método interno que usa ConfigManager
+    patch("sam.common.config_manager.ConfigManager._get_env_with_warning", side_effect=mock_get).start()
 
 
 @pytest.fixture

@@ -1,21 +1,11 @@
-SET ANSI_NULLS ON
-SET QUOTED_IDENTIFIER ON
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ListarProgramacionesPorRobot]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ListarProgramacionesPorRobot] AS'
-END
 -- =============================================
--- Author:      <Author>
--- Create date: <Create Date>
--- Description: Obtiene las programaciones para un robot específico,
---              incluyendo una lista de los equipos asignados.
+-- 2. Actualizar ListarProgramacionesPorRobot
 -- =============================================
-ALTER   PROCEDURE [dbo].[ListarProgramacionesPorRobot]
+CREATE PROCEDURE [dbo].[ListarProgramacionesPorRobot]
     @RobotId INT
 AS
 BEGIN
     SET NOCOUNT ON;
-
     SELECT
         P.ProgramacionId,
         P.RobotId,

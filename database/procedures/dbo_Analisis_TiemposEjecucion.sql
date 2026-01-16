@@ -1,4 +1,5 @@
-CREATE OR ALTER PROCEDURE [dbo].[Analisis_TiemposEjecucion]
+-- Inicio de dbo_Analisis_TiemposEjecucion.sql
+CREATE   PROCEDURE [dbo].[Analisis_TiemposEjecucion]
     @ExcluirPorcentajeInferior DECIMAL(3,2) = 0.15,  -- 15% por defecto
     @ExcluirPorcentajeSuperior DECIMAL(3,2) = 0.85,  -- 85% por defecto
     @IncluirSoloCompletadas BIT = 1,                   -- 1 = Solo completadas, 0 = Todos los estados
@@ -7,14 +8,12 @@ CREATE OR ALTER PROCEDURE [dbo].[Analisis_TiemposEjecucion]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     -- Validar parámetros
     IF @ExcluirPorcentajeInferior >= @ExcluirPorcentajeSuperior
     BEGIN
         RAISERROR('El porcentaje inferior debe ser menor que el superior', 16, 1);
         RETURN;
     END;
-
     -- Análisis de tiempos de ejecución por robot excluyendo extremos
     -- INCLUYE: Datos actuales e históricos, FechaInicioReal, y número de repeticiones
     WITH EjecucionesUnificadas AS (
@@ -34,9 +33,7 @@ BEGIN
             AND e.FechaInicio >= DATEADD(MONTH, -@MesesHaciaAtras, GETDATE())
             AND (@IncluirSoloCompletadas = 0 OR e.Estado IN ('COMPLETED', 'RUN_COMPLETED'))
             AND DATEDIFF(SECOND, e.FechaInicio, e.FechaFin) > 0
-
         UNION ALL
-
         -- Datos históricos
         SELECT
             eh.EjecucionId,
@@ -142,42 +139,34 @@ BEGIN
         COUNT(*) AS EjecucionesAnalizadas,
         MAX(tf.TotalRegistros) AS TotalEjecucionesOriginales,
         CAST((COUNT(*) * 100.0 / MAX(tf.TotalRegistros)) AS DECIMAL(5,2)) AS PorcentajeIncluido,
-
         -- MÉTRICAS DE TIEMPO POR REPETICIÓN (lo más importante)
         AVG(CAST(tf.DuracionPorRepeticionMinutos AS FLOAT)) AS TiempoPromedioPorRepeticionMinutos,
         AVG(CAST(tf.DuracionPorRepeticionSegundos AS FLOAT)) AS TiempoPromedioPorRepeticionSegundos,
         MAX(tf.DuracionPorRepeticionMinutos) AS TiempoMaximoPorRepeticionMinutos,
         MIN(tf.DuracionPorRepeticionMinutos) AS TiempoMinimoPorRepeticionMinutos,
         CONVERT(VARCHAR(8), DATEADD(SECOND, AVG(CAST(tf.DuracionPorRepeticionSegundos AS FLOAT)), 0), 108) AS TiempoPromedioPorRepeticionFormateado,
-
         -- MÉTRICAS DE TIEMPO TOTAL (por ejecución completa)
         AVG(CAST(tf.DuracionTotalMinutos AS FLOAT)) AS TiempoPromedioTotalMinutos,
         AVG(CAST(tf.DuracionTotalSegundos AS FLOAT)) AS TiempoPromedioTotalSegundos,
         SUM(CAST(tf.DuracionTotalMinutos AS FLOAT)) AS TiempoTotalAcumuladoMinutos,
-
         -- MÉTRICAS DE REPETICIONES
         AVG(CAST(tf.NumRepeticiones AS FLOAT)) AS PromedioRepeticiones,
         MAX(tf.NumRepeticiones) AS MaxRepeticiones,
         MIN(tf.NumRepeticiones) AS MinRepeticiones,
-
         -- MÉTRICAS DE LATENCIA (delay entre disparo e inicio real)
         AVG(CAST(tf.LatenciaInicioSegundos AS FLOAT)) AS LatenciaPromedioSegundos,
         AVG(CAST(tf.LatenciaInicioSegundos AS FLOAT) / 60.0) AS LatenciaPromedioMinutos,
         MAX(tf.LatenciaInicioSegundos) AS LatenciaMaximaSegundos,
         COUNT(CASE WHEN tf.LatenciaInicioSegundos IS NOT NULL THEN 1 END) AS EjecucionesConLatencia,
-
         -- ESTADÍSTICAS
         STDEV(CAST(tf.DuracionPorRepeticionSegundos AS FLOAT)) AS DesviacionEstandarSegundos,
         CONCAT('P', CAST(@ExcluirPorcentajeInferior * 100 AS INT), ' - P', CAST(@ExcluirPorcentajeSuperior * 100 AS INT)) AS RangoPercentiles,
-
         -- INFORMACIÓN DE ORIGEN DE DATOS
         SUM(CASE WHEN tf.Origen = 'ACTUAL' THEN 1 ELSE 0 END) AS EjecucionesActuales,
         SUM(CASE WHEN tf.Origen = 'HISTORICA' THEN 1 ELSE 0 END) AS EjecucionesHistoricas,
-
         GETDATE() AS FechaAnalisis
     FROM TiemposFiltrados tf
     INNER JOIN dbo.Robots r ON r.RobotId = tf.RobotId
     GROUP BY tf.RobotId, r.Robot, r.EsOnline
     ORDER BY TiempoPromedioPorRepeticionSegundos DESC;
 END;
-GO

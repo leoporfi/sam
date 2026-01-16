@@ -6,7 +6,10 @@ from pathlib import Path
 def get_version_from_pyproject():
     try:
         content = Path("pyproject.toml").read_text(encoding="utf-8")
-        match = re.search(r'version\s*=\s*"([^"]+)"', content)
+        # Check if version is dynamic
+        if re.search(r'dynamic\s*=\s*\[.*"version".*\]', content):
+            return None  # Version is dynamic, skip check
+        match = re.search(r'^\s*version\s*=\s*"([^"]+)"', content, re.MULTILINE)
         if match:
             return match.group(1)
     except Exception as e:
@@ -29,9 +32,15 @@ def main():
     v_toml = get_version_from_pyproject()
     v_init = get_version_from_init()
 
-    if not v_toml:
-        print("[ERROR] Could not find version in pyproject.toml")
-        sys.exit(1)
+    # If pyproject.toml uses dynamic versioning, skip the check
+    if v_toml is None:
+        print("[OK] pyproject.toml uses dynamic versioning from __init__.py")
+        if v_init:
+            print(f"[OK] Version: {v_init}")
+            sys.exit(0)
+        else:
+            print("[ERROR] Could not find version in src/sam/__init__.py")
+            sys.exit(1)
 
     if not v_init:
         print("[ERROR] Could not find version in src/sam/__init__.py")

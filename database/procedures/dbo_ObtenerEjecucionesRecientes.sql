@@ -1,13 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerEjecucionesRecientes]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerEjecucionesRecientes] AS'
-END
-GO
-ALTER PROCEDURE [dbo].[ObtenerEjecucionesRecientes]
+CREATE PROCEDURE [dbo].[ObtenerEjecucionesRecientes]
     @Limit INT = 50,
     @CriticalOnly BIT = 1,
     @UmbralFijoMinutos INT = 25,
@@ -18,8 +9,6 @@ ALTER PROCEDURE [dbo].[ObtenerEjecucionesRecientes]
     @FiltroEjecucionesCortasMinutos INT = 2
 AS
 BEGIN
-    SET NOCOUNT ON;
-
     WITH TiemposPromedio AS (
         -- Calcular tiempo promedio por robot (solo si tiene suficiente historial)
         -- Filtramos ejecuciones menores a 2 min para evitar que ejecuciones 'vacías' sesguen el promedio
@@ -47,7 +36,6 @@ BEGIN
             CASE
                 -- Fallos inmediatos
                 WHEN e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED') THEN 'Fallo'
-
                 -- RUNNING o DEPLOYED demorados
                 WHEN e.Estado IN ('RUNNING', 'DEPLOYED') AND (
                     (tp.TiempoPromedioMinutos IS NOT NULL AND
@@ -61,7 +49,6 @@ BEGIN
                     (tp.TiempoPromedioMinutos IS NULL AND
                      DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > @UmbralFijoMinutos)
                 ) THEN 'Demorada'
-
                 -- QUEUED huérfano (sin DEPLOYED/RUNNING correspondiente)
                 WHEN e.Estado = 'QUEUED'
                      AND DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > 5
@@ -72,14 +59,12 @@ BEGIN
                           AND e2.Estado IN ('DEPLOYED', 'RUNNING')
                           AND e2.FechaInicio >= e.FechaInicio
                      ) THEN 'Huerfana'
-
                 ELSE NULL
             END AS TipoCritico,
             CASE
                 -- Mensaje para Fallos
                 WHEN e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
                 THEN ISNULL(CAST(e.CallbackInfo AS NVARCHAR(MAX)), 'Fallo técnico reportado por A360')
-
                 -- Mensaje para Demoras
                 WHEN e.Estado IN ('RUNNING', 'DEPLOYED') AND (
                     (tp.TiempoPromedioMinutos IS NOT NULL AND
@@ -102,7 +87,6 @@ BEGIN
                             END
                         ELSE @UmbralFijoMinutos
                     END AS DECIMAL(10,1)) AS VARCHAR(10)) + ' min'
-
                 -- Mensaje para Huérfanas
                 WHEN e.Estado = 'QUEUED'
                      AND DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > 5
@@ -113,7 +97,6 @@ BEGIN
                           AND e2.Estado IN ('DEPLOYED', 'RUNNING')
                           AND e2.FechaInicio >= e.FechaInicio
                      ) THEN 'Sin actividad detectada en DEPLOYED/RUNNING'
-
                 ELSE NULL
             END AS MensajeError,
             CASE
@@ -149,22 +132,18 @@ BEGIN
     INTO #ResultadosAnalisis
     FROM EjecucionesConEstado
     WHERE (@CriticalOnly = 0 OR TipoCritico IS NOT NULL);
-
     -- Result Set 1: FALLOS (Prioridad Alta)
     SELECT TOP (@Limit)
         *
     FROM #ResultadosAnalisis
     WHERE TipoCritico = 'Fallo'
     ORDER BY FechaInicio DESC;
-
     -- Result Set 2: DEMORAS y HUÉRFANAS (Prioridad Operativa)
     SELECT TOP (@Limit)
         *
     FROM #ResultadosAnalisis
     WHERE TipoCritico IN ('Demorada', 'Huerfana')
     ORDER BY TiempoTranscurridoMinutos DESC;
-
     -- Limpieza
     DROP TABLE #ResultadosAnalisis;
 END
-GO

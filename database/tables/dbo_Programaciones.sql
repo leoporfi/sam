@@ -29,7 +29,6 @@ CREATE TABLE [dbo].[Programaciones](
 ) ON [PRIMARY]
 END
 SET ANSI_PADDING ON
-
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = OBJECT_ID(N'[dbo].[Programaciones]') AND name = N'IX_Programaciones_Activo_EsCiclico_Tipo')
 CREATE NONCLUSTERED INDEX [IX_Programaciones_Activo_EsCiclico_Tipo] ON [dbo].[Programaciones]
 (

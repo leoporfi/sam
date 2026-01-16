@@ -1,14 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ActualizarProgramacionSimple]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ActualizarProgramacionSimple] AS'
-END
-GO
-
-ALTER PROCEDURE [dbo].[ActualizarProgramacionSimple]
+CREATE PROCEDURE [dbo].[ActualizarProgramacionSimple]
     @ProgramacionId INT,
     @TipoProgramacion NVARCHAR(20),
     @HoraInicio TIME,
@@ -29,32 +19,27 @@ ALTER PROCEDURE [dbo].[ActualizarProgramacionSimple]
 AS
 BEGIN
     SET NOCOUNT ON;
-
     -- Variables para cálculo de HoraFin
     DECLARE @FechaBase DATETIME;
     DECLARE @InicioFull DATETIME;
     DECLARE @FinFull DATETIME;
     DECLARE @HoraFinCalculada TIME;
-
     -------------------------------------------------------------------------
     -- CÁLCULO DE @HoraFin
     -------------------------------------------------------------------------
     SET @HoraFinCalculada = @HoraFin;
-
     -- Si no se especificó HoraFin, calcularla usando la Tolerancia
     IF @HoraFinCalculada IS NULL AND @Tolerancia IS NOT NULL AND @Tolerancia > 0
     BEGIN
         SET @FechaBase = CAST(GETDATE() AS DATE);
         SET @InicioFull = DATEADD(MINUTE, DATEDIFF(MINUTE, 0, @HoraInicio), @FechaBase);
         SET @FinFull = DATEADD(MINUTE, @Tolerancia, @InicioFull);
-
         IF CAST(@FinFull AS DATE) > CAST(@InicioFull AS DATE)
             SET @HoraFinCalculada = '23:59:59';
         ELSE
             SET @HoraFinCalculada = CAST(@FinFull AS TIME);
     END
     -------------------------------------------------------------------------
-
     UPDATE dbo.Programaciones
     SET
         TipoProgramacion = @TipoProgramacion,
@@ -75,7 +60,6 @@ BEGIN
         FechaModificacion = GETDATE()
     WHERE
         ProgramacionId = @ProgramacionId;
-
     IF @@ROWCOUNT = 0
     BEGIN
         RAISERROR('Programación no encontrada.', 16, 1);
@@ -85,4 +69,3 @@ BEGIN
         PRINT 'Programación actualizada exitosamente.';
     END
 END
-GO
