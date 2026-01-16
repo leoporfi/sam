@@ -99,6 +99,15 @@ async def trigger_sync_robots(
         # Usamos el wrapper, no la tarea directa
         background_tasks.add_task(run_robot_sync_task, db, aa_client, app_state)
 
+    db_service.log_audit(
+        db,
+        accion="SYNC",
+        entidad="Robot",
+        entidad_id="ALL",
+        detalle="Sincronización de robots iniciada manualmente",
+        host=request.client.host,
+    )
+
     return {"message": "Sincronización de robots iniciada."}
 
 
@@ -119,6 +128,15 @@ async def trigger_sync_equipos(
 
         # Usamos el wrapper de equipos
         background_tasks.add_task(run_equipo_sync_task, db, aa_client, app_state)
+
+    db_service.log_audit(
+        db,
+        accion="SYNC",
+        entidad="Equipo",
+        entidad_id="ALL",
+        detalle="Sincronización de equipos iniciada manualmente",
+        host=request.client.host,
+    )
 
     return {"message": "Sincronización de equipos iniciada."}
 
@@ -376,6 +394,7 @@ def get_recent_executions(
 
 @router.post("/api/executions/{deployment_id}/unlock", tags=["Analytics"])
 async def unlock_execution(
+    request: Request,
     deployment_id: str,
     db: DatabaseConnector = Depends(get_db),
     apigw_client: ApiGatewayClient = Depends(get_apigw_client),
@@ -443,6 +462,15 @@ async def unlock_execution(
             actions_taken.append(f"LOCAL_DB_ERROR: {str(e)[:50]}")
     else:
         actions_taken.append("LOCAL_DB_UPDATE_SKIPPED_BY_CALLBACK")
+
+    db_service.log_audit(
+        db,
+        accion="UNLOCK",
+        entidad="Ejecucion",
+        entidad_id=deployment_id,
+        detalle=f"Destrabado manual. Acciones: {', '.join(actions_taken)}",
+        host=request.client.host,
+    )
 
     return {
         "success": True,
@@ -577,13 +605,23 @@ def get_success_analysis(
 # Robots - Endpoints adicionales
 # ------------------------------------------------------------------
 @router.patch("/api/robots/{robot_id}", tags=["Robots"])
-def update_robot_status(robot_id: int, updates: Dict[str, bool] = Body(...), db: DatabaseConnector = Depends(get_db)):
+def update_robot_status(
+    request: Request, robot_id: int, updates: Dict[str, bool] = Body(...), db: DatabaseConnector = Depends(get_db)
+):
     """Actualiza el estado de un robot"""
     field = next(iter(updates))
     if field not in {"Activo", "EsOnline"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Campo no vÃ¡lido.")
     try:
         db_service.update_robot_status(db, robot_id, field, updates[field])
+        db_service.log_audit(
+            db,
+            accion="UPDATE_STATUS",
+            entidad="Robot",
+            entidad_id=str(robot_id),
+            detalle=f"Cambio en {field} a {updates[field]}",
+            host=request.client.host,
+        )
         return {"message": "Estado del robot actualizado."}
     except ValueError as ve:
         # Regla de negocio (robot programado, etc.)
@@ -595,10 +633,20 @@ def update_robot_status(robot_id: int, updates: Dict[str, bool] = Body(...), db:
 
 
 @router.put("/api/robots/{robot_id}", tags=["Robots"])
-def update_robot_details(robot_id: int, robot_data: RobotUpdateRequest, db: DatabaseConnector = Depends(get_db)):
+def update_robot_details(
+    request: Request, robot_id: int, robot_data: RobotUpdateRequest, db: DatabaseConnector = Depends(get_db)
+):
     try:
         updated = db_service.update_robot_details(db, robot_id, robot_data)
         if updated:
+            db_service.log_audit(
+                db,
+                accion="UPDATE",
+                entidad="Robot",
+                entidad_id=str(robot_id),
+                detalle=f"Actualización de detalles: {robot_data.dict()}",
+                host=request.client.host,
+            )
             return {"message": f"Robot {robot_id} actualizado."}
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Robot no encontrado.")
     except ValueError as ve:
@@ -608,9 +656,18 @@ def update_robot_details(robot_id: int, robot_data: RobotUpdateRequest, db: Data
 
 
 @router.post("/api/robots", tags=["Robots"], status_code=status.HTTP_201_CREATED)
-def create_robot(robot_data: RobotCreateRequest, db: DatabaseConnector = Depends(get_db)):
+def create_robot(request: Request, robot_data: RobotCreateRequest, db: DatabaseConnector = Depends(get_db)):
     try:
-        return db_service.create_robot(db, robot_data)
+        new_robot = db_service.create_robot(db, robot_data)
+        db_service.log_audit(
+            db,
+            accion="CREATE",
+            entidad="Robot",
+            entidad_id=str(robot_data.RobotId),
+            detalle=f"Creación de robot: {robot_data.dict()}",
+            host=request.client.host,
+        )
+        return new_robot
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(ve))
     except Exception as e:
@@ -658,17 +715,33 @@ def get_robot_schedules(robot_id: int, db: DatabaseConnector = Depends(get_db)):
 @router.delete(
     "/api/schedules/{programacion_id}/robot/{robot_id}", tags=["Programaciones"], status_code=status.HTTP_204_NO_CONTENT
 )
-def delete_schedule(programacion_id: int, robot_id: int, db: DatabaseConnector = Depends(get_db)):
+def delete_schedule(request: Request, programacion_id: int, robot_id: int, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.delete_schedule(db, programacion_id, robot_id)
+        db_service.log_audit(
+            db,
+            accion="DELETE",
+            entidad="Programacion",
+            entidad_id=str(programacion_id),
+            detalle=f"Eliminación de programación para robot {robot_id}",
+            host=request.client.host,
+        )
     except Exception as e:
         _handle_endpoint_errors("delete_schedule", e, "ProgramaciÃ³n", programacion_id)
 
 
 @router.post("/api/schedules", tags=["Programaciones"])
-def create_schedule(data: ScheduleData, db: DatabaseConnector = Depends(get_db)):
+def create_schedule(request: Request, data: ScheduleData, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.create_schedule(db, data)
+        db_service.log_audit(
+            db,
+            accion="CREATE",
+            entidad="Programacion",
+            entidad_id="NEW",
+            detalle=f"Creación de programación: {data.dict()}",
+            host=request.client.host,
+        )
         return {"message": "ProgramaciÃ³n creada."}
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
@@ -677,9 +750,17 @@ def create_schedule(data: ScheduleData, db: DatabaseConnector = Depends(get_db))
 
 
 @router.put("/api/schedules/{schedule_id}", tags=["Programaciones"])
-def update_schedule(schedule_id: int, data: ScheduleData, db: DatabaseConnector = Depends(get_db)):
+def update_schedule(request: Request, schedule_id: int, data: ScheduleData, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.update_schedule(db, schedule_id, data)
+        db_service.log_audit(
+            db,
+            accion="UPDATE",
+            entidad="Programacion",
+            entidad_id=str(schedule_id),
+            detalle=f"Actualización completa de programación: {data.dict()}",
+            host=request.client.host,
+        )
         return {"message": "ProgramaciÃ³n actualizada."}
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
@@ -689,6 +770,7 @@ def update_schedule(schedule_id: int, data: ScheduleData, db: DatabaseConnector 
 
 @router.patch("/api/schedules/{schedule_id}/status", tags=["Programaciones"], status_code=200)
 def toggle_schedule_status(
+    request: Request,
     schedule_id: int,
     body: dict,
     db: DatabaseConnector = Depends(get_db),
@@ -699,6 +781,14 @@ def toggle_schedule_status(
         if activo is None:
             raise ValueError("El cuerpo debe contener la clave 'Activo'")
         db_service.toggle_schedule_active(db, schedule_id, activo)
+        db_service.log_audit(
+            db,
+            accion="TOGGLE_STATUS",
+            entidad="Programacion",
+            entidad_id=str(schedule_id),
+            detalle=f"Cambio de estado Activo a {activo}",
+            host=request.client.host,
+        )
         return {"message": "Estado actualizado"}
     except Exception as e:
         _handle_endpoint_errors("toggle_schedule_status", e, "ProgramaciÃ³n", schedule_id)
@@ -706,6 +796,7 @@ def toggle_schedule_status(
 
 @router.put("/api/schedules/{schedule_id}/details", tags=["Programaciones"], status_code=status.HTTP_204_NO_CONTENT)
 def update_schedule_details(
+    request: Request,
     schedule_id: int,
     data: ScheduleEditData,
     db: DatabaseConnector = Depends(get_db),
@@ -716,6 +807,14 @@ def update_schedule_details(
     """
     try:
         db_service.update_schedule_simple(db, schedule_id, data)
+        db_service.log_audit(
+            db,
+            accion="UPDATE_SIMPLE",
+            entidad="Programacion",
+            entidad_id=str(schedule_id),
+            detalle=f"Actualización simple de programación: {data.dict()}",
+            host=request.client.host,
+        )
     except Exception as e:
         _handle_endpoint_errors("update_schedule_details", e, "ProgramaciÃ³n", schedule_id)
 
@@ -730,10 +829,18 @@ def get_schedule_devices(schedule_id: int, db: DatabaseConnector = Depends(get_d
 
 @router.put("/api/schedules/{schedule_id}/devices", tags=["Programaciones"])
 def update_schedule_devices(
-    schedule_id: int, equipo_ids: List[int] = Body(...), db: DatabaseConnector = Depends(get_db)
+    request: Request, schedule_id: int, equipo_ids: List[int] = Body(...), db: DatabaseConnector = Depends(get_db)
 ):
     try:
         db_service.update_schedule_devices_db(db, schedule_id, equipo_ids)
+        db_service.log_audit(
+            db,
+            accion="UPDATE_DEVICES",
+            entidad="Programacion",
+            entidad_id=str(schedule_id),
+            detalle=f"Actualización de equipos asignados: {equipo_ids}",
+            host=request.client.host,
+        )
         return {"message": "Asignaciones actualizadas"}
     except Exception as e:
         _handle_endpoint_errors("update_schedule_devices", e, "Schedules", schedule_id)
@@ -756,13 +863,23 @@ def get_available_devices(robot_id: int, db: DatabaseConnector = Depends(get_db)
 
 
 @router.patch("/api/equipos/{equipo_id}", tags=["Equipos"])
-def update_equipo_status(equipo_id: int, update_data: EquipoStatusUpdate, db: DatabaseConnector = Depends(get_db)):
+def update_equipo_status(
+    request: Request, equipo_id: int, update_data: EquipoStatusUpdate, db: DatabaseConnector = Depends(get_db)
+):
     """
     Actualiza el estado de un equipo (Activo_SAM o PermiteBalanceoDinamico).
     El SP valida: existe el equipo y que el valor sea distinto.
     """
     try:
         db_service.update_device_status(db, equipo_id, update_data.field, update_data.value)
+        db_service.log_audit(
+            db,
+            accion="UPDATE_STATUS",
+            entidad="Equipo",
+            entidad_id=str(equipo_id),
+            detalle=f"Cambio en {update_data.field} a {update_data.value}",
+            host=request.client.host,
+        )
         return {"message": "Estado del equipo actualizado con Ã©xito."}
 
     except pyodbc.Error as db_error:
@@ -773,10 +890,18 @@ def update_equipo_status(equipo_id: int, update_data: EquipoStatusUpdate, db: Da
 
 
 @router.post("/api/equipos", tags=["Equipos"], status_code=status.HTTP_201_CREATED)
-def create_new_equipo(equipo_data: EquipoCreateRequest, db: DatabaseConnector = Depends(get_db)):
+def create_new_equipo(request: Request, equipo_data: EquipoCreateRequest, db: DatabaseConnector = Depends(get_db)):
     """Crea un nuevo equipo manualmente."""
     try:
         new_equipo = db_service.create_equipo(db, equipo_data)
+        db_service.log_audit(
+            db,
+            accion="CREATE",
+            entidad="Equipo",
+            entidad_id=str(equipo_data.EquipoId),
+            detalle=f"Creación manual de equipo: {equipo_data.dict()}",
+            host=request.client.host,
+        )
         return {"message": "Equipo creado exitosamente.", "equipo": new_equipo}
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(ve))
@@ -799,11 +924,19 @@ def get_robot_assignments(robot_id: int, db: DatabaseConnector = Depends(get_db)
 
 @router.post("/api/robots/{robot_id}/asignaciones", tags=["Asignaciones"])
 def update_robot_assignments(
-    robot_id: int, update_data: AssignmentUpdateRequest, db: DatabaseConnector = Depends(get_db)
+    request: Request, robot_id: int, update_data: AssignmentUpdateRequest, db: DatabaseConnector = Depends(get_db)
 ):
     try:
         result = db_service.update_asignaciones_robot(
             db, robot_id, update_data.asignar_equipo_ids, update_data.desasignar_equipo_ids
+        )
+        db_service.log_audit(
+            db,
+            accion="UPDATE_ASSIGNMENTS",
+            entidad="Robot",
+            entidad_id=str(robot_id),
+            detalle=f"Actualización de asignaciones. Asignar: {update_data.asignar_equipo_ids}, Desasignar: {update_data.desasignar_equipo_ids}",
+            host=request.client.host,
         )
         return {"message": "Asignaciones actualizadas.", "detail": result}
     except ValueError as ve:
@@ -826,9 +959,17 @@ def get_all_pools(db: DatabaseConnector = Depends(get_db)):
 
 
 @router.post("/api/pools", tags=["Pools"], status_code=status.HTTP_201_CREATED)
-def create_new_pool(pool_data: PoolCreate, db: DatabaseConnector = Depends(get_db)):
+def create_new_pool(request: Request, pool_data: PoolCreate, db: DatabaseConnector = Depends(get_db)):
     try:
         pool = db_service.create_pool(db, pool_data.Nombre, pool_data.Descripcion)
+        db_service.log_audit(
+            db,
+            accion="CREATE",
+            entidad="Pool",
+            entidad_id=str(pool.get("PoolId", "NEW")),
+            detalle=f"Creación de pool: {pool_data.dict()}",
+            host=request.client.host,
+        )
         return {"message": "Pool creado.", "pool": pool}
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(ve))
@@ -841,9 +982,19 @@ def create_new_pool(pool_data: PoolCreate, db: DatabaseConnector = Depends(get_d
 
 
 @router.put("/api/pools/{pool_id}", tags=["Pools"])
-def update_existing_pool(pool_id: int, pool_data: PoolUpdate, db: DatabaseConnector = Depends(get_db)):
+def update_existing_pool(
+    request: Request, pool_id: int, pool_data: PoolUpdate, db: DatabaseConnector = Depends(get_db)
+):
     try:
         db_service.update_pool(db, pool_id, pool_data.Nombre, pool_data.Descripcion)
+        db_service.log_audit(
+            db,
+            accion="UPDATE",
+            entidad="Pool",
+            entidad_id=str(pool_id),
+            detalle=f"Actualización de pool: {pool_data.dict()}",
+            host=request.client.host,
+        )
         return {"message": f"Pool {pool_id} actualizado."}
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(ve))
@@ -852,9 +1003,17 @@ def update_existing_pool(pool_id: int, pool_data: PoolUpdate, db: DatabaseConnec
 
 
 @router.delete("/api/pools/{pool_id}", tags=["Pools"], status_code=status.HTTP_204_NO_CONTENT)
-def delete_single_pool(pool_id: int, db: DatabaseConnector = Depends(get_db)):
+def delete_single_pool(request: Request, pool_id: int, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.delete_pool(db, pool_id)
+        db_service.log_audit(
+            db,
+            accion="DELETE",
+            entidad="Pool",
+            entidad_id=str(pool_id),
+            detalle="Eliminación de pool",
+            host=request.client.host,
+        )
     except Exception as e:
         _handle_endpoint_errors("delete_single_pool", e, "Pools", pool_id)
 
@@ -869,9 +1028,19 @@ def get_pool_assignments(pool_id: int, db: DatabaseConnector = Depends(get_db)):
 
 
 @router.put("/api/pools/{pool_id}/asignaciones", tags=["Pools"])
-def set_pool_assignments(pool_id: int, data: PoolAssignmentsRequest, db: DatabaseConnector = Depends(get_db)):
+def set_pool_assignments(
+    request: Request, pool_id: int, data: PoolAssignmentsRequest, db: DatabaseConnector = Depends(get_db)
+):
     try:
         db_service.assign_resources_to_pool(db, pool_id, data.robot_ids, data.equipo_ids)
+        db_service.log_audit(
+            db,
+            accion="UPDATE_ASSIGNMENTS",
+            entidad="Pool",
+            entidad_id=str(pool_id),
+            detalle=f"Actualización de asignaciones de pool. Robots: {data.robot_ids}, Equipos: {data.equipo_ids}",
+            host=request.client.host,
+        )
         return {"message": f"Asignaciones para el Pool {pool_id} actualizadas."}
     except Exception as e:
         _handle_endpoint_errors("set_pool_assignments", e, "Pools", pool_id)
@@ -891,10 +1060,20 @@ def get_preemption_mode(db: DatabaseConnector = Depends(get_db)):
 
 
 @router.put("/api/config/preemption", tags=["Configuracion"])
-def set_preemption_mode(enabled: bool = Body(..., embed=True), db: DatabaseConnector = Depends(get_db)):
+def set_preemption_mode(
+    request: Request, enabled: bool = Body(..., embed=True), db: DatabaseConnector = Depends(get_db)
+):
     try:
         val = "TRUE" if enabled else "FALSE"
         db_service.set_system_config(db, "BALANCEO_PREEMPTION_MODE", val)
+        db_service.log_audit(
+            db,
+            accion="UPDATE_CONFIG",
+            entidad="Configuracion",
+            entidad_id="BALANCEO_PREEMPTION_MODE",
+            detalle=f"Cambio a {val}",
+            host=request.client.host,
+        )
         return {"message": f"Modo Prioridad Estricta {'activado' if enabled else 'desactivado'}"}
     except Exception as e:
         _handle_endpoint_errors("set_preemption_mode", e, "Configuracion")
@@ -911,10 +1090,20 @@ def get_isolation_mode(db: DatabaseConnector = Depends(get_db)):
 
 
 @router.put("/api/config/isolation", tags=["Configuracion"])
-def set_isolation_mode(enabled: bool = Body(..., embed=True), db: DatabaseConnector = Depends(get_db)):
+def set_isolation_mode(
+    request: Request, enabled: bool = Body(..., embed=True), db: DatabaseConnector = Depends(get_db)
+):
     try:
         val = "TRUE" if enabled else "FALSE"
         db_service.set_system_config(db, "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", val)
+        db_service.log_audit(
+            db,
+            accion="UPDATE_CONFIG",
+            entidad="Configuracion",
+            entidad_id="BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO",
+            detalle=f"Cambio a {val}",
+            host=request.client.host,
+        )
         mode_text = "Aislamiento Estricto (Sin Desborde)" if enabled else "Desborde Permitido (Cross-Pool)"
         return {"message": f"Modo {mode_text} activado."}
     except Exception as e:
@@ -933,18 +1122,34 @@ def get_mappings(db: DatabaseConnector = Depends(get_db)):
 
 
 @router.post("/api/mappings", tags=["Configuracion"])
-def create_mapping_endpoint(mapping: MapeoRobotCreate, db: DatabaseConnector = Depends(get_db)):
+def create_mapping_endpoint(request: Request, mapping: MapeoRobotCreate, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.create_mapping(db, mapping.dict())
+        db_service.log_audit(
+            db,
+            accion="CREATE",
+            entidad="Mapeo",
+            entidad_id="NEW",
+            detalle=f"Creación de mapeo: {mapping.dict()}",
+            host=request.client.host,
+        )
         return {"message": "Mapeo creado correctamente"}
     except Exception as e:
         _handle_endpoint_errors("create_mapping", e, "Mapeos")
 
 
 @router.delete("/api/mappings/{mapeo_id}", tags=["Configuracion"])
-def delete_mapping_endpoint(mapeo_id: int, db: DatabaseConnector = Depends(get_db)):
+def delete_mapping_endpoint(request: Request, mapeo_id: int, db: DatabaseConnector = Depends(get_db)):
     try:
         db_service.delete_mapping(db, mapeo_id)
+        db_service.log_audit(
+            db,
+            accion="DELETE",
+            entidad="Mapeo",
+            entidad_id=str(mapeo_id),
+            detalle="Eliminación de mapeo",
+            host=request.client.host,
+        )
         return {"message": "Mapeo eliminado"}
     except Exception as e:
         _handle_endpoint_errors("delete_mapping", e, "Mapeos", mapeo_id)
