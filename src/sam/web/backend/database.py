@@ -1,7 +1,6 @@
 # web/backend/database.py
 import asyncio
 import logging
-import socket
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -34,17 +33,8 @@ def log_audit(
 ):
     """Registra una acción en la tabla de auditoría."""
     try:
-        # Intentar resolver el nombre de la PC (hostname) a partir de la IP
-        resolved_host = host
-        if host and host != "testclient":
-            try:
-                resolved_host = socket.gethostbyaddr(host)[0]
-            except Exception:
-                # Si falla la resolución (ej: DNS no configurado), mantenemos la IP
-                pass
-
         query = "EXEC dbo.RegistrarAuditoria @Accion=?, @Entidad=?, @EntidadId=?, @Detalle=?, @Host=?, @Usuario=?"
-        params = (accion, entidad, entidad_id, detalle, resolved_host, usuario)
+        params = (accion, entidad, entidad_id, detalle, host, usuario)
         db.ejecutar_consulta(query, params, es_select=False)
     except Exception as e:
         logger.error(f"Error al registrar auditoría: {e}", exc_info=True)
