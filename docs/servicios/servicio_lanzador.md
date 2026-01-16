@@ -26,10 +26,12 @@ El servicio está construido sobre asyncio para manejar múltiples tareas concur
    * Pregunta a A360: *"¿En qué estado está el deployment X?"*.
    * Si detecta discrepancias (ej. el robot murió sin avisar), actualiza la BD para cerrar la ejecución.
    * **Gestión de ejecuciones antiguas:** Marca como UNKNOWN ejecuciones que superan el umbral de días de tolerancia (configurable, por defecto 30 días).
-   * **Estrategias de Conciliación:**
-     * **BY_ID (Default):** Consulta el estado de cada ejecución activa enviando lotes de `deploymentId` a la API. Es preciso pero puede ser lento si hay muchas ejecuciones.
-     * **BY_STATUS:** Consulta *todas* las ejecuciones activas del Control Room en una sola petición (filtrando por estados como RUNNING, QUEUED, etc.). Si una ejecución local no aparece en esa lista, infiere que ha finalizado. Ideal para entornos con alto volumen o lentitud en la API.
-     * Configurable vía `CONCILIADOR_ESTRATEGIA`.
+   * **Estrategia de Conciliación (Híbrida):**
+     * SAM utiliza una estrategia única que combina eficiencia y precisión:
+       1. **Vista Global:** Consulta *todas* las ejecuciones activas del Control Room en una sola petición.
+       2. **Actualización:** Actualiza las ejecuciones locales que coinciden con la lista activa.
+       3. **Verificación:** Para las ejecuciones que "desaparecieron" de la lista activa, realiza una consulta específica por ID para obtener su estado final real (COMPLETED, FAILED, etc.) y fechas exactas.
+       4. **Inferencia:** Solo si esta segunda consulta tampoco devuelve datos (ej. ejecución purgada), infiere que ha finalizado.
 3. **Sincronizador (service/sincronizador.py) \- El Actualizador**:
    * Mantiene los catálogos al día. Trae de A360 la lista completa de:
      * **Robots** (Taskbots).
@@ -261,7 +263,7 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 * LANZADOR\_DELAY\_REINTENTOS\_DEPLOY\_SEG: Segundos de espera entre reintentos (por defecto 5).
 * LANZADOR\_UMBRAL\_ALERTAS\_412: Fallos consecutivos 412 antes de alertar (por defecto 20).
 * LANZADOR\_DIAS\_TOLERANCIA\_UNKNOWN: Días antes de marcar UNKNOWN definitivo (por defecto 30).
-* CONCILIADOR\_ESTRATEGIA: Estrategia de conciliación (`BY_ID` o `BY_STATUS`).
+
 * CONCILIADOR\_ESTADO\_INFERIDO: Estado a asignar cuando se infiere finalización en `BY_STATUS` (ej. `COMPLETED_INFERRED`).
 * CONCILIADOR\_MENSAJE\_INFERIDO: Mensaje explicativo para el estado inferido.
 

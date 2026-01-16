@@ -145,11 +145,6 @@ class ConfigManager:
             "repeticiones": int(cls._get_env_with_warning("LANZADOR_BOT_INPUT_VUELTAS", 3)),
             "umbral_alertas_412": int(cls._get_env_with_warning("LANZADOR_UMBRAL_ALERTAS_412", 20)),
             "parametros_default": default_params,
-            # Estrategia de Conciliación
-            "conciliador_estrategia": cls._get_env_with_warning("CONCILIADOR_ESTRATEGIA", "BY_ID"),  # BY_ID | BY_STATUS
-            "conciliador_estado_inferido": cls._get_env_with_warning(
-                "CONCILIADOR_ESTADO_INFERIDO", "COMPLETED_INFERRED"
-            ),
             "conciliador_mensaje_inferido": cls._get_env_with_warning(
                 "CONCILIADOR_MENSAJE_INFERIDO", "Finalizado (Inferido por ausencia en lista de activos)"
             ),

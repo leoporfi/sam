@@ -255,7 +255,7 @@ class DatabaseConnector:
         return (
             self.ejecutar_consulta(
                 "SELECT EjecucionId, DeploymentId FROM dbo.Ejecuciones "
-                "WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED') "
+                "WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED', 'COMPLETED_INFERRED') "
                 "OR (Estado = 'UNKNOWN' AND FechaUltimoUNKNOWN IS NOT NULL AND DATEDIFF(DAY, FechaUltimoUNKNOWN, GETDATE()) > 7) "
                 "ORDER BY EjecucionId ASC;",
                 es_select=True,
@@ -281,6 +281,7 @@ class DatabaseConnector:
                     "RUN_FAILED",
                     "DEPLOY_FAILED",
                     "RUN_ABORTED",
+                    "COMPLETED_INFERRED",
                     # "UNKNOWN", # ya que no estaría comportandose como un estado final
                 ):
                     return UpdateStatus.ALREADY_PROCESSED
