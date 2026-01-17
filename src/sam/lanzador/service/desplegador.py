@@ -52,6 +52,8 @@ class Desplegador:
 
         # Control para no spamear alertas de error 400 en el mismo ciclo
         self._equipos_alertados_400 = set()
+        # Control para no spamear alertas de error 412 (robot error) en el mismo ciclo
+        self._equipos_alertados_412 = set()
         # Control para no spamear alertas de error 500 en el mismo ciclo
         self._equipos_alertados_500 = set()
 
@@ -234,31 +236,76 @@ class Desplegador:
                         is_robot_error = True
                         detected_error_type = "412_robot_error"  # Marcar como error del robot
 
-                        # Enviar email inmediatamente con el mensaje de error completo
-                        logger.error(
-                            f"Error 412 - Problema con Robot {robot_id} ({robot_nombre}) - No compatible targets. Error: {response_text_full}"
-                        )
-                        context = AlertContext(
-                            alert_level=AlertLevel.CRITICAL,
-                            alert_scope=AlertScope.ROBOT,
-                            alert_type=AlertType.PERMANENT,
-                            subject=f"Robot '{robot_nombre}' no configurable",
-                            summary=f"El robot '{robot_nombre}' no tiene dispositivos compatibles asignados en A360.",
-                            technical_details={
-                                "Robot": f"{robot_nombre} (ID: {robot_id})",
-                                "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
-                                "Usuario": f"{user_nombre} (ID: {user_id})",
-                                "Error": "No compatible targets found",
-                            },
-                            actions=[
-                                f"Ingresar a A360 Control Room > Bots > {robot_nombre}",
-                                "Editar el bot y verificar la pestaña 'Run settings'",
-                                "Asegurar que haya al menos un dispositivo en 'Run with these devices'",
-                            ],
-                        )
-                        alert_sent = self._notificador.send_alert_v2(context)
-                        if not alert_sent:
-                            logger.error(f"Fallo al enviar alerta de error de robot {robot_id} ({robot_nombre})")
+                        # Solo alertar la primera vez por equipo
+                        equipo_alertado_key = f"412_{equipo_id}"
+                        if equipo_alertado_key not in self._equipos_alertados_412:
+                            # Enviar email inmediatamente con el mensaje de error completo
+                            logger.error(
+                                f"Error 412 - Problema con Robot {robot_id} ({robot_nombre}) - No compatible targets. Error: {response_text_full}"
+                            )
+                            links = self._cfg_lanzador.get("links", {})
+                            context = AlertContext(
+                                alert_level=AlertLevel.CRITICAL,
+                                alert_scope=AlertScope.ROBOT,
+                                alert_type=AlertType.PERMANENT,
+                                subject=f"Robot '{robot_nombre}' no configurable - ASIGNACIÓN ELIMINADA",
+                                summary=(
+                                    f"El robot '{robot_nombre}' no tiene dispositivos compatibles asignados en A360. "
+                                    "La asignación ha sido ELIMINADA de SAM para evitar reintentos fallidos. "
+                                    "Se requiere intervención manual para corregir el bot y volver a asignararlo."
+                                ),
+                                technical_details={
+                                    "Robot": f"{robot_nombre} (ID: {robot_id})",
+                                    "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
+                                    "Usuario": f"{user_nombre} (ID: {user_id})",
+                                    "Error": "No compatible targets found",
+                                    "Explicación": (
+                                        "Este error ocurre cuando el bot tiene configuraciones de ejecución (Run settings) "
+                                        "que no coinciden con el dispositivo seleccionado, o no tiene dispositivos permitidos."
+                                    ),
+                                    "Documentación": links.get("aa_docs_run_settings"),
+                                },
+                                actions=[
+                                    "1. Ingresar a A360 Control Room > Bots > " + robot_nombre,
+                                    "2. Editar el bot y verificar la pestaña 'Run settings'.",
+                                    "3. Asegurar que el dispositivo o el pool estén permitidos en 'Run with these devices'.",
+                                    "4. UNA VEZ RESUELTO: Volver a asignar el equipo al robot manualmente en el panel de SAM.",
+                                    "NOTA: El sistema NO volverá a intentar este lanzamiento hasta que se realice la re-asignación manual.",
+                                ],
+                            )
+                            alert_sent = self._notificador.send_alert_v2(context)
+                            if alert_sent:
+                                self._equipos_alertados_412.add(equipo_alertado_key)
+                            else:
+                                logger.error(f"Fallo al enviar alerta de error de robot {robot_id} ({robot_nombre})")
+
+                        # REGISTRAR FALLO EN BD para que no reintente en este ciclo/horario
+                        try:
+                            dummy_deploy_id = f"FAIL_412_{datetime.now().strftime('%Y%m%d%H%M%S')}_{robot_id}"
+                            self._db_connector.insertar_registro_ejecucion(
+                                id_despliegue=dummy_deploy_id,
+                                db_robot_id=robot_id,
+                                db_equipo_id=equipo_id,
+                                a360_user_id=user_id,
+                                marca_tiempo_programada=hora,
+                                estado="DEPLOY_FAILED",
+                            )
+                            logger.debug(f"Fallo 412 registrado en BD para Robot {robot_id}")
+                        except Exception as db_e:
+                            logger.error(f"Error al registrar fallo 412 en BD: {db_e}")
+
+                        # DESACTIVAR ASIGNACIÓN (Error permanente de configuración)
+                        try:
+                            self._db_connector.ejecutar_consulta(
+                                "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ?",
+                                (robot_id, equipo_id),
+                                es_select=False,
+                            )
+                            logger.info(
+                                f"Asignación desactivada por Error 412: Robot {robot_id} ({robot_nombre}) - Equipo {equipo_id} ({equipo_nombre})"
+                            )
+                        except Exception as db_e:
+                            logger.error(f"Error al desactivar asignación por 412: {db_e}")
 
                         # No reintentar, es un error permanente del robot
                         break
@@ -330,6 +377,26 @@ class Desplegador:
                             f"Revise configuración. Error: {response_text}"
                         )
 
+                        # Análisis de mensaje para explicación más precisa
+                        explicacion = (
+                            "Este error (400 Bad Request) indica un problema de configuración en la solicitud. "
+                            "Puede deberse a parámetros inválidos, falta de permisos o licencias."
+                        )
+                        acciones = [
+                            f"Verificar que el usuario '{user_nombre}' tenga permisos sobre el robot.",
+                            "Confirmar que haya licencias disponibles en A360.",
+                            "Validar que el robot exista en el Control Room.",
+                        ]
+
+                        if "no session found" in error_message_lower:
+                            explicacion = "No se encontró una sesión activa para el usuario en el dispositivo. Problema de RDP o inicio de sesión."
+                            acciones.insert(0, "Verificar configuración de RDP y credenciales del Bot Runner.")
+                        elif "already logged in" in error_message_lower:
+                            explicacion = (
+                                "El usuario ya tiene una sesión activa en otro dispositivo o sesión de consola."
+                            )
+                            acciones.insert(0, "Cerrar sesiones activas del usuario en otros equipos.")
+
                         # Solo alertar la primera vez por equipo
                         equipo_alertado_key = f"400_{equipo_id}"
                         if equipo_alertado_key not in self._equipos_alertados_400:
@@ -340,18 +407,23 @@ class Desplegador:
                                 alert_level=AlertLevel.CRITICAL,
                                 alert_scope=AlertScope.ROBOT,
                                 alert_type=AlertType.PERMANENT,
-                                subject=f"Error de configuración en despliegue de '{robot_nombre}'",
-                                summary=f"Fallo de configuración (400 Bad Request) al intentar desplegar en {equipo_nombre}.",
+                                subject=f"Error de configuración en '{robot_nombre}' - ASIGNACIÓN ELIMINADA",
+                                summary=(
+                                    f"Fallo de configuración (400 Bad Request) al intentar desplegar en {equipo_nombre}. "
+                                    "La asignación ha sido ELIMINADA de SAM para evitar reintentos fallidos. "
+                                    "Se requiere revisión manual y re-asignación."
+                                ),
                                 technical_details={
                                     "Robot": f"{robot_nombre} (ID: {robot_id})",
                                     "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
                                     "Usuario": f"{user_nombre} (ID: {user_id})",
                                     "Error": response_text,
+                                    "Explicación": explicacion,
                                 },
-                                actions=[
-                                    f"Verificar que el usuario '{user_nombre}' tenga permisos sobre el robot",
-                                    "Confirmar que haya licencias disponibles en A360",
-                                    "Validar que el robot exista en el Control Room",
+                                actions=acciones
+                                + [
+                                    "UNA VEZ RESUELTO: Volver a asignar el equipo al robot manualmente en el panel de SAM.",
+                                    "NOTA: El sistema NO volverá a intentar este lanzamiento hasta que se realice la re-asignación manual.",
                                 ],
                             )
                             alert_sent = self._notificador.send_alert_v2(context)
@@ -361,6 +433,21 @@ class Desplegador:
                                 logger.error(
                                     f"Fallo al enviar alerta de error 400 para equipo {equipo_id} ({equipo_nombre})"
                                 )
+
+                        # REGISTRAR FALLO EN BD
+                        try:
+                            dummy_deploy_id = f"FAIL_400_{datetime.now().strftime('%Y%m%d%H%M%S')}_{robot_id}"
+                            self._db_connector.insertar_registro_ejecucion(
+                                id_despliegue=dummy_deploy_id,
+                                db_robot_id=robot_id,
+                                db_equipo_id=equipo_id,
+                                a360_user_id=user_id,
+                                marca_tiempo_programada=hora,
+                                estado="DEPLOY_FAILED",
+                            )
+                            logger.debug(f"Fallo 400 registrado en BD para Robot {robot_id}")
+                        except Exception as db_e:
+                            logger.error(f"Error al registrar fallo 400 en BD: {db_e}")
 
                         # Desactivar asignación problemática
                         try:
@@ -397,19 +484,28 @@ class Desplegador:
                     elif recovery_status == "TIMEOUT":
                         # Fallo persistente tras ventana de recuperación
                         should_alert = True
+                        links = self._cfg_lanzador.get("links", {})
                         alert_context = AlertContext(
                             alert_level=AlertLevel.CRITICAL,
                             alert_scope=AlertScope.SYSTEM,
                             alert_type=AlertType.PERMANENT,
-                            subject="Control Room A360 caído persistentemente",
-                            summary="El servidor A360 no se ha recuperado después de 5 minutos de inestabilidad.",
+                            subject="Control Room A360 Cloud - SERVICIO NO DISPONIBLE",
+                            summary="El servicio A360 Cloud no se ha recuperado después de 5 minutos de inestabilidad.",
                             technical_details={
                                 "Último Error": f"{status_code} - {response_text}",
                                 "Tiempo Caída": "> 5 minutos",
+                                "Entorno": "A360 Cloud",
+                                "Explicación": (
+                                    "El Control Room de Automation Anywhere está devolviendo errores internos (5xx) persistentes. "
+                                    "Al ser un entorno Cloud, esto indica una degradación del servicio por parte del proveedor."
+                                ),
+                                "Status Page": links.get("aa_status_page"),
                             },
                             actions=[
-                                "Contactar a Soporte de Infraestructura AHORA",
-                                "Verificar servicios de A360 en el servidor",
+                                f"1. Verificar el estado del servicio en: {links.get('aa_status_page')}",
+                                "2. Comprobar si hay tareas de mantenimiento programadas informadas por Automation Anywhere.",
+                                "3. Si el estado global es 'Operational' pero el error persiste, abrir un caso de soporte con Automation Anywhere.",
+                                "4. Notificar internamente que los lanzamientos automáticos están suspendidos temporalmente.",
                             ],
                         )
                         # Salir de modo recovery pero marcar como caído para notificar cuando vuelva
@@ -426,19 +522,27 @@ class Desplegador:
                                 self._in_recovery_mode = True
                                 self._recovery_start_time = datetime.now()
                                 should_alert = True
+                                links = self._cfg_lanzador.get("links", {})
                                 alert_context = AlertContext(
                                     alert_level=AlertLevel.CRITICAL,
                                     alert_scope=AlertScope.SYSTEM,
                                     alert_type=AlertType.RECOVERY,
-                                    subject="Control Room A360 no responde",
-                                    summary="El servidor A360 no responde a las verificaciones de salud. Posible caída total.",
+                                    subject="Control Room A360 Cloud - SIN CONEXIÓN",
+                                    summary="El Control Room Cloud no responde a las verificaciones de salud. Posible problema de red o caída del servicio.",
                                     technical_details={
                                         "Error Original": f"{status_code} - {response_text}",
-                                        "Health Check": "Fallido (Conexión rechazada o 5xx)",
+                                        "Health Check": "Fallido (Timeout o Conexión rechazada)",
+                                        "Explicación": (
+                                            "SAM no puede establecer conexión con la URL de A360 Cloud. "
+                                            "Esto puede deberse a un corte de internet en el servidor de SAM, un problema de DNS, "
+                                            "o una caída total de la región de A360 Cloud."
+                                        ),
                                     },
                                     actions=[
-                                        "Verificar estado del servidor A360",
-                                        "Contactar a Infraestructura inmediatamente",
+                                        "1. Verificar la conexión a internet y salida a sitios externos desde el servidor de SAM.",
+                                        "2. Validar que la URL del Control Room sea accesible desde un navegador.",
+                                        f"3. Revisar el estado de la región de A360 Cloud en la Status Page oficial: {links.get('aa_status_page')}",
+                                        "4. Si el problema es local (red), contactar al equipo de Comunicaciones/Networking.",
                                     ],
                                 )
                                 self._system_is_down = True
@@ -447,26 +551,79 @@ class Desplegador:
                             equipo_alertado_key = f"{status_code}_{equipo_id}"
                             if equipo_alertado_key not in self._equipos_alertados_500:
                                 should_alert = True
+
+                                # Análisis de mensaje para explicación más precisa
+                                explicacion = (
+                                    "El Control Room devolvió un error interno al procesar esta solicitud específica. "
+                                    "Esto suele ocurrir si el archivo del robot fue borrado, el usuario está bloqueado, "
+                                    "o hay una inconsistencia en la base de datos de A360."
+                                )
+                                acciones = [
+                                    "1. Verificar que el Robot exista y sea visible para el usuario en el Control Room.",
+                                    "2. Asegurar que el usuario tenga licencias de 'Bot Runner' disponibles.",
+                                ]
+
+                                if "could not start a new session" in error_message_lower:
+                                    explicacion = "Fallo al iniciar sesión de navegador o sesión de escritorio. Posible desajuste de versión de Chromedriver o extensión de A360."
+                                    acciones.insert(0, "Verificar versión de Chrome y Chromedriver en el Bot Runner.")
+                                elif "token that does not exist" in error_message_lower:
+                                    explicacion = "Referencia a un token de sesión inexistente. Problema de persistencia de sesión en el Bot Agent."
+                                    acciones.insert(
+                                        0, "Reiniciar el servicio 'Automation Anywhere Bot Agent' en el equipo."
+                                    )
+
                                 alert_context = AlertContext(
                                     alert_level=AlertLevel.CRITICAL,
                                     alert_scope=AlertScope.ROBOT,
                                     alert_type=AlertType.PERMANENT,
-                                    subject=f"Error 500 en Despliegue de '{robot_nombre}'",
-                                    summary="Error 500 irreversible. El servidor está online, pero rechazó este despliegue específico.",
+                                    subject=f"Error 500 en '{robot_nombre}' - ASIGNACIÓN ELIMINADA",
+                                    summary=(
+                                        "Error 500 irreversible. El servidor está online, pero rechazó este despliegue específico. "
+                                        "La asignación ha sido ELIMINADA de SAM para evitar reintentos fallidos."
+                                    ),
                                     technical_details={
                                         "Robot": f"{robot_nombre} (ID: {robot_id})",
                                         "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
                                         "Usuario": f"{user_nombre} (ID: {user_id})",
                                         "Error": f"{status_code} - {response_text}",
                                         "Health Check": "Exitoso (Servidor Online)",
+                                        "Explicación": explicacion,
                                     },
-                                    actions=[
-                                        "Verificar que el FileId del robot exista en A360",
-                                        "Verificar que el UserId del usuario exista en A360",
-                                        "Si el error persiste, contactar soporte de A360",
+                                    actions=acciones
+                                    + [
+                                        "3. UNA VEZ RESUELTO: Volver a asignar el equipo al robot manualmente en SAM.",
+                                        "NOTA: El sistema NO volverá a intentar este lanzamiento hasta que se realice la re-asignación manual.",
                                     ],
                                 )
                                 self._equipos_alertados_500.add(equipo_alertado_key)
+
+                                # REGISTRAR FALLO EN BD para evitar reintentos infinitos si es un error del robot/usuario
+                                try:
+                                    dummy_deploy_id = f"FAIL_500_{datetime.now().strftime('%Y%m%d%H%M%S')}_{robot_id}"
+                                    self._db_connector.insertar_registro_ejecucion(
+                                        id_despliegue=dummy_deploy_id,
+                                        db_robot_id=robot_id,
+                                        db_equipo_id=equipo_id,
+                                        a360_user_id=user_id,
+                                        marca_tiempo_programada=hora,
+                                        estado="DEPLOY_FAILED",
+                                    )
+                                    logger.debug(f"Fallo 500 registrado en BD para Robot {robot_id}")
+                                except Exception as db_e:
+                                    logger.error(f"Error al registrar fallo 500 en BD: {db_e}")
+
+                                # DESACTIVAR ASIGNACIÓN (Error irreversible)
+                                try:
+                                    self._db_connector.ejecutar_consulta(
+                                        "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ?",
+                                        (robot_id, equipo_id),
+                                        es_select=False,
+                                    )
+                                    logger.info(
+                                        f"Asignación desactivada por Error 500 Irreversible: Robot {robot_id} - Equipo {equipo_id}"
+                                    )
+                                except Exception as db_e:
+                                    logger.error(f"Error al desactivar asignación por 500: {db_e}")
 
                     if should_alert and alert_context:
                         # Usar tracking de frecuencia para no spamear la misma alerta de sistema
@@ -478,11 +635,51 @@ class Desplegador:
                     # No reintentar errores del servidor, esperar al próximo ciclo
                     break
                 else:
-                    # OTROS ERRORES HTTP (401, 403, 404, etc.)
+                    # OTROS ERRORES HTTP (401, 403, 404, etc.) - Probablemente permanentes
                     detected_error_type = f"{status_code}_http_error"
                     logger.error(
                         f"Error HTTP {status_code} Robot {robot_id} ({robot_nombre}) Equipo {equipo_id} ({equipo_nombre}): {response_text}"
                     )
+
+                    # Enviar alerta para errores HTTP inesperados
+                    context = AlertContext(
+                        alert_level=AlertLevel.CRITICAL,
+                        alert_scope=AlertScope.ROBOT,
+                        alert_type=AlertType.PERMANENT,
+                        subject=f"Error HTTP {status_code} en '{robot_nombre}' - ASIGNACIÓN ELIMINADA",
+                        summary=(
+                            f"Se recibió un error HTTP {status_code} inesperado al intentar desplegar. "
+                            "La asignación ha sido ELIMINADA para evitar reintentos fallidos."
+                        ),
+                        technical_details={
+                            "Robot": f"{robot_nombre} (ID: {robot_id})",
+                            "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
+                            "Usuario": f"{user_nombre} (ID: {user_id})",
+                            "Error": f"{status_code} - {response_text}",
+                            "Explicación": (
+                                "Este error (401, 403, 404) indica problemas de permisos, recursos no encontrados "
+                                "o credenciales inválidas para este robot o usuario específico."
+                            ),
+                        },
+                        actions=[
+                            f"1. Verificar que el usuario '{user_nombre}' tenga permisos de ejecución en A360.",
+                            "2. Confirmar que el robot y el usuario existan en el Control Room.",
+                            "3. UNA VEZ RESUELTO: Volver a asignar el equipo al robot manualmente en SAM.",
+                        ],
+                    )
+                    self._notificador.send_alert_v2(context)
+
+                    # DESACTIVAR ASIGNACIÓN
+                    try:
+                        self._db_connector.ejecutar_consulta(
+                            "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ?",
+                            (robot_id, equipo_id),
+                            es_select=False,
+                        )
+                        logger.info(f"Asignación desactivada por Error HTTP {status_code}")
+                    except Exception as db_e:
+                        logger.error(f"Error al desactivar asignación por error HTTP: {db_e}")
+
                     break
 
             except (httpx.TimeoutException, httpx.ConnectError) as e:
@@ -502,11 +699,43 @@ class Desplegador:
                     break
 
             except Exception as e:
-                # ERRORES GENÉRICOS
+                # ERRORES GENÉRICOS - Inesperados
+                detected_error_type = "generic_exception"
                 logger.error(
                     f"Error genérico Robot {robot_id} ({robot_nombre}) Equipo {equipo_id} ({equipo_nombre}): {e}",
                     exc_info=True,
                 )
+
+                # Alerta para errores de código o excepciones no controladas
+                context = AlertContext(
+                    alert_level=AlertLevel.CRITICAL,
+                    alert_scope=AlertScope.SYSTEM,
+                    alert_type=AlertType.PERMANENT,
+                    subject=f"Excepción inesperada en despliegue de '{robot_nombre}' - ASIGNACIÓN ELIMINADA",
+                    summary="Se produjo un error interno no controlado durante el despliegue. Asignación eliminada por seguridad.",
+                    technical_details={
+                        "Robot": f"{robot_nombre} (ID: {robot_id})",
+                        "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
+                        "Error": str(e),
+                    },
+                    actions=[
+                        "1. Revisar los logs del servicio Lanzador para más detalles.",
+                        "2. Verificar la integridad de la base de datos y la conexión con A360.",
+                        "3. UNA VEZ RESUELTO: Volver a asignar el equipo manualmente.",
+                    ],
+                )
+                self._notificador.send_alert_v2(context)
+
+                # DESACTIVAR ASIGNACIÓN
+                try:
+                    self._db_connector.ejecutar_consulta(
+                        "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ?",
+                        (robot_id, equipo_id),
+                        es_select=False,
+                    )
+                except Exception as db_e:
+                    logger.error(f"Error al desactivar asignación por excepción: {db_e}")
+
                 break
 
         # Fallo después de todos los intentos
@@ -673,8 +902,9 @@ class Desplegador:
                     "Detección": "Éxito en Despliegue" if not force_health_check else "Health Check Exitoso",
                 },
                 actions=[
-                    "No se requiere acción adicional.",
-                    "Se han reseteado los contadores de errores temporales de equipos.",
+                    "1. No se requiere acción adicional.",
+                    "2. Los contadores de errores temporales de equipos han sido reseteados.",
+                    "3. El sistema ha reanudado el procesamiento normal de la cola de lanzamientos.",
                 ],
             )
 

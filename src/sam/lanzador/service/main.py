@@ -115,13 +115,24 @@ class LanzadorService:
                 import traceback
 
                 error_trace = traceback.format_exc()
-                alert_sent = self._notificador.send_alert(
+                context = AlertContext(
+                    alert_level=AlertLevel.CRITICAL,
+                    alert_scope=AlertScope.SYSTEM,
+                    alert_type=AlertType.PERMANENT,
                     subject=f"Error Crítico en Ciclo de {cycle_name}",
-                    message=(
-                        f"Se ha producido un error irrecuperable en el ciclo de {cycle_name}.\n\nError: {e}\n\nStack Trace:\n{error_trace}"
-                    ),
-                    is_critical=True,
+                    summary=f"Se ha producido un error irrecuperable en el ciclo de {cycle_name}. El proceso podría estar detenido.",
+                    technical_details={
+                        "Ciclo": cycle_name,
+                        "Error": str(e),
+                        "Stack Trace": error_trace[:1000],  # Limitar para el mail
+                    },
+                    actions=[
+                        "1. Revisar los logs del servidor para identificar la causa raíz.",
+                        "2. Verificar la conectividad con la base de datos y el Control Room.",
+                        "3. Reiniciar el servicio SAM_Lanzador si el error persiste.",
+                    ],
                 )
+                alert_sent = self._notificador.send_alert_v2(context)
                 if not alert_sent:
                     logger.error(f"No se pudo enviar la alerta de error crítico en ciclo de {cycle_name}")
             try:
@@ -173,6 +184,7 @@ class LanzadorService:
                     )
                     equipo_nombre = resultado.get("equipo_nombre", "N/A")
 
+                    links = self._lanzador_cfg.get("links", {})
                     context = AlertContext(
                         alert_level=AlertLevel.HIGH,
                         alert_scope=AlertScope.DEVICE,
@@ -183,13 +195,20 @@ class LanzadorService:
                             "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
                             "Fallos Consecutivos": str(contador),
                             "Umbral Configurado": str(self._umbral_alertas_412),
+                            "Explicación": (
+                                "El dispositivo (Bot Runner) no está respondiendo a las órdenes del Control Room. "
+                                "Esto suele deberse a que el servicio 'Automation Anywhere Bot Agent' está detenido, "
+                                "el equipo está apagado, o no tiene conexión a internet."
+                            ),
+                            "Documentación": links.get("aa_docs_bot_agent_status"),
                         },
                         actions=[
-                            "Verificar conectividad del equipo",
-                            "Verificar estado del Bot Agent en el equipo",
-                            "Reiniciar servicio de Automation Anywhere Bot Agent si es necesario",
+                            "1. Verificar que el equipo físico esté encendido y tenga conexión a internet.",
+                            "2. Reiniciar el servicio 'Automation Anywhere Bot Agent' en el equipo (services.msc).",
+                            "3. Verificar en el Control Room (Devices > My Devices) que el equipo aparezca como 'Connected'.",
+                            "4. Si el equipo está 'Connected' pero el error persiste, reinicie el Bot Agent.",
                         ],
-                        frequency_info="Primera alerta. Se repetirá cada 30 minutos si persiste.",
+                        frequency_info="Esta alerta se repetirá cada 30 minutos mientras el equipo siga fallando.",
                     )
 
                     alert_sent = self._notificador.send_alert_v2(context)
@@ -215,6 +234,7 @@ class LanzadorService:
         """Maneja el fallo crítico de autenticación con la API Key."""
         logger.error(f"Handler de fallo de autenticación activado. Status: {status_code}")
 
+        links = self._lanzador_cfg.get("links", {})
         context = AlertContext(
             alert_level=AlertLevel.CRITICAL,
             alert_scope=AlertScope.SYSTEM,
@@ -226,11 +246,17 @@ class LanzadorService:
                 "Error": error_text[:500],
                 "Usuario CR": self._sincronizador._aa_client.cr_user,
                 "URL CR": self._sincronizador._aa_client.cr_url,
+                "Explicación": (
+                    "Las credenciales de API (Token) han expirado o fueron revocadas en el Control Room. "
+                    "Sin un token válido, SAM no puede autenticarse para realizar ninguna operación."
+                ),
+                "Documentación": links.get("aa_docs_api_key"),
             },
             actions=[
-                "Generar una nueva API Key en el Control Room de Automation Anywhere",
-                "Actualizar la variable de entorno AA_CR_API_KEY en el servidor",
-                "Reiniciar los servicios de SAM para aplicar el cambio",
+                "1. Ingresar al Control Room con el usuario: " + self._sincronizador._aa_client.cr_user,
+                "2. Ir a 'My settings' > 'Generate API Key' (o 'Regenerate').",
+                "3. Copiar la nueva clave y actualizar la variable AA_CR_API_KEY en el archivo .env del servidor.",
+                "4. Reiniciar el servicio SAM_Lanzador para aplicar los cambios.",
             ],
             frequency_info="Esta es una alerta única por proceso hasta que se resuelva.",
         )
