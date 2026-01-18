@@ -1,19 +1,10 @@
-CREATE PROCEDURE [dbo].[ObtenerEquiposDisponiblesParaRobot]
-    @RobotId INT  -- Mantenemos el parámetro aunque ya no se use en la lógica,
-                  -- para no tener que modificar el código de Python.
+CREATE PROCEDURE [dbo].[ListarEquiposDisponiblesParaRobot]
+    @RobotId NVARCHAR(50)
 AS
 BEGIN
     SET NOCOUNT ON;
-    -- REGLAS DE NEGOCIO ACTUALIZADAS:
-    -- Un equipo está disponible para una NUEVA PROGRAMACIÓN si:
-    -- 1. Está Activo_SAM = 1
-    -- 2. Tiene la licencia correcta ('ATTENDEDRUNTIME' o 'RUNTIME')
-    -- 3. NO está 'Reservado = 1' manualmente
-    -- 4. NO está asignado dinámicamente (EsProgramado = 0 AND Reservado = 0)
-    --
-    -- NOTA: Se elimina la restricción que impedía asignarlo si ya
-    -- estaba programado (EsProgramado = 1) para este mismo robot.
-    WITH EquiposNoDisponibles AS (
+
+    WITH EquiposReservados AS (
         -- Equipos reservados manualmente o asignados dinámicamente por CUALQUIER robot
         SELECT DISTINCT EquipoId
         FROM dbo.Asignaciones
@@ -42,7 +33,7 @@ BEGIN
     LEFT JOIN EquiposProgramadosEnOtrosRobots P ON E.EquipoId = P.EquipoId
     WHERE E.Activo_SAM = 1
       AND E.Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')
-      AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposNoDisponibles)
+      AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservados)
       AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposYaAsignados)
     ORDER BY E.Equipo;
 END

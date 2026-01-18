@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.3] - 2026-01-18
+
+### Added
+- **Nuevos Stored Procedures**: Implementación de SPs estandarizados para Robots, Equipos, Asignaciones, Programaciones, Mapeos y Configuración.
+- **Estándar de SPs en AGENTS.md**: Definición obligatoria de manejo de errores, transacciones y logging en `dbo.ErrorLog` para todos los SPs.
+- **Estrategia de Ramas**: Documentación de la estrategia de Git en `AGENTS.md`.
+
+### Changed
+- **Refactorización de Web Service**: Eliminación total de SQL crudo en `src/sam/web/backend/database.py`, sustituyéndolo por llamadas a Stored Procedures.
+- **Gestión de Asignaciones**: Migración a Table-Valued Parameters (TVPs) para la actualización de asignaciones de robots.
+
+## [1.8.2] - 2026-01-16
+
+### Fixed
+- Correcciones menores en la sincronización de estados.
+
 ## [1.5.0] - 2026-01-11
 
 ### Added
