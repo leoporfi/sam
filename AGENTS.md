@@ -107,6 +107,7 @@ Estrategia de Ramas (Git):
 - Nueva Característica (Feature): Crear SIEMPRE una rama nueva. Preguntar al usuario desde qué rama base se debe crear.
 - Corrección Pequeña (Fix): Realizar el cambio en la rama que el usuario indique.
 - Refactorización (Refactor): Crear una rama nueva solo si los cambios son complejos o afectan a múltiples componentes.
+- **Mensajes de Commit**: SIEMPRE escribir los mensajes de commit en español.
 
 
 Estilo de Código y Calidad
