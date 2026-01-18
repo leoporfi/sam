@@ -101,6 +101,8 @@ Si cambias la lógica de negocio, DEBES actualizar el escenario correspondiente 
 
 Nunca dejes que el código contradiga a los archivos .feature.
 
+Documentación Técnica: Mantener actualizados los documentos en `docs/servicios/` cuando se realicen cambios en la lógica de los servicios.
+
 Versionado: Respetar el versionado semántico (SemVer) y el uso correcto de tags en Git para los releases.
 
 Estrategia de Ramas (Git):

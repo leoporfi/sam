@@ -31,7 +31,8 @@ El servicio está construido sobre asyncio para manejar múltiples tareas concur
        1. **Vista Global:** Consulta *todas* las ejecuciones activas del Control Room en una sola petición.
        2. **Actualización:** Actualiza las ejecuciones locales que coinciden con la lista activa.
        3. **Verificación:** Para las ejecuciones que "desaparecieron" de la lista activa, realiza una consulta específica por ID para obtener su estado final real (COMPLETED, FAILED, etc.) y fechas exactas.
-       4. **Inferencia:** Solo si esta segunda consulta tampoco devuelve datos (ej. ejecución purgada), infiere que ha finalizado.
+       4. **Tolerancia:** Si la consulta específica tampoco devuelve datos (ej. ejecución purgada), el sistema verifica el contador de intentos fallidos.
+       5. **Inferencia:** Solo si se supera el número máximo de intentos fallidos (`CONCILIADOR_MAX_INTENTOS_INFERENCIA`, por defecto 5), se infiere que ha finalizado (`COMPLETED_INFERRED`). Si no, se incrementa el contador y se reintenta en el siguiente ciclo.
 3. **Sincronizador (service/sincronizador.py) \- El Actualizador**:
    * Mantiene los catálogos al día. Trae de A360 la lista completa de:
      * **Robots** (Taskbots).
@@ -273,6 +274,7 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 
 * CONCILIADOR\_ESTADO\_INFERIDO: Estado a asignar cuando se infiere finalización en `BY_STATUS` (ej. `COMPLETED_INFERRED`).
 * CONCILIADOR\_MENSAJE\_INFERIDO: Mensaje explicativo para el estado inferido.
+* CONCILIADOR\_MAX\_INTENTOS\_INFERENCIA: Número de intentos fallidos antes de inferir finalización (por defecto 5).
 
 ## **9\. Diagnóstico de Fallos (Troubleshooting)**
 
