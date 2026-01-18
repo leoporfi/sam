@@ -148,6 +148,9 @@ class ConfigManager:
             "conciliador_mensaje_inferido": cls._get_env_with_warning(
                 "CONCILIADOR_MENSAJE_INFERIDO", "Finalizado (Inferido por ausencia en lista de activos)"
             ),
+            "conciliador_max_intentos_inferencia": int(
+                cls._get_env_with_warning("CONCILIADOR_MAX_INTENTOS_INFERENCIA", 5)
+            ),
             "links": cls.get_external_links(),
         }
 

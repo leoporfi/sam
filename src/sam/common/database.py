@@ -254,7 +254,7 @@ class DatabaseConnector:
     def obtener_ejecuciones_en_curso(self) -> List[Dict]:
         return (
             self.ejecutar_consulta(
-                "SELECT EjecucionId, DeploymentId FROM dbo.Ejecuciones "
+                "SELECT EjecucionId, DeploymentId, IntentosConciliadorFallidos FROM dbo.Ejecuciones "
                 "WHERE Estado NOT IN ('COMPLETED', 'RUN_COMPLETED', 'RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED', 'COMPLETED_INFERRED') "
                 "OR (Estado = 'UNKNOWN' AND FechaUltimoUNKNOWN IS NOT NULL AND DATEDIFF(DAY, FechaUltimoUNKNOWN, GETDATE()) > 7) "
                 "ORDER BY EjecucionId ASC;",

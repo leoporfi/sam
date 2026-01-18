@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Refactorización de Web Service**: Eliminación total de SQL crudo en `src/sam/web/backend/database.py`, sustituyéndolo por llamadas a Stored Procedures.
 - **Gestión de Asignaciones**: Migración a Table-Valued Parameters (TVPs) para la actualización de asignaciones de robots.
+- **Tolerancia en Conciliador**: Implementación de un periodo de gracia (intentos configurables) antes de inferir la finalización de ejecuciones desaparecidas en A360, reduciendo falsos positivos.
 
 ## [1.8.2] - 2026-01-16
 
