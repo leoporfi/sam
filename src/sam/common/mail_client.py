@@ -149,6 +149,17 @@ class EmailAlertClient:
             return False
 
         try:
+            now = datetime.datetime.now()
+
+            # Throttling: No enviar la misma alerta (por subject) si se envió hace menos de 30 min
+            # Solo para alertas de nivel CRITICAL o HIGH
+            if context.alert_level in (AlertLevel.CRITICAL, AlertLevel.HIGH):
+                last_sent = self.last_critical_sent.get(context.subject)
+                if last_sent and (now - last_sent).total_seconds() < 1800:
+                    logger.warning(f"Alerta v2 omitida (enviada hace menos de 30 min): {context.subject}")
+                    return False
+                self.last_critical_sent[context.subject] = now
+
             msg = MIMEMultipart()
             msg["From"] = self.from_email
             msg["To"] = ", ".join(self.recipients)

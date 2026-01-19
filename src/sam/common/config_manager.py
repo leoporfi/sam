@@ -148,6 +148,10 @@ class ConfigManager:
             "conciliador_mensaje_inferido": cls._get_env_with_warning(
                 "CONCILIADOR_MENSAJE_INFERIDO", "Finalizado (Inferido por ausencia en lista de activos)"
             ),
+            "conciliador_max_intentos_inferencia": int(
+                cls._get_env_with_warning("CONCILIADOR_MAX_INTENTOS_INFERENCIA", 5)
+            ),
+            "links": cls.get_external_links(),
         }
 
     @classmethod
@@ -273,6 +277,27 @@ class ConfigManager:
             "timeout_seconds": int(cls._get_env_with_warning("API_GATEWAY_TIMEOUT_SECONDS", 30)),
             "token_expiration_buffer_sec": int(
                 cls._get_env_with_warning("API_GATEWAY_TOKEN_EXPIRATION_BUFFER_SEC", 300)
+            ),
+        }
+
+    @classmethod
+    def get_external_links(cls) -> Dict[str, str]:
+        """Obtiene enlaces externos a documentación y estados de servicio."""
+        return {
+            "aa_status_page": cls._get_env_with_warning(
+                "AA_STATUS_PAGE_URL", "https://status.automationanywhere.digital/"
+            ),
+            "aa_docs_run_settings": cls._get_env_with_warning(
+                "AA_DOCS_RUN_SETTINGS_URL",
+                "https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/control-room/bots/my-bots/run-bot-settings.html",
+            ),
+            "aa_docs_bot_agent_status": cls._get_env_with_warning(
+                "AA_DOCS_BOT_AGENT_STATUS_URL",
+                "https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/bot-agent/install/bot-agent-status.html",
+            ),
+            "aa_docs_api_key": cls._get_env_with_warning(
+                "AA_DOCS_API_KEY_URL",
+                "https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/control-room/administration/settings/cr-settings-api-key.html",
             ),
         }
 

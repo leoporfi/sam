@@ -31,7 +31,8 @@ El servicio está construido sobre asyncio para manejar múltiples tareas concur
        1. **Vista Global:** Consulta *todas* las ejecuciones activas del Control Room en una sola petición.
        2. **Actualización:** Actualiza las ejecuciones locales que coinciden con la lista activa.
        3. **Verificación:** Para las ejecuciones que "desaparecieron" de la lista activa, realiza una consulta específica por ID para obtener su estado final real (COMPLETED, FAILED, etc.) y fechas exactas.
-       4. **Inferencia:** Solo si esta segunda consulta tampoco devuelve datos (ej. ejecución purgada), infiere que ha finalizado.
+       4. **Tolerancia:** Si la consulta específica tampoco devuelve datos (ej. ejecución purgada), el sistema verifica el contador de intentos fallidos.
+       5. **Inferencia:** Solo si se supera el número máximo de intentos fallidos (`CONCILIADOR_MAX_INTENTOS_INFERENCIA`, por defecto 5), se infiere que ha finalizado (`COMPLETED_INFERRED`). Si no, se incrementa el contador y se reintenta en el siguiente ciclo.
 3. **Sincronizador (service/sincronizador.py) \- El Actualizador**:
    * Mantiene los catálogos al día. Trae de A360 la lista completa de:
      * **Robots** (Taskbots).
@@ -52,7 +53,9 @@ SAM implementa un sistema de clasificación tridimensional para las alertas, per
 **Comportamiento:**
 - ✋ **NO reintenta** (error permanente).
 - 🚨 **Alerta INMEDIATA** con acciones específicas ("Editar bot > Run settings").
-- 📝 El deployment NO se registra en la BD.
+- ❌ **Desactiva la asignación** automáticamente para evitar bucles de error.
+- 📝 El deployment se registra en la BD como `DEPLOY_FAILED` para trazabilidad.
+- 🛠️ **Gestión Manual:** Requiere corregir el bot en A360 y volver a asignar el equipo manualmente en SAM.
 
 ### **3.2. Error 412 - Dispositivo Offline/Ocupado**
 **Clasificación:** `[HIGH] [DEVICE] [THRESHOLD]`
@@ -72,22 +75,27 @@ SAM implementa un sistema de clasificación tridimensional para las alertas, per
 
 **Comportamiento:**
 - ✋ **NO reintenta**.
-- 🚨 **Alerta única** por equipo/ciclo.
+- 🚨 **Alerta única** por equipo/ciclo (con throttling de 30 min).
 - ❌ **Desactiva la asignación** automáticamente.
+- 📝 El deployment se registra en la BD como `DEPLOY_FAILED`.
+- 🔍 **Análisis Inteligente:** El sistema identifica patrones comunes (ej. "No session found", "Already logged in") para dar explicaciones precisas.
+- 🛠️ **Gestión Manual:** Requiere corregir la configuración y volver a asignar el equipo manualmente en SAM.
 
-### **3.4. Error 500 - Patrones de Reinicio A360**
+### **3.4. Error 500 - Patrones de Reinicio/Inestabilidad A360 Cloud**
 **Clasificación:** `[MEDIUM] [SYSTEM] [RECOVERY]` o `[CRITICAL] [SYSTEM] [PERMANENTE]`
 
 **Lógica de Detección:**
-El sistema monitorea errores 5xx (500, 502, 503, 504) para distinguir entre un fallo real y un reinicio de servicios.
+El sistema monitorea errores 5xx (500, 502, 503, 504) para distinguir entre inestabilidad temporal del servicio Cloud y una caída persistente.
 
 1. **Detección de Patrón:** Si ocurren múltiples errores 5xx diferentes en < 3 minutos.
    - **Acción:** Entra en **Modo Recuperación**.
-   - **Alerta:** Envía alerta `MEDIUM` indicando "Posible reinicio de A360".
+   - **Alerta:** Envía alerta `MEDIUM` indicando "Inestabilidad en A360 Cloud".
 2. **Ventana de Recuperación (5 min):**
    - Suprime nuevas alertas 5xx para evitar spam.
 3. **Timeout:**
-   - Si tras 5 minutos no se recupera, escala a alerta `CRITICAL` ("Control Room caído persistentemente").
+   - Si tras 5 minutos no se recupera, escala a alerta `CRITICAL` ("Servicio A360 Cloud no disponible").
+   - **Acción:** Se recomienda verificar la [Status Page oficial](https://status.automationanywhere.digital/).
+4. **Errores 500 Específicos:** Si el servicio está online pero el error es puntual (ej. "Could not start session"), se trata como **PERMANENTE**, se desactiva la asignación y se alerta con análisis de causa raíz.
 
 ## **4\. Lógica Crítica: El Estado UNKNOWN**
 
@@ -266,6 +274,7 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 
 * CONCILIADOR\_ESTADO\_INFERIDO: Estado a asignar cuando se infiere finalización en `BY_STATUS` (ej. `COMPLETED_INFERRED`).
 * CONCILIADOR\_MENSAJE\_INFERIDO: Mensaje explicativo para el estado inferido.
+* CONCILIADOR\_MAX\_INTENTOS\_INFERENCIA: Número de intentos fallidos antes de inferir finalización (por defecto 5).
 
 ## **9\. Diagnóstico de Fallos (Troubleshooting)**
 

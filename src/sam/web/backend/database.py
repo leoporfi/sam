@@ -4,8 +4,6 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import pyodbc
-
 from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.config_manager import ConfigManager
 from sam.common.database import DatabaseConnector
@@ -167,32 +165,29 @@ def get_robots(
 
 
 def update_robot_status(db: DatabaseConnector, robot_id: int, field: str, value: bool) -> bool:
-    if field == "EsOnline" and value is True:
-        # Verificar si el robot tiene programaciones activas
-        check_query = """
-            SELECT COUNT(*) AS ProgramCount
-            FROM dbo.Programaciones
-            WHERE RobotId = ? AND Activo = 1
-        """
-        result = db.ejecutar_consulta(check_query, (robot_id,), es_select=True)
-        if result and result[0]["ProgramCount"] > 0:
-            # Si tiene programaciones, lanzar un error en lugar de actualizar
-            raise ValueError("No se puede marcar como 'Online' un robot que tiene programaciones activas.")
-
-    query = f"UPDATE dbo.Robots SET {field} = ? WHERE RobotId = ?"
-    params = (value, robot_id)
-    rows_affected = db.ejecutar_consulta(query, params, es_select=False)
-    return rows_affected > 0
+    """
+    Actualiza el estado de un robot (Activo o EsOnline) usando SP.
+    """
+    try:
+        query = "EXEC dbo.ActualizarRobotEstado @RobotId=?, @Campo=?, @Valor=?"
+        params = (str(robot_id), field, value)
+        db.ejecutar_consulta(query, params, es_select=False)
+        return True
+    except ValueError as ve:
+        # Relanzar errores de validación de negocio del SP
+        raise ve
+    except Exception as e:
+        logger.error(f"Error en update_robot_status: {e}", exc_info=True)
+        raise
 
 
 def update_robot_details(db: DatabaseConnector, robot_id: int, robot_data: RobotUpdateRequest) -> int:
-    query = """
-        UPDATE dbo.Robots SET
-            Robot = ?, Descripcion = ?, MinEquipos = ?, MaxEquipos = ?,
-            PrioridadBalanceo = ?, TicketsPorEquipoAdicional = ?, Parametros = ?
-        WHERE RobotId = ?
     """
+    Actualiza los detalles de un robot usando SP.
+    """
+    query = "EXEC dbo.ActualizarRobotDetalle @RobotId=?, @Robot=?, @Descripcion=?, @MinEquipos=?, @MaxEquipos=?, @PrioridadBalanceo=?, @TicketsPorEquipoAdicional=?, @Parametros=?"
     params = (
+        str(robot_id),
         robot_data.Robot,
         robot_data.Descripcion,
         robot_data.MinEquipos,
@@ -200,19 +195,17 @@ def update_robot_details(db: DatabaseConnector, robot_id: int, robot_data: Robot
         robot_data.PrioridadBalanceo,
         robot_data.TicketsPorEquipoAdicional,
         robot_data.Parametros,
-        robot_id,
     )
     return db.ejecutar_consulta(query, params, es_select=False)
 
 
 def create_robot(db: DatabaseConnector, robot_data: RobotCreateRequest) -> Dict:
-    query = """
-        INSERT INTO dbo.Robots (RobotId, Robot, Descripcion, MinEquipos, MaxEquipos, PrioridadBalanceo, TicketsPorEquipoAdicional)
-        OUTPUT INSERTED.*
-        VALUES (?, ?, ?, ?, ?, ?, ?);
     """
+    Crea un nuevo robot usando SP.
+    """
+    query = "EXEC dbo.CrearRobot @RobotId=?, @Robot=?, @Descripcion=?, @MinEquipos=?, @MaxEquipos=?, @PrioridadBalanceo=?, @TicketsPorEquipoAdicional=?"
     params = (
-        robot_data.RobotId,
+        str(robot_data.RobotId),
         robot_data.Robot,
         robot_data.Descripcion,
         robot_data.MinEquipos,
@@ -226,7 +219,7 @@ def create_robot(db: DatabaseConnector, robot_data: RobotCreateRequest) -> Dict:
             return None
         return new_robot[0]
     except Exception as e:
-        if "Violation of PRIMARY KEY constraint" in str(e):
+        if "Violation of PRIMARY KEY constraint" in str(e) or "El RobotId ya existe" in str(e):
             raise ValueError(f"El RobotId {robot_data.RobotId} ya existe.")
         raise
 
@@ -244,31 +237,23 @@ def get_asignaciones_by_robot(db: DatabaseConnector, robot_id: int) -> List[Dict
 def update_asignaciones_robot(
     db: DatabaseConnector, robot_id: int, assign_ids: List[int], unassign_ids: List[int]
 ) -> Dict:
-    robot_info = db.ejecutar_consulta("SELECT EsOnline FROM dbo.Robots WHERE RobotId = ?", (robot_id,), es_select=True)
-    if not robot_info:
-        raise ValueError("Robot no encontrado")
-
+    """
+    Actualiza las asignaciones de un robot usando SP con TVPs.
+    """
     try:
-        with db.obtener_cursor() as cursor:
-            # 1. Desasignar equipos
-            if unassign_ids:
-                unassign_placeholders = ",".join("?" for _ in unassign_ids)
-                unassign_query = (
-                    f"DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId IN ({unassign_placeholders})"
-                )
-                cursor.execute(unassign_query, robot_id, *unassign_ids)
+        # Preparar TVPs
+        assign_tvp = [(eid,) for eid in assign_ids]
+        unassign_tvp = [(eid,) for eid in unassign_ids]
 
-            # 2. Asignar nuevos equipos
-            if assign_ids:
-                assign_query = """
-                    INSERT INTO dbo.Asignaciones (RobotId, EquipoId, EsProgramado, Reservado, AsignadoPor)
-                    VALUES (?, ?, 0, 1, 'WebApp')
-                """
-                assign_params = [(robot_id, equipo_id) for equipo_id in assign_ids]
-                cursor.executemany(assign_query, assign_params)
+        params = {
+            "RobotId": str(robot_id),
+            "AssignIds": assign_tvp,
+            "UnassignIds": unassign_tvp,
+            "AsignadoPor": "WebApp",
+        }
 
-            cursor.commit()
-            return {"message": "Asignaciones actualizadas correctamente."}
+        db.ejecutar_sp_con_tvp("dbo.ActualizarAsignacionesRobot", params)
+        return {"message": "Asignaciones actualizadas correctamente."}
     except Exception as e:
         logger.error(f"Error al actualizar asignaciones para el robot {robot_id}: {e}", exc_info=True)
         raise
@@ -303,45 +288,10 @@ def get_available_devices_for_robot(db: DatabaseConnector, robot_id: int) -> Lis
 
 def get_available_devices_for_robot_inline(db: DatabaseConnector, robot_id: int) -> List[Dict]:
     """
-    Implementación inline como fallback o para desarrollo.
-    Esta query es equivalente pero más legible que la versión con NOT EXISTS anidados.
-    Incluye información sobre si el equipo está programado en otro robot.
+    Obtiene los equipos disponibles para un robot usando SP.
     """
-    query = """
-        WITH EquiposReservados AS (
-            -- Equipos reservados manualmente o asignados dinámicamente por CUALQUIER robot
-            SELECT DISTINCT EquipoId
-            FROM dbo.Asignaciones
-            WHERE Reservado = 1
-               OR (EsProgramado = 0 AND Reservado = 0)
-        ),
-        EquiposYaAsignados AS (
-            -- Equipos ya asignados (de cualquier forma) A ESTE robot específico
-            SELECT DISTINCT EquipoId
-            FROM dbo.Asignaciones
-            WHERE RobotId = ?
-        ),
-        EquiposProgramadosEnOtrosRobots AS (
-            -- Equipos programados en otros robots (no en este)
-            SELECT DISTINCT EquipoId, CAST(1 AS BIT) AS EsProgramado
-            FROM dbo.Asignaciones
-            WHERE EsProgramado = 1
-              AND RobotId != ?
-        )
-        SELECT
-            E.EquipoId,
-            E.Equipo,
-            ISNULL(P.EsProgramado, CAST(0 AS BIT)) AS EsProgramado,
-            CAST(0 AS BIT) AS Reservado
-        FROM dbo.Equipos E
-        LEFT JOIN EquiposProgramadosEnOtrosRobots P ON E.EquipoId = P.EquipoId
-        WHERE E.Activo_SAM = 1
-          AND E.Licencia IN ('ATTENDEDRUNTIME', 'RUNTIME')
-          AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposReservados)
-          AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposYaAsignados)
-        ORDER BY E.Equipo
-    """
-    return db.ejecutar_consulta(query, (robot_id, robot_id), es_select=True)
+    query = "EXEC dbo.ListarEquiposDisponiblesParaRobot @RobotId = ?"
+    return db.ejecutar_consulta(query, (str(robot_id),), es_select=True)
 
 
 def get_devices(
@@ -409,21 +359,16 @@ def delete_schedule(db: DatabaseConnector, programacion_id: int, robot_id: int):
 
 
 def create_schedule(db: DatabaseConnector, data: ScheduleData):
-    robot_nombre_result = db.ejecutar_consulta(
-        "SELECT Robot FROM dbo.Robots WHERE RobotId = ?", (data.RobotId,), es_select=True
-    )
-    if not robot_nombre_result:
+    robot_info = db.ejecutar_consulta("EXEC dbo.ObtenerRobotPorId @RobotId = ?", (str(data.RobotId),), es_select=True)
+    if not robot_info:
         raise ValueError(f"No se encontró un robot con el ID {data.RobotId}")
-    robot_str = robot_nombre_result[0]["Robot"]
+    robot_str = robot_info[0]["Robot"]
 
     equipos_str = ""
     if data.Equipos:
-        placeholders = ",".join("?" for _ in data.Equipos)
-        # Usamos NVARCHAR(MAX) para evitar el límite de 8000 bytes de STRING_AGG
-        equipos_nombres_result = db.ejecutar_consulta(
-            f"SELECT STRING_AGG(CAST(Equipo AS NVARCHAR(MAX)), ',') AS Nombres FROM dbo.Equipos WHERE EquipoId IN ({placeholders})",
-            tuple(data.Equipos),
-            es_select=True,
+        equipos_ids_tvp = [(eid,) for eid in data.Equipos]
+        equipos_nombres_result = db.ejecutar_sp_con_tvp(
+            "dbo.ObtenerNombresEquipos", {"EquiposIds": equipos_ids_tvp}, es_select=True
         )
         if equipos_nombres_result and equipos_nombres_result[0]["Nombres"]:
             equipos_str = equipos_nombres_result[0]["Nombres"]
@@ -636,8 +581,11 @@ def get_schedules_paginated(
 
 
 def toggle_schedule_active(db: DatabaseConnector, schedule_id: int, activo: bool):
-    sql = "UPDATE dbo.Programaciones SET Activo=? WHERE ProgramacionId=?"
-    db.ejecutar_consulta(sql, (activo, schedule_id), es_select=False)
+    """
+    Cambia el estado activo de una programación usando SP.
+    """
+    query = "EXEC dbo.ActualizarEstadoProgramacion @ProgramacionId=?, @Activo=?"
+    db.ejecutar_consulta(query, (schedule_id, activo), es_select=False)
 
 
 def get_schedule_devices_data(db: DatabaseConnector, schedule_id: int) -> Dict[str, List[Dict]]:
@@ -763,98 +711,70 @@ def assign_resources_to_pool(db: DatabaseConnector, pool_id: int, robot_ids: Lis
 # Equipos
 def create_equipo(db: DatabaseConnector, equipo_data: EquipoCreateRequest) -> Dict:
     """
-    Inserta un nuevo equipo manualmente en la base de datos.
-    NOTA: Esto asume que no existe un SP CrearEquipo. Usa INSERT directo.
+    Inserta un nuevo equipo manualmente en la base de datos usando SP.
     """
     logger.info(f"Intentando crear equipo manualmente: ID={equipo_data.EquipoId}, Nombre={equipo_data.Equipo}")
-    # Usamos valores por defecto consistentes con la tabla
-    # Activo_SAM = 1 (True)
-    # PermiteBalanceoDinamico = 0 (False)
-    query = """
-        INSERT INTO dbo.Equipos (
-            EquipoId, Equipo, UserId, UserName, Licencia,
-            Activo_SAM, PermiteBalanceoDinamico
-        )
-        OUTPUT INSERTED.EquipoId, INSERTED.Equipo, INSERTED.UserName, INSERTED.Licencia,
-               INSERTED.Activo_SAM, INSERTED.PermiteBalanceoDinamico
-               , 'N/A' AS RobotAsignado, 'N/A' AS Pool
-        VALUES (?, ?, ?, ?, ?, 1, 0);
-    """
-    params = (
-        equipo_data.EquipoId,
-        str(equipo_data.Equipo).upper(),
-        equipo_data.UserId,
-        equipo_data.UserName,
-        equipo_data.Licencia,
-    )
     try:
+        query = "EXEC dbo.CrearEquipoManual @EquipoId=?, @Equipo=?, @UserId=?, @UserName=?, @Licencia=?"
+        params = (
+            equipo_data.EquipoId,
+            equipo_data.Equipo,
+            equipo_data.UserId,
+            equipo_data.UserName,
+            equipo_data.Licencia,
+        )
         new_equipo_list = db.ejecutar_consulta(query, params, es_select=True)
         if not new_equipo_list:
             raise Exception("La inserción no devolvió el nuevo equipo.")
         logger.info(f"Equipo {equipo_data.EquipoId} creado exitosamente.")
         return new_equipo_list[0]
-    except pyodbc.IntegrityError as e:  # type: ignore  # noqa: F821
-        # Captura error de clave duplicada
-        if "Violation of PRIMARY KEY constraint" in str(e) or "duplicate key" in str(e).lower():
+    except Exception as e:
+        if "Violation of PRIMARY KEY constraint" in str(e) or "El EquipoId ya existe" in str(e):
             logger.warning(f"Intento de crear equipo duplicado: ID={equipo_data.EquipoId}")
             raise ValueError(f"Ya existe un equipo con el ID {equipo_data.EquipoId}.")
         elif "FOREIGN KEY constraint" in str(e):
             logger.warning(f"Error de FK al crear equipo {equipo_data.EquipoId}")
             raise ValueError("Error de referencia: Verifique si el PoolId (si aplica) existe.")
         else:
-            logger.error(f"Error de integridad no manejado al crear equipo: {e}", exc_info=True)
+            logger.error(f"Error al crear equipo {equipo_data.EquipoId}: {e}", exc_info=True)
             raise
-    except Exception as e:
-        logger.error(f"Error inesperado al crear equipo {equipo_data.EquipoId}: {e}", exc_info=True)
-        raise
 
 
 # Configuración
 
 
 def get_system_config(db: DatabaseConnector, key: str) -> str:
-    """Obtiene el valor de una configuración del sistema."""
-    query = "SELECT Valor FROM dbo.ConfiguracionSistema WHERE Clave = ?"
+    """Obtiene el valor de una configuración del sistema usando SP."""
+    query = "EXEC dbo.ObtenerConfiguracion @Clave = ?"
     row = db.ejecutar_consulta(query, (key,), es_select=True)
     return row[0]["Valor"] if row else None
 
 
 def set_system_config(db: DatabaseConnector, key: str, value: str):
-    """Actualiza el valor de una configuración."""
-    query = """
-        UPDATE dbo.ConfiguracionSistema
-        SET Valor = ?, FechaActualizacion = GETDATE()
-        WHERE Clave = ?
-    """
-    db.ejecutar_consulta(query, (str(value), key), es_select=False)
+    """Actualiza el valor de una configuración usando SP."""
+    query = "EXEC dbo.ActualizarConfiguracion @Clave = ?, @Valor = ?"
+    db.ejecutar_consulta(query, (key, str(value)), es_select=False)
 
 
 # --- Gestión de Mapeos ---
 
 
 def get_all_mappings(db: DatabaseConnector) -> List[Dict]:
-    """Obtiene todos los mapeos con el nombre del robot interno asociado."""
-    query = """
-        SELECT m.*, r.Robot as RobotNombre
-        FROM dbo.MapeoRobots m
-        LEFT JOIN dbo.Robots r ON m.RobotId = r.RobotId
-        ORDER BY m.Proveedor, m.NombreExterno
-    """
-    return db.ejecutar_consulta(query, es_select=True)
+    """Obtiene todos los mapeos usando SP."""
+    return db.ejecutar_consulta("EXEC dbo.ListarMapeos", es_select=True)
 
 
 def create_mapping(db: DatabaseConnector, data: dict):
-    query = """
-        INSERT INTO dbo.MapeoRobots (Proveedor, NombreExterno, RobotId, Descripcion)
-        VALUES (?, ?, ?, ?)
-    """
+    """Crea un nuevo mapeo usando SP."""
+    query = "EXEC dbo.CrearMapeo @Proveedor=?, @NombreExterno=?, @RobotId=?, @Descripcion=?"
     db.ejecutar_consulta(
         query, (data["Proveedor"], data["NombreExterno"], data["RobotId"], data.get("Descripcion")), es_select=False
     )
 
 
 def delete_mapping(db: DatabaseConnector, mapeo_id: int):
-    db.ejecutar_consulta("DELETE FROM dbo.MapeoRobots WHERE MapeoId = ?", (mapeo_id,), es_select=False)
+    """Elimina un mapeo usando SP."""
+    db.ejecutar_consulta("EXEC dbo.EliminarMapeo @MapeoId = ?", (mapeo_id,), es_select=False)
 
 
 # --- ANALÍTICA ---

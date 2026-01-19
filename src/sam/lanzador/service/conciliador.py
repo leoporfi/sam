@@ -106,6 +106,7 @@ class Conciliador:
             for imp in ejecuciones_en_curso
             if imp.get("DeploymentId") and imp.get("EjecucionId")
         }
+        mapa_deploy_a_data = {imp["DeploymentId"]: imp for imp in ejecuciones_en_curso if imp.get("DeploymentId")}
 
         # A) Las que siguen activas: Actualizamos sus estados (RUNNING, etc.) usando la info de la API
         detalles_relevantes = [item for item in activas_api if item.get("deploymentId") in mapa_deploy_a_ejecucion]
@@ -138,13 +139,38 @@ class Conciliador:
                 }
                 ids_definitivamente_perdidos = ids_desaparecidos - ids_encontrados_finales
 
-                # 4. Inferir finalización solo para los que no aparecieron ni en activos ni en búsqueda directa
+                # 4. Inferir finalización (con tolerancia de intentos)
                 if ids_definitivamente_perdidos:
-                    logger.info(
-                        f"Aún quedan {len(ids_definitivamente_perdidos)} ejecuciones sin rastro en A360. "
-                        "Infiriendo finalización."
-                    )
-                    self._marcar_como_inferidas(ids_definitivamente_perdidos, mapa_deploy_a_ejecucion)
+                    max_intentos = int(self._config.get("conciliador_max_intentos_inferencia", 5))
+
+                    ids_para_inferir = set()
+                    ids_para_incrementar = set()
+
+                    for dep_id in ids_definitivamente_perdidos:
+                        data = mapa_deploy_a_data.get(dep_id)
+                        if not data:
+                            continue
+
+                        intentos_actuales = data.get("IntentosConciliadorFallidos") or 0
+
+                        if intentos_actuales + 1 >= max_intentos:
+                            ids_para_inferir.add(dep_id)
+                        else:
+                            ids_para_incrementar.add(dep_id)
+
+                    if ids_para_inferir:
+                        logger.info(
+                            f"Inferiendo finalización para {len(ids_para_inferir)} ejecuciones "
+                            f"(Superaron {max_intentos} intentos fallidos)."
+                        )
+                        self._marcar_como_inferidas(ids_para_inferir, mapa_deploy_a_ejecucion)
+
+                    if ids_para_incrementar:
+                        logger.info(
+                            f"Incrementando contador de intentos fallidos para {len(ids_para_incrementar)} ejecuciones "
+                            f"(Aún no superan el límite de {max_intentos})."
+                        )
+                        self._incrementar_intentos_fallidos(ids_para_incrementar, mapa_deploy_a_ejecucion)
 
             except Exception as e:
                 logger.error(f"Error al consultar detalles finales de ejecuciones desaparecidas: {e}")
@@ -312,3 +338,20 @@ class Conciliador:
         except Exception as e:
             logger.error(f"Error al convertir fecha UTC '{fecha_utc_str}': {e}", exc_info=True)
             return None
+
+    def _incrementar_intentos_fallidos(self, ids_para_incrementar: set, mapa_deploy_a_ejecucion: dict):
+        """Incrementa el contador de intentos fallidos para las ejecuciones dadas."""
+        updates = []
+        for dep_id in ids_para_incrementar:
+            ejecucion_id = mapa_deploy_a_ejecucion.get(dep_id)
+            if ejecucion_id:
+                updates.append((ejecucion_id,))
+
+        if updates:
+            query = """
+                UPDATE dbo.Ejecuciones
+                SET IntentosConciliadorFallidos = ISNULL(IntentosConciliadorFallidos, 0) + 1,
+                    FechaActualizacion = GETDATE()
+                WHERE EjecucionId = ?;
+            """
+            self._db_connector.ejecutar_consulta_multiple(query, updates, usar_fast_executemany=False)
