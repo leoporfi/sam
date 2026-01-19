@@ -248,27 +248,27 @@ class Desplegador:
                                 alert_level=AlertLevel.CRITICAL,
                                 alert_scope=AlertScope.ROBOT,
                                 alert_type=AlertType.PERMANENT,
-                                subject=f"Robot '{robot_nombre}' no configurable - ASIGNACIÓN ELIMINADA",
+                                subject=f"Fallo de Integridad/Configuración en '{robot_nombre}' - ASIGNACIÓN ELIMINADA",
                                 summary=(
-                                    f"El robot '{robot_nombre}' no tiene dispositivos compatibles asignados en A360. "
-                                    "La asignación ha sido ELIMINADA de SAM para evitar reintentos fallidos. "
-                                    "Se requiere intervención manual para corregir el bot y volver a asignararlo."
+                                    f"El robot '{robot_nombre}' presenta un fallo de integridad o configuración en A360 (Error 412). "
+                                    "Esto puede deberse a falta de dispositivos compatibles o errores internos en el Taskbot. "
+                                    "La asignación ha sido ELIMINADA de SAM para evitar reintentos fallidos."
                                 ),
                                 technical_details={
                                     "Robot": f"{robot_nombre} (ID: {robot_id})",
                                     "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
                                     "Usuario": f"{user_nombre} (ID: {user_id})",
-                                    "Error": "No compatible targets found",
+                                    "Error": "No compatible targets found / Code Integrity Error",
                                     "Explicación": (
                                         "Este error ocurre cuando el bot tiene configuraciones de ejecución (Run settings) "
-                                        "que no coinciden con el dispositivo seleccionado, o no tiene dispositivos permitidos."
+                                        "incompatibles, o cuando el Taskbot tiene errores de integridad (paquetes o variables rotas)."
                                     ),
                                     "Documentación": links.get("aa_docs_run_settings"),
                                 },
                                 actions=[
                                     "1. Ingresar a A360 Control Room > Bots > " + robot_nombre,
-                                    "2. Editar el bot y verificar la pestaña 'Run settings'.",
-                                    "3. Asegurar que el dispositivo o el pool estén permitidos en 'Run with these devices'.",
+                                    "2. Abrir el bot en el editor y verificar si hay errores de integridad (íconos rojos).",
+                                    "3. En 'Run settings', asegurar que el dispositivo o el pool estén permitidos.",
                                     "4. UNA VEZ RESUELTO: Volver a asignar el equipo al robot manualmente en el panel de SAM.",
                                     "NOTA: El sistema NO volverá a intentar este lanzamiento hasta que se realice la re-asignación manual.",
                                 ],
@@ -379,13 +379,14 @@ class Desplegador:
 
                         # Análisis de mensaje para explicación más precisa
                         explicacion = (
-                            "Este error (400 Bad Request) indica un problema de configuración en la solicitud. "
-                            "Puede deberse a parámetros inválidos, falta de permisos o licencias."
+                            "Este error (400 Bad Request) indica un problema de configuración o integridad en el Taskbot. "
+                            "Puede deberse a paquetes inexistentes, variables mal referenciadas, parámetros inválidos o falta de licencias."
                         )
                         acciones = [
-                            f"Verificar que el usuario '{user_nombre}' tenga permisos sobre el robot.",
-                            "Confirmar que haya licencias disponibles en A360.",
-                            "Validar que el robot exista en el Control Room.",
+                            "1. Abrir el bot en el editor de A360 y verificar si hay errores de integridad (íconos rojos).",
+                            "2. Validar que todos los paquetes (Packages) y versiones existan en el Control Room.",
+                            "3. Confirmar que el usuario tenga permisos y licencias de Bot Runner disponibles.",
+                            "4. Validar que el robot no haya sido movido o renombrado en A360.",
                         ]
 
                         if "no session found" in error_message_lower:
@@ -407,11 +408,11 @@ class Desplegador:
                                 alert_level=AlertLevel.CRITICAL,
                                 alert_scope=AlertScope.ROBOT,
                                 alert_type=AlertType.PERMANENT,
-                                subject=f"Error de configuración en '{robot_nombre}' - ASIGNACIÓN ELIMINADA",
+                                subject=f"Fallo de Integridad/Configuración en '{robot_nombre}' - ASIGNACIÓN ELIMINADA",
                                 summary=(
-                                    f"Fallo de configuración (400 Bad Request) al intentar desplegar en {equipo_nombre}. "
+                                    f"Fallo de configuración o integridad (400 Bad Request) al intentar desplegar en {equipo_nombre}. "
                                     "La asignación ha sido ELIMINADA de SAM para evitar reintentos fallidos. "
-                                    "Se requiere revisión manual y re-asignación."
+                                    "Se requiere revisión manual del Taskbot y re-asignación."
                                 ),
                                 technical_details={
                                     "Robot": f"{robot_nombre} (ID: {robot_id})",
