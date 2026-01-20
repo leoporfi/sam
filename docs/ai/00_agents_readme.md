@@ -161,7 +161,7 @@ Estas reglas NO son negociables:
 - ✅ Manejo de errores con TRY...CATCH
 
 ### Python
-- ✅ **Versión 3.10 estricta** (verificar con `requires-python` en pyproject.toml)
+- ✅ **Versión de Python:** Ver `requires-python` en `pyproject.toml`
 - ✅ **Tipado estático obligatorio** (typing, List, Optional, Dict, etc.)
 - ✅ Logging vía `src/sam/common/logging_setup.py` (nunca `print()`)
 - ❌ No usar `logging.basicConfig()` directamente
@@ -196,7 +196,6 @@ graph TD
     I --> F
     M --> H
 ```
-
 ### Para Diagnóstico
 
 ```mermaid

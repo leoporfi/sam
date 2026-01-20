@@ -27,7 +27,7 @@ Seguimos las reglas de **Ruff** definidas en `pyproject.toml`:
 ```toml
 [tool.ruff]
 line-length = 120
-target-version = "py38"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
@@ -725,4 +725,4 @@ Usa esta checklist antes de cada commit:
 
 ---
 
-*Última revisión: 2025-01-19*
+*Última revisión: 2025-01-19 (Python version defined in pyproject.toml)*
