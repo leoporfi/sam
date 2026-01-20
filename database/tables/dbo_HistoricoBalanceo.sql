@@ -1,5 +1,7 @@
-SET ANSI_NULLS ON
+﻿SET ANSI_NULLS ON
+GO
 SET QUOTED_IDENTIFIER ON
+GO
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[HistoricoBalanceo]') AND type in (N'U'))
 BEGIN
 CREATE TABLE [dbo].[HistoricoBalanceo](
@@ -23,3 +25,4 @@ ALTER TABLE [dbo].[HistoricoBalanceo]  WITH CHECK ADD  CONSTRAINT [FK_HistoricoB
 REFERENCES [dbo].[Robots] ([RobotId])
 IF  EXISTS (SELECT * FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[dbo].[FK_HistoricoBalanceo_Robots]') AND parent_object_id = OBJECT_ID(N'[dbo].[HistoricoBalanceo]'))
 ALTER TABLE [dbo].[HistoricoBalanceo] CHECK CONSTRAINT [FK_HistoricoBalanceo_Robots]
+GO

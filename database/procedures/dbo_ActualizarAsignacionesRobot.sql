@@ -1,4 +1,13 @@
-CREATE PROCEDURE [dbo].[ActualizarAsignacionesRobot]
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ActualizarAsignacionesRobot]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ActualizarAsignacionesRobot] AS'
+END
+GO
+ALTER PROCEDURE [dbo].[ActualizarAsignacionesRobot]
     @RobotId NVARCHAR(50),
     @AssignIds dbo.IdListType READONLY,
     @UnassignIds dbo.IdListType READONLY,
@@ -43,3 +52,4 @@ BEGIN
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END
+GO

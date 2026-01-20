@@ -1,5 +1,7 @@
-SET ANSI_NULLS ON
+﻿SET ANSI_NULLS ON
+GO
 SET QUOTED_IDENTIFIER ON
+GO
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Ejecuciones_Historico]') AND type in (N'U'))
 BEGIN
 CREATE TABLE [dbo].[Ejecuciones_Historico](
@@ -16,9 +18,11 @@ CREATE TABLE [dbo].[Ejecuciones_Historico](
 	[FechaActualizacion] [datetime2](0) NULL,
 	[IntentosConciliadorFallidos] [int] NOT NULL,
 	[CallbackInfo] [nvarchar](max) NULL,
+	[FechaInicioReal] [datetime] NULL,
  CONSTRAINT [PK_Ejecuciones_Historico] PRIMARY KEY CLUSTERED
 (
 	[HistoricoId] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 END
+GO

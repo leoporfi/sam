@@ -1,4 +1,13 @@
-CREATE PROCEDURE [dbo].[CrearEquipoManual]
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[CrearEquipoManual]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CrearEquipoManual] AS'
+END
+GO
+ALTER PROCEDURE [dbo].[CrearEquipoManual]
     @EquipoId INT,
     @Equipo NVARCHAR(100),
     @UserId NVARCHAR(100),
@@ -48,3 +57,4 @@ BEGIN
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END
+GO

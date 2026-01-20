@@ -1,5 +1,7 @@
-SET ANSI_NULLS ON
+﻿SET ANSI_NULLS ON
+GO
 SET QUOTED_IDENTIFIER ON
+GO
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Programaciones]') AND type in (N'U'))
 BEGIN
 CREATE TABLE [dbo].[Programaciones](
@@ -29,6 +31,7 @@ CREATE TABLE [dbo].[Programaciones](
 ) ON [PRIMARY]
 END
 SET ANSI_PADDING ON
+
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = OBJECT_ID(N'[dbo].[Programaciones]') AND name = N'IX_Programaciones_Activo_EsCiclico_Tipo')
 CREATE NONCLUSTERED INDEX [IX_Programaciones_Activo_EsCiclico_Tipo] ON [dbo].[Programaciones]
 (
@@ -64,3 +67,4 @@ IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'S
 	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Fecha hasta la cual la ventana temporal es válida. Si es NULL, la ventana es válida indefinidamente.' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'TABLE',@level1name=N'Programaciones', @level2type=N'COLUMN',@level2name=N'FechaFinVentana'
 IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'SCHEMA',N'dbo', N'TABLE',N'Programaciones', N'COLUMN',N'IntervaloEntreEjecuciones'))
 	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Minutos de espera entre ejecuciones cíclicas. Si es NULL y EsCiclico=1, se ejecuta tan pronto como el equipo esté disponible.' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'TABLE',@level1name=N'Programaciones', @level2type=N'COLUMN',@level2name=N'IntervaloEntreEjecuciones'
+GO
