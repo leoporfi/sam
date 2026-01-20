@@ -1,7 +1,13 @@
-CREATE VIEW dbo.EquiposAsignados AS
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.views WHERE object_id = OBJECT_ID(N'[dbo].[EquiposAsignados]'))
+EXEC dbo.sp_executesql @statement = N'CREATE VIEW dbo.EquiposAsignados AS
 SELECT
     r.Robot,
     COUNT(DISTINCT a.EquipoId) AS Equipos  -- Cambiar COUNT(*) por COUNT(DISTINCT a.EquipoId)
 FROM dbo.Robots r
 LEFT JOIN dbo.Asignaciones a ON r.RobotId = a.RobotId
-GROUP BY r.Robot;
+GROUP BY r.Robot;'
+GO

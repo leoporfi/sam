@@ -1,5 +1,7 @@
-SET ANSI_NULLS ON
+﻿SET ANSI_NULLS ON
+GO
 SET QUOTED_IDENTIFIER ON
+GO
 SET ANSI_PADDING ON
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[MapeoRobots]') AND type in (N'U'))
 BEGIN
@@ -27,3 +29,4 @@ ALTER TABLE [dbo].[MapeoRobots]  WITH CHECK ADD  CONSTRAINT [FK_MapeoRobots_Robo
 REFERENCES [dbo].[Robots] ([RobotId])
 IF  EXISTS (SELECT * FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[dbo].[FK_MapeoRobots_Robots]') AND parent_object_id = OBJECT_ID(N'[dbo].[MapeoRobots]'))
 ALTER TABLE [dbo].[MapeoRobots] CHECK CONSTRAINT [FK_MapeoRobots_Robots]
+GO

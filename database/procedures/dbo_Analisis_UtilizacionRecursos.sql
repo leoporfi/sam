@@ -1,21 +1,35 @@
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Analisis_UtilizacionRecursos]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[Analisis_UtilizacionRecursos] AS'
+END
+
 -- Inicio de dbo_Analisis_UtilizacionRecursos.sql
-CREATE   PROCEDURE [dbo].[Analisis_UtilizacionRecursos]
+ALTER   PROCEDURE [dbo].[Analisis_UtilizacionRecursos]
     @FechaInicio DATETIME = NULL,
     @FechaFin DATETIME = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+
     -- Si no se especifican fechas, usar los últimos 30 días
     IF @FechaInicio IS NULL
         SET @FechaInicio = DATEADD(DAY, -30, GETDATE());
+
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
+
     -- Calcular tiempo total disponible en minutos
     DECLARE @MinutosTotales INT;
     SET @MinutosTotales = DATEDIFF(MINUTE, @FechaInicio, @FechaFin);
+
     -- Evitar división por cero
     IF @MinutosTotales <= 0
         SET @MinutosTotales = 1;
+
     -- CTE para unir ejecuciones actuales e históricas
     WITH TodasEjecuciones AS (
         SELECT
@@ -26,7 +40,9 @@ BEGIN
         FROM dbo.Ejecuciones
         WHERE FechaInicio >= @FechaInicio AND FechaInicio <= @FechaFin
           AND FechaFin IS NOT NULL -- Solo ejecuciones finalizadas
+
         UNION ALL
+
         SELECT
             EquipoId,
             RobotId,
@@ -61,3 +77,5 @@ BEGIN
         AND (t.MinutosOcupados > 0 OR EXISTS (SELECT 1 FROM dbo.Asignaciones a WHERE a.EquipoId = eq.EquipoId AND a.RobotId = r.RobotId))
     ORDER BY PorcentajeUtilizacion DESC;
 END;
+
+GO

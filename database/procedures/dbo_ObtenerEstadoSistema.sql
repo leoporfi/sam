@@ -1,8 +1,18 @@
-CREATE PROCEDURE [dbo].[ObtenerEstadoSistema]
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerEstadoSistema]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerEstadoSistema] AS'
+END
+GO
+ALTER PROCEDURE [dbo].[ObtenerEstadoSistema]
     @PoolId INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+
     SELECT
         'ESTADO_ACTUAL' AS TipoResultado,
         (SELECT COUNT(*) FROM Robots WHERE (@PoolId IS NULL OR PoolId = @PoolId)) AS TotalRobots,
@@ -36,3 +46,5 @@ BEGIN
             WHERE E.Estado IN ('DEPLOYED', 'RUNNING', 'QUEUED', 'PENDING_EXECUTION')
             AND (@PoolId IS NULL OR R.PoolId = @PoolId)) AS EquiposEjecutando;
 END
+
+GO

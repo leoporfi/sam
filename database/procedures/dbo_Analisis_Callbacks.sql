@@ -1,8 +1,18 @@
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Analisis_Callbacks]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[Analisis_Callbacks] AS'
+END
+
 -- Inicio de dbo_Analisis_Callbacks.sql
 -- Autor: Sistema SAM
 -- Fecha: 2025-09-25
 -- =============================================
-CREATE   PROCEDURE [dbo].[Analisis_Callbacks]
+
+ALTER   PROCEDURE [dbo].[Analisis_Callbacks]
     @FechaInicio DATETIME2(0) = NULL,
     @FechaFin DATETIME2(0) = NULL,
     @RobotId INT = NULL,
@@ -11,45 +21,56 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+
     -- Establecer fechas por defecto si no se proporcionan
     IF @FechaInicio IS NULL
         SET @FechaInicio = DATEADD(DAY, -7, GETDATE()); -- Últimos 7 días por defecto
+
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
+
     BEGIN TRY
         -- =============================================
         -- RESULT SET 1: MÉTRICAS GENERALES DEL SISTEMA
         -- =============================================
         SELECT
             'METRICAS_GENERALES' AS TipoResultado,
+
             -- Totales por mecanismo de finalización
             COUNT(*) AS TotalEjecuciones,
             SUM(EsCallbackExitoso) AS CallbacksExitosos,
             SUM(EsConciliadorExitoso) AS ConciliadorExitosos,
             SUM(EsConciliadorAgotado) AS ConciliadorAgotados,
             COUNT(CASE WHEN MecanismoFinalizacion = 'ACTIVA' THEN 1 END) AS EjecucionesActivas,
+
             -- Porcentajes de efectividad
             CAST(SUM(EsCallbackExitoso) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeCallbackExitoso,
             CAST(SUM(EsConciliadorExitoso) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeConciliadorExitoso,
             CAST(SUM(EsConciliadorAgotado) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeConciliadorAgotado,
+
             -- Métricas de rendimiento
             AVG(CAST(LatenciaActualizacionMinutos AS FLOAT)) AS LatenciaPromedioMinutos,
             MAX(LatenciaActualizacionMinutos) AS LatenciaMaximaMinutos,
             MIN(LatenciaActualizacionMinutos) AS LatenciaMinimaMinutos,
+
             -- Indicadores de problemas
             SUM(CallbackFallidoIndicador) AS CallbacksFallidos,
             SUM(ConciliadorProblemaIndicador) AS ProblemasConciliador,
             CAST(SUM(CallbackFallidoIndicador) * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5,2)) AS PorcentajeCallbacksFallidos,
+
             -- Métricas de duración de ejecuciones
             AVG(CAST(DuracionEjecucionMinutos AS FLOAT)) AS DuracionPromedioMinutos,
             MAX(DuracionEjecucionMinutos) AS DuracionMaximaMinutos,
+
             -- Salud del sistema
             SUM(EjecucionExitosa) AS EjecucionesExitosas,
             SUM(EjecucionFallida) AS EjecucionesFallidas,
             CAST(SUM(EjecucionExitosa) * 100.0 / NULLIF(SUM(EjecucionExitosa) + SUM(EjecucionFallida), 0) AS DECIMAL(5,2)) AS PorcentajeExito
+
         FROM dbo.AnalisisRendimientoCallbacks
         WHERE FechaInicio BETWEEN @FechaInicio AND @FechaFin
             AND (@RobotId IS NULL OR RobotId = @RobotId);
+
         -- =============================================
         -- RESULT SET 2: DISTRIBUCIÓN POR CLASIFICACIÓN DE RENDIMIENTO
         -- =============================================
@@ -71,6 +92,7 @@ BEGIN
                 WHEN 'REGULAR' THEN 3
                 WHEN 'DEFICIENTE' THEN 4
             END;
+
         -- =============================================
         -- RESULT SET 3: ANÁLISIS POR ROBOT
         -- =============================================
@@ -95,6 +117,7 @@ BEGIN
         GROUP BY R.RobotId, R.Robot
         HAVING COUNT(*) >= 5 -- Solo robots con al menos 5 ejecuciones
         ORDER BY COUNT(*) DESC;
+
         -- =============================================
         -- RESULT SET 4: TENDENCIA DIARIA
         -- =============================================
@@ -114,6 +137,7 @@ BEGIN
             AND (@RobotId IS NULL OR RobotId = @RobotId)
         GROUP BY CAST(FechaInicio AS DATE)
         ORDER BY Fecha ASC;
+
         -- =============================================
         -- RESULT SET 5: ANÁLISIS HORARIO (si se solicita)
         -- =============================================
@@ -134,6 +158,7 @@ BEGIN
             GROUP BY DATEPART(HOUR, FechaInicio)
             ORDER BY Hora;
         END
+
         -- =============================================
         -- RESULT SET 6: CASOS PROBLEMÁTICOS RECIENTES
         -- =============================================
@@ -171,6 +196,7 @@ BEGIN
                  OR A.MecanismoFinalizacion = 'CONCILIADOR_AGOTADO'
                  OR A.ClasificacionRendimiento = 'DEFICIENTE')
         ORDER BY A.FechaInicio DESC;
+
     END TRY
     BEGIN CATCH
         -- Manejo de errores
@@ -182,8 +208,12 @@ BEGIN
             ISNULL(CAST(@RobotId AS NVARCHAR(10)), 'NULL'),
             ISNULL(CAST(@IncluirDetalleHorario AS NVARCHAR(1)), 'NULL')
         );
+
         INSERT INTO dbo.ErrorLog (Usuario, SPNombre, ErrorMensaje, Parametros)
         VALUES (SUSER_NAME(), 'ObtenerDashboardCallbacks', @ErrorMessage, @Parametros);
+
         THROW;
     END CATCH
 END
+
+GO

@@ -1,4 +1,13 @@
-CREATE PROCEDURE [dbo].[CrearRobot]
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[CrearRobot]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[CrearRobot] AS'
+END
+GO
+ALTER PROCEDURE [dbo].[CrearRobot]
     @RobotId NVARCHAR(50),
     @Robot NVARCHAR(100),
     @Descripcion NVARCHAR(MAX),
@@ -45,3 +54,4 @@ BEGIN
         RAISERROR (@ErrorMessage, @ErrorSeverity, @ErrorState);
     END CATCH
 END
+GO

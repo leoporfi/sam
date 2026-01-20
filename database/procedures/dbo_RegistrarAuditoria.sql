@@ -1,9 +1,13 @@
--- database/procedures/dbo_RegistrarAuditoria.sql
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[RegistrarAuditoria]') AND type in (N'P', N'PC'))
-    DROP PROCEDURE [dbo].[RegistrarAuditoria];
+﻿SET ANSI_NULLS ON
 GO
-
-CREATE PROCEDURE [dbo].[RegistrarAuditoria]
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[RegistrarAuditoria]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[RegistrarAuditoria] AS'
+END
+GO
+ALTER PROCEDURE [dbo].[RegistrarAuditoria]
     @Accion NVARCHAR(50),
     @Entidad NVARCHAR(50),
     @EntidadId NVARCHAR(100),
@@ -16,4 +20,5 @@ BEGIN
     INSERT INTO dbo.Auditoria (Accion, Entidad, EntidadId, Detalle, Host, Usuario)
     VALUES (@Accion, @Entidad, @EntidadId, @Detalle, @Host, @Usuario);
 END
+
 GO

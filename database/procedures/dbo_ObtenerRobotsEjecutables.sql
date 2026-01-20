@@ -1,14 +1,25 @@
-CREATE   PROCEDURE [dbo].[ObtenerRobotsEjecutables]
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerRobotsEjecutables]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerRobotsEjecutables] AS'
+END
+GO
+ALTER   PROCEDURE [dbo].[ObtenerRobotsEjecutables]
 AS
 BEGIN
     SET NOCOUNT ON;
     SET LANGUAGE Spanish;
+
     DECLARE @FechaActual DATETIME = GETDATE();
     DECLARE @HoraActual TIME(0) = CAST(@FechaActual AS TIME(0));
     DECLARE @DiaDelMesActual INT = DAY(@FechaActual);
     DECLARE @UltimoDiaDelMes INT = DAY(EOMONTH(@FechaActual));
     DECLARE @DiaSemanaActual NVARCHAR(2) = UPPER(LEFT(DATENAME(WEEKDAY, @FechaActual), 2) COLLATE Latin1_General_CI_AI);
     DECLARE @FechaActualDate DATE = CAST(@FechaActual AS DATE);
+
     -- Tabla temporal para almacenar los resultados
     CREATE TABLE #ResultadosRobots (
         RobotId INT,
@@ -18,6 +29,7 @@ BEGIN
         EsProgramado BIT,
         PrioridadBalanceo INT  -- Para ordenar por prioridad en caso de conflictos
     );
+
     -- =============================================
     -- PARTE 1: Robots Programados (Tradicionales - Una vez)
     -- =============================================
@@ -101,6 +113,7 @@ BEGIN
         AND NOT EXISTS (
             SELECT 1 FROM #ResultadosRobots RR WHERE RR.EquipoId = A.EquipoId
         );
+
     -- =============================================
     -- PARTE 2: Robots Cíclicos con Ventanas
     -- =============================================
@@ -171,6 +184,7 @@ BEGIN
         AND NOT EXISTS (
             SELECT 1 FROM #ResultadosRobots RR WHERE RR.EquipoId = A.EquipoId
         );
+
     -- =============================================
     -- PARTE 3: Robots Online (SIN CAMBIOS)
     -- =============================================
@@ -197,6 +211,7 @@ BEGIN
               AND (Ejec.Estado IN ('DEPLOYED', 'QUEUED', 'PENDING_EXECUTION', 'RUNNING', 'UPDATE', 'RUN_PAUSED')
                    OR (Ejec.Estado = 'UNKNOWN' AND Ejec.FechaUltimoUNKNOWN > DATEADD(HOUR, -2, GETDATE())))
         );
+
     -- =============================================
     -- RESULTADO FINAL: Ordenar por prioridad y tipo
     -- =============================================
@@ -226,5 +241,7 @@ BEGIN
     INNER JOIN dbo.Equipos Eq ON Ord.EquipoId = Eq.EquipoId
     WHERE Ord.RN = 1  -- Solo el de mayor prioridad por equipo
     ORDER BY Ord.EsProgramado DESC, Ord.PrioridadBalanceo ASC, Ord.Hora;
+
     DROP TABLE #ResultadosRobots;
 END
+GO

@@ -1,4 +1,13 @@
-CREATE   PROCEDURE [dbo].[ObtenerEjecucionesRecientes_v2]
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerEjecucionesRecientes_v2]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerEjecucionesRecientes_v2] AS'
+END
+GO
+ALTER   PROCEDURE [dbo].[ObtenerEjecucionesRecientes_v2]
     @Limit INT = 50,
     @CriticalOnly BIT = 1,
     @UmbralFijoMinutos INT = 25,
@@ -6,7 +15,9 @@ CREATE   PROCEDURE [dbo].[ObtenerEjecucionesRecientes_v2]
 AS
 BEGIN
     SET NOCOUNT ON;
+
     IF OBJECT_ID('tempdb..#ResultadosAnalisis') IS NOT NULL DROP TABLE #ResultadosAnalisis;
+
     WITH TiemposPromedio AS (
         SELECT
             RobotId,
@@ -57,16 +68,20 @@ BEGIN
         LEFT JOIN TiemposPromedio tp ON e.RobotId = tp.RobotId
     )
     SELECT * INTO #ResultadosAnalisis FROM CalculoEstado;
+
     SELECT TOP (@Limit)
         Id, Robot, Equipo, Estado, FechaInicio, TipoCritico, 'ERROR RECIENTE' as Categoria
     FROM #ResultadosAnalisis
     WHERE TipoCritico = 'Fallo'
     ORDER BY FechaInicio DESC;
+
     SELECT TOP (@Limit)
         Id, Robot, Equipo, Estado, FechaInicio, TiempoTranscurridoMinutos,
         UmbralUtilizadoMinutos, TiempoPromedioMinutos, TipoCritico, 'POSIBLE DEMORA' as Categoria
     FROM #ResultadosAnalisis
     WHERE TipoCritico IN ('Demorada', 'Huerfana')
     ORDER BY TiempoTranscurridoMinutos DESC;
+
     DROP TABLE #ResultadosAnalisis;
 END
+GO

@@ -1,4 +1,13 @@
-CREATE PROCEDURE [dbo].[ListarEquiposDisponiblesParaRobot]
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ListarEquiposDisponiblesParaRobot]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ListarEquiposDisponiblesParaRobot] AS'
+END
+GO
+ALTER PROCEDURE [dbo].[ListarEquiposDisponiblesParaRobot]
     @RobotId NVARCHAR(50)
 AS
 BEGIN
@@ -37,3 +46,4 @@ BEGIN
       AND E.EquipoId NOT IN (SELECT EquipoId FROM EquiposYaAsignados)
     ORDER BY E.Equipo;
 END
+GO

@@ -1,5 +1,7 @@
-SET ANSI_NULLS ON
+﻿SET ANSI_NULLS ON
+GO
 SET QUOTED_IDENTIFIER ON
+GO
 IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Robots]') AND type in (N'U'))
 BEGIN
 CREATE TABLE [dbo].[Robots](
@@ -39,3 +41,4 @@ IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'S
 	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Límite de equipos que el balanceador puede asignar dinámicamente a este robot. (default -1 o un número alto)' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'TABLE',@level1name=N'Robots', @level2type=N'COLUMN',@level2name=N'MaxEquipos'
 IF NOT EXISTS (SELECT * FROM sys.fn_listextendedproperty(N'MS_Description' , N'SCHEMA',N'dbo', N'TABLE',N'Robots', N'COLUMN',N'PrioridadBalanceo'))
 	EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Para decidir qué robot obtiene recursos si son escasos. Menor número = mayor prioridad.' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'TABLE',@level1name=N'Robots', @level2type=N'COLUMN',@level2name=N'PrioridadBalanceo'
+GO

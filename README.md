@@ -72,7 +72,7 @@ Get-Service SAM\_\*
 
 ### **Prerrequisitos**
 
-* **Python 3.9+**
+* **Python:** Ver `pyproject.toml` (`requires-python`).
 * **SQL Server** (Base de datos creada con SAM.sql).
 * **NSSM** (Non-Sucking Service Manager) en el PATH.
 * **UV** (pip install uv).

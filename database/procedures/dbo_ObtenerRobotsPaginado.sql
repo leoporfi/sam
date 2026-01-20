@@ -1,4 +1,13 @@
-CREATE PROCEDURE [dbo].[ObtenerRobotsPaginado]
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ObtenerRobotsPaginado]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ObtenerRobotsPaginado] AS'
+END
+GO
+ALTER PROCEDURE [dbo].[ObtenerRobotsPaginado]
     @Nombre NVARCHAR(100) = NULL,
     @Activo BIT = NULL,
     @Online BIT = NULL,
@@ -10,8 +19,10 @@ CREATE PROCEDURE [dbo].[ObtenerRobotsPaginado]
 AS
 BEGIN
     SET NOCOUNT ON;
+
     DECLARE @Offset INT = (@Page - 1) * @Size;
     DECLARE @SearchName NVARCHAR(102) = CASE WHEN @Nombre IS NULL THEN NULL ELSE '%' + @Nombre + '%' END;
+
     -- CTE para filtrar y contar
     WITH RobotsFiltrados AS (
         SELECT
@@ -87,3 +98,5 @@ BEGIN
         rf.Robot ASC
     OFFSET @Offset ROWS FETCH NEXT @Size ROWS ONLY;
 END
+
+GO

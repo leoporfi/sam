@@ -1,7 +1,15 @@
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Analisis_Balanceador]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[Analisis_Balanceador] AS'
+END
 --              Proporciona métricas de rendimiento y actividad del sistema
 -- Modified:    2025-10-16 - Corrección de duplicación de robots
 -- =============================================
-CREATE   PROCEDURE [dbo].[Analisis_Balanceador]
+ALTER   PROCEDURE [dbo].[Analisis_Balanceador]
     @FechaInicio DATETIME2(0) = NULL,
     @FechaFin DATETIME2(0) = NULL,
     @PoolId INT = NULL
@@ -9,11 +17,14 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+
     -- Establecer fechas por defecto si no se proporcionan
     IF @FechaInicio IS NULL
         SET @FechaInicio = DATEADD(DAY, -30, GETDATE());
+
     IF @FechaFin IS NULL
         SET @FechaFin = GETDATE();
+
     BEGIN TRY
         -- =============================================
         -- RESULT SET 1: MÉTRICAS GENERALES (CORREGIDO)
@@ -21,6 +32,7 @@ BEGIN
         SELECT
             'METRICAS_GENERALES' AS TipoResultado,
             COUNT(*) AS TotalAcciones,
+
             -- Clasificación con prioridad: DESASIGNAR primero, luego ASIGNAR
             -- Esto evita que "DESASIGNAR" se cuente como "ASIGNAR"
             SUM(CASE
@@ -28,10 +40,12 @@ BEGIN
                 WHEN AccionTomada LIKE 'ASIGNAR%' OR AccionTomada LIKE '%AGREGAR%' THEN 1
                 ELSE 0
             END) AS TotalAsignaciones,
+
             SUM(CASE
                 WHEN AccionTomada LIKE 'DESASIGNAR%' OR AccionTomada LIKE '%QUITAR%' THEN 1
                 ELSE 0
             END) AS TotalDesasignaciones,
+
             -- Nueva métrica: acciones no clasificadas
             SUM(CASE
                 WHEN AccionTomada NOT LIKE 'ASIGNAR%'
@@ -41,16 +55,19 @@ BEGIN
                 THEN 1
                 ELSE 0
             END) AS AccionesOtras,
+
             -- Métricas basadas en el delta real de equipos
             SUM(CASE WHEN (EquiposAsignadosDespues - EquiposAsignadosAntes) > 0 THEN 1 ELSE 0 END) AS AsignacionesReales,
             SUM(CASE WHEN (EquiposAsignadosDespues - EquiposAsignadosAntes) < 0 THEN 1 ELSE 0 END) AS DesasignacionesReales,
             SUM(CASE WHEN (EquiposAsignadosDespues - EquiposAsignadosAntes) = 0 THEN 1 ELSE 0 END) AS AccionesSinCambio,
+
             AVG(CAST(EquiposAsignadosDespues - EquiposAsignadosAntes AS FLOAT)) AS PromedioMovimientoNeto,
             COUNT(DISTINCT RobotId) AS RobotsAfectados,
             AVG(CAST(TicketsPendientes AS FLOAT)) AS PromedioTicketsPendientes
         FROM HistoricoBalanceo
         WHERE FechaBalanceo BETWEEN @FechaInicio AND @FechaFin
             AND (@PoolId IS NULL OR PoolId = @PoolId);
+
         -- =============================================
         -- RESULT SET 2: TRAZABILIDAD PARA EL GRÁFICO
         -- =============================================
@@ -70,6 +87,7 @@ BEGIN
         WHERE H.FechaBalanceo BETWEEN @FechaInicio AND @FechaFin
             AND (@PoolId IS NULL OR H.PoolId = @PoolId)
         ORDER BY H.FechaBalanceo ASC;
+
         -- =============================================
         -- RESULT SET 3: RESUMEN DIARIO
         -- =============================================
@@ -89,6 +107,7 @@ BEGIN
             AND (@PoolId IS NULL OR PoolId = @PoolId)
         GROUP BY CAST(FechaBalanceo AS DATE)
         ORDER BY Fecha ASC;
+
         -- =============================================
         -- RESULT SET 4: ANÁLISIS POR ROBOT (CORREGIDO)
         -- =============================================
@@ -128,6 +147,7 @@ BEGIN
             AND (@PoolId IS NULL OR R.PoolId = @PoolId)
             AND Stats.TotalAcciones IS NOT NULL  -- Solo incluir robots con actividad
         ORDER BY Stats.TotalAcciones DESC;
+
         -- =============================================
         -- RESULT SET 5: ESTADO ACTUAL DEL SISTEMA (CORREGIDO)
         -- =============================================
@@ -147,6 +167,7 @@ BEGIN
              INNER JOIN Robots R ON E.RobotId = R.RobotId
              WHERE E.Estado IN ('DEPLOYED', 'RUNNING', 'QUEUED', 'PENDING_EXECUTION')
              AND (@PoolId IS NULL OR R.PoolId = @PoolId)) AS EjecucionesActivas;
+
         -- =============================================
         -- RESULT SET 6: DETECCIÓN DE THRASHING
         -- =============================================
@@ -173,6 +194,7 @@ BEGIN
         WHERE MinutosDesdeUltimaAccion <= 5
             AND ((AccionTomada LIKE '%ASIGNAR%' AND AccionAnterior LIKE '%DESASIGNAR%')
                  OR (AccionTomada LIKE '%DESASIGNAR%' AND AccionAnterior LIKE '%ASIGNAR%'));
+
     END TRY
     BEGIN CATCH
         -- Manejo de errores
@@ -183,8 +205,12 @@ BEGIN
             ISNULL(CONVERT(NVARCHAR(20), @FechaFin, 120), 'NULL'),
             ISNULL(CAST(@PoolId AS NVARCHAR(10)), 'NULL')
         );
+
         INSERT INTO dbo.ErrorLog (Usuario, SPNombre, ErrorMensaje, Parametros)
         VALUES (SUSER_NAME(), 'ObtenerDashboardBalanceador', @ErrorMessage, @Parametros);
+
         THROW;
     END CATCH
 END
+
+GO

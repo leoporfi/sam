@@ -1,10 +1,20 @@
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ListarProgramaciones]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ListarProgramaciones] AS'
+END
+
 -- =============================================
 -- 1. Actualizar ListarProgramaciones
 -- =============================================
-CREATE PROCEDURE [dbo].[ListarProgramaciones]
+ALTER PROCEDURE [dbo].[ListarProgramaciones]
 AS
 BEGIN
 	SET NOCOUNT ON;
+
 	SELECT
         P.ProgramacionId,
         P.RobotId,
@@ -53,3 +63,5 @@ BEGIN
     ORDER BY
         P.ProgramacionId;
 END
+
+GO

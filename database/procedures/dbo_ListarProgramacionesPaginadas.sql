@@ -1,7 +1,16 @@
+﻿SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ListarProgramacionesPaginadas]') AND type in (N'P', N'PC'))
+BEGIN
+EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[ListarProgramacionesPaginadas] AS'
+END
+
 -- =============================================
 -- 3. Actualizar ListarProgramacionesPaginadas
 -- =============================================
-CREATE PROCEDURE [dbo].[ListarProgramacionesPaginadas]
+ALTER PROCEDURE [dbo].[ListarProgramacionesPaginadas]
     @RobotId INT = NULL,
     @Tipo NVARCHAR(50) = NULL,
     @Activo BIT = NULL,
@@ -11,6 +20,7 @@ CREATE PROCEDURE [dbo].[ListarProgramacionesPaginadas]
 AS
 BEGIN
     SET NOCOUNT ON;
+
     WITH ProgramasFiltradosCTE AS (
         SELECT
             p.ProgramacionId,
@@ -31,6 +41,7 @@ BEGIN
             CONVERT(VARCHAR(10), p.FechaInicioVentana, 23) AS FechaInicioVentana,
             CONVERT(VARCHAR(10), p.FechaFinVentana, 23) AS FechaFinVentana,
             p.IntervaloEntreEjecuciones,
+
             -- --- CAMBIO AQUÍ ---
             -- Usamos STRING_AGG para listar nombres, pero filtrando por p.ProgramacionId
             (
@@ -41,6 +52,7 @@ BEGIN
                   AND eq.Activo_SAM = 1                    -- <--- Solo activos
             ) AS EquiposProgramados,
             -- -------------------
+
             COUNT(*) OVER() AS TotalRows
         FROM dbo.Programaciones p
         JOIN dbo.Robots r ON p.RobotId = r.RobotId
@@ -54,8 +66,11 @@ BEGIN
                 p.TipoProgramacion LIKE '%' + @Search + '%'
             )
     )
+
     SELECT *
     FROM ProgramasFiltradosCTE
     ORDER BY RobotNombre, HoraInicio
     OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
 END
+
+GO

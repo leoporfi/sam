@@ -121,4 +121,4 @@ tests/
 backup_migration/
 migrate_sam_structure*.py
 dev_notes/
-# docs/mejoras/
+docs/mejoras

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.4] - 2026-01-20
+
+### Added
+- **Consolidación de Versión de Python**: Se ha establecido `pyproject.toml` como la única fuente de verdad para la versión de Python (`requires-python = ">=3.10"`).
+
+### Changed
+- **Documentación de Agentes**: Actualizadas todas las referencias de versión de Python para apuntar a `pyproject.toml`.
+- **Configuración de Proyecto**: Elevado el requerimiento de Python a 3.10 en `pyproject.toml`.
+
 ## [1.8.3] - 2026-01-18
 
 ### Added
