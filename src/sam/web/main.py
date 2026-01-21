@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from reactpy.backend.fastapi import Options, configure
 from starlette.staticfiles import StaticFiles
 
+from sam import __version__
 from sam.common.database import DatabaseConnector
 
 from .backend.api import router as api_router
@@ -59,7 +60,7 @@ def create_app(db_connector: DatabaseConnector) -> FastAPI:
     """Crea y configura la aplicación FastAPI."""
 
     # Pasar el lifespan a FastAPI
-    app = FastAPI(title="SAM Interfaz Web API", lifespan=lifespan)
+    app = FastAPI(title="SAM Interfaz Web API", version=__version__, lifespan=lifespan)
 
     # Inyectar la dependencia de base de datos
     db_dependency_provider.set_db_connector(db_connector)

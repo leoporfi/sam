@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from sam import __version__
 from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.config_loader import ConfigLoader
 from sam.common.config_manager import ConfigManager
@@ -60,7 +61,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="SAM Callback Service API",
-    version="3.0.0",
+    version=__version__,
     description="API para recibir callbacks de A360. Requiere `X-Authorization` header.",
     lifespan=lifespan,
 )
