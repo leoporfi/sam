@@ -405,6 +405,59 @@ class Desplegador:
                             )
                             # No desasignar, solo reportar el fallo
                             break
+
+                    # --- NUEVO: Manejo específico de "No Default Device" ---
+                    elif "none of the user(s) provided have default device(s)" in error_message_lower:
+                        detected_error_type = "400_no_default_device"
+                        logger.warning(
+                            f"Error 400 (No Default Device) Robot {robot_id} ({robot_nombre}) "
+                            f"Equipo {equipo_id} ({equipo_nombre}). El usuario {user_nombre} no tiene dispositivo por defecto."
+                        )
+
+                        # Solo alertar si no está en cooldown (1 hora) para no spamear
+                        alert_key = f"400_no_device_{equipo_id}"
+                        if self._should_send_alert(alert_key, cooldown_min=60):
+                            context = AlertContext(
+                                alert_level=AlertLevel.CRITICAL,
+                                alert_scope=AlertScope.DEVICE,
+                                alert_type=AlertType.PERMANENT,
+                                subject="Configuración Requerida en A360 - Usuario sin Dispositivo por Defecto",
+                                summary=(
+                                    f"El usuario '{user_nombre}' no tiene un dispositivo por defecto asignado en A360. "
+                                    "Esto impide el lanzamiento automático pero la asignación en SAM se MANTENDRÁ activa."
+                                ),
+                                technical_details={
+                                    "Robot": f"{robot_nombre} (ID: {robot_id})",
+                                    "Equipo": f"{equipo_nombre} (ID: {equipo_id})",
+                                    "Usuario": f"{user_nombre} (ID: {user_id})",
+                                    "Error": "None of the user(s) provided have default device(s)",
+                                },
+                                actions=[
+                                    "1. Ingresar al Control Room de A360 > Manage > Users.",
+                                    f"2. Buscar y editar al usuario '{user_nombre}'.",
+                                    "3. En la sección 'Device settings', seleccionar un dispositivo como 'Default Device'.",
+                                    "4. Guardar los cambios.",
+                                    "NOTA: El sistema volverá a intentar este lanzamiento en el próximo ciclo programado.",
+                                ],
+                            )
+                            self._notificador.send_alert_v2(context)
+
+                        # REGISTRAR FALLO EN BD para este ciclo
+                        try:
+                            dummy_deploy_id = f"FAIL_400_NODEV_{datetime.now().strftime('%Y%m%d%H%M%S')}_{robot_id}"
+                            self._db_connector.insertar_registro_ejecucion(
+                                id_despliegue=dummy_deploy_id,
+                                db_robot_id=robot_id,
+                                db_equipo_id=equipo_id,
+                                a360_user_id=user_id,
+                                marca_tiempo_programada=hora,
+                                estado="DEPLOY_FAILED",
+                            )
+                        except Exception as db_e:
+                            logger.error(f"Error al registrar fallo 400_no_device en BD: {db_e}")
+
+                        break
+
                     else:
                         # ERROR PERMANENTE (Bad Request de configuración)
                         logger.warning(

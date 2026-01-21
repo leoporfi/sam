@@ -44,8 +44,8 @@ BEGIN
             e.FechaFin,
             DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) AS TiempoTranscurridoMinutos,
             CASE
-                -- Fallos inmediatos
-                WHEN e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED') THEN 'Fallo'
+                -- Fallos inmediatos (Excluyendo RUN_FAILED y RUN_ABORTED por pedido de usuario)
+                WHEN e.Estado LIKE '%FAILED%' AND e.Estado NOT IN ('RUN_FAILED', 'RUN_ABORTED') THEN 'Fallo'
 
                 -- RUNNING o DEPLOYED demorados
                 WHEN e.Estado IN ('RUNNING', 'DEPLOYED') AND (
@@ -76,7 +76,7 @@ BEGIN
             END AS TipoCritico,
             CASE
                 -- Mensaje para Fallos
-                WHEN e.Estado IN ('RUN_FAILED', 'DEPLOY_FAILED', 'RUN_ABORTED')
+                WHEN e.Estado LIKE '%FAILED%' AND e.Estado NOT IN ('RUN_FAILED', 'RUN_ABORTED')
                 THEN ISNULL(CAST(e.CallbackInfo AS NVARCHAR(MAX)), 'Fallo técnico reportado por A360')
 
                 -- Mensaje para Demoras
