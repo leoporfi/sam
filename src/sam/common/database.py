@@ -172,6 +172,10 @@ class DatabaseConnector:
                     retries -= 1
                     delay *= 2
                 else:
+                    logger.warning(
+                        f"No se reintentará query (SQLSTATE: {sqlstate}). "
+                        f"Retries restantes: {retries}. Configurados: {self.retryable_sqlstates}"
+                    )
                     raise
         return None
 
