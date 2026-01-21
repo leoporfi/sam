@@ -36,11 +36,40 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
 # =======================================
-# LOGS Y ARCHIVOS TEMPORALES
+# TESTS
 # =======================================
-logs/*.log
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+*.cover
+nosetests.xml
+coverage.xml
+test-results/
+
+# =======================================
+# TYPE CHECKING
+# =======================================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# =======================================
+# JUPYTER
+# =======================================
+.ipynb_checkpoints/
+
+# =======================================
+# LOGS Y TEMPORALES
+# =======================================
+logs/
 *.log
 *.tmp
 *.bak
@@ -59,66 +88,54 @@ diff*.txt
 *~
 
 # =======================================
-# DISTRIBUCIÓN Y COMPILACIÓN
-# =======================================
-dist/
-build/
-*.egg-info/
-
-# =======================================
 # SISTEMAS OPERATIVOS
 # =======================================
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # =======================================
-# DEPENDENCIAS EXTERNAS
+# DEPENDENCIAS
 # =======================================
 node_modules/
 
 # =======================================
-# TESTS (ignorar resultados, no el código)
+# UV LOCK (descomentar si es librería)
 # =======================================
-# Ignora resultados o artefactos de pruebas,
-# pero no ignores la carpeta tests/ completa
-.pytest_cache/
-.tox/
-.coverage
-htmlcov/
-
-# =======================================
-# ARCHIVOS PROPIOS DEL PROYECTO
-# =======================================
-# El archivo de lock de uv:
-# - Versiona si es APP
-# - Ignora si es LIBRERÍA
 #uv.lock
 
-# Archivos varios
-*copy*
-*copia*
-*_old
+# =======================================
+# BASES DE DATOS LOCALES
+# =======================================
+*.db
+*.sqlite
+*.sqlite3
+db.sqlite3
+
+# =======================================
+# ARCHIVOS TEMPORALES DEL PROYECTO
+# =======================================
+*_copy.*
+*_copia.*
+*_old.*
+*.backup
 .env.bak
 
 # =======================================
-# ARCHIVOS EXPORTADOS / GENERADOS
+# OUTPUTS Y EXPORTACIONES
 # =======================================
-*.zip
-*.pdf
-*.html
-*.csv
-*.png
-*.svg
+/output/
+/exports/
+/temp/
+temp_*
+*_generated.*
 
 # =======================================
-# ARCHIVOS INTERNOS DEL PROYECTO
+# ARCHIVOS ESPECÍFICOS DEL PROYECTO
 # =======================================
-generate_keys.py
-migra.md
-
-# SAM specific
-tests/
-backup_migration/
+/generate_keys.py
+/migra.md
+/backup_migration/
 migrate_sam_structure*.py
-dev_notes/
-docs/mejoras
+/dev_notes/
+/docs/mejoras/

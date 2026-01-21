@@ -1037,6 +1037,7 @@ def get_recent_executions(
             "FactorUmbralDinamico": factor_umbral_dinamico,
             "PisoUmbralDinamicoMinutos": piso_umbral_dinamico_minutos,
             "FiltroEjecucionesCortasMinutos": filtro_ejecuciones_cortas_minutos,
+            "DefaultRepeticiones": int(ConfigManager.get_lanzador_config().get("repeticiones", 1)),
         }
 
         # Agregar filtros opcionales solo si tienen valor
