@@ -55,7 +55,13 @@ class Desplegador:
         # Control para no spamear alertas de error 412 (robot error) en el mismo ciclo
         self._equipos_alertados_412 = set()
         # Control para no spamear alertas de error 500 en el mismo ciclo
+        # Control para no spamear alertas de error 500 en el mismo ciclo
         self._equipos_alertados_500 = set()
+
+        # --- PROTECCIÓN DE REBOTE (Circuit Breaker Local) ---
+        # Almacena (robot_id, equipo_id) -> datetime_lanzamiento
+        # Evita re-lanzar robots si la BD falló al registrar el inicio pero A360 sí lo lanzó.
+        self._cooldown_despliegues: Dict[tuple, datetime] = {}
 
         # --- SISTEMA DE ALERTAS MEJORADO ---
         self._server_error_history: List[ServerErrorPattern] = []
@@ -70,16 +76,36 @@ class Desplegador:
         Orquestación principal del despliegue:
         1. Verifica pausa.
         2. Obtiene robots de la BD.
-        3. Obtiene token API Gateway.
-        4. Ejecuta despliegues en paralelo.
-        5. Retorna resultados para que el Orquestador gestione alertas (ej. 412).
+        3. Filtra robots en cooldown (protección de rebote).
+        4. Obtiene token API Gateway.
+        5. Ejecuta despliegues en paralelo.
+        6. Retorna resultados para que el Orquestador gestione alertas (ej. 412).
         """
         if self._esta_en_pausa():
             logger.info("Lanzador en PAUSA operativa configurada. Omitiendo ciclo.")
             return []
 
+        # 1. Limpieza de memoria a corto plazo (Cooldowns expirados > 10 min)
+        now = datetime.now()
+        cooldown_minutos = 10
+        self._cooldown_despliegues = {
+            k: v for k, v in self._cooldown_despliegues.items() if (now - v).total_seconds() < (cooldown_minutos * 60)
+        }
+
         logger.info("Buscando robots para ejecutar...")
-        robots_a_ejecutar = self._db_connector.obtener_robots_ejecutables()
+        robots_raw = self._db_connector.obtener_robots_ejecutables()
+
+        # 2. Filtrado por Cooldown (Evitar bucle zombi si falló DB)
+        robots_a_ejecutar = []
+        for r in robots_raw:
+            key = (r.get("RobotId"), r.get("EquipoId"))
+            if key in self._cooldown_despliegues:
+                logger.warning(
+                    f"Omitiendo Robot {r.get('Robot')} en Equipo {r.get('Equipo')} "
+                    f"porque está en periodo de enfriamiento (posible fallo previo de registro en BD)."
+                )
+                continue
+            robots_a_ejecutar.append(r)
 
         if not robots_a_ejecutar:
             logger.info("No hay robots para ejecutar en este ciclo.")
@@ -193,17 +219,27 @@ class Desplegador:
                     f"en Equipo {equipo_id} ({equipo_nombre}) (Intento {intento}/{max_intentos})"
                 )
 
-                self._db_connector.insertar_registro_ejecucion(
-                    id_despliegue=deployment_id,
-                    db_robot_id=robot_id,
-                    db_equipo_id=equipo_id,
-                    a360_user_id=user_id,
-                    marca_tiempo_programada=hora,
-                    estado="DEPLOYED",
-                )
+                try:
+                    self._db_connector.insertar_registro_ejecucion(
+                        id_despliegue=deployment_id,
+                        db_robot_id=robot_id,
+                        db_equipo_id=equipo_id,
+                        a360_user_id=user_id,
+                        marca_tiempo_programada=hora,
+                        estado="DEPLOYED",
+                    )
 
-                # Si el despliegue es exitoso, verificar si venimos de una caída del sistema
-                await self._check_and_notify_system_recovery(force_health_check=False)
+                    # Si el despliegue es exitoso, verificar si venimos de una caída del sistema
+                    await self._check_and_notify_system_recovery(force_health_check=False)
+                except Exception as db_e:
+                    logger.error(
+                        f"Error al registrar ejecución en BD para Robot {robot_id} ({robot_nombre}) "
+                        f"con DeployID {deployment_id}. El robot se está ejecutando, pero SAM no lo monitoreará. "
+                        f"Activando protección de rebote local. Error: {db_e}"
+                    )
+                    # Activar Circuit Breaker Local:
+                    # Evitar que el SP nos devuelva este robot en el próximo ciclo
+                    self._cooldown_despliegues[(robot_id, equipo_id)] = datetime.now()
 
                 return {"status": "exitoso", "robot_id": robot_id, "equipo_id": equipo_id}
 

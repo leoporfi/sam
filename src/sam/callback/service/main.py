@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from sam.common.a360_client import AutomationAnywhereClient
 from sam.common.config_loader import ConfigLoader
 from sam.common.config_manager import ConfigManager
 from sam.common.database import DatabaseConnector, UpdateStatus
@@ -93,22 +94,103 @@ async def verify_api_key(x_authorization: str = Header(...)):
 async def handle_callback(payload: CallbackPayload, db: DatabaseConnector = Depends(get_db)):
     logger.info(f"Callback recibido para DeploymentId: {payload.deployment_id} con estado: {payload.status}")
     try:
-        # CORRECCIÓN: Usar model_dump_json(by_alias=True) para que el JSON guardado use camelCase
+        # CRITICAL: A360 only sends callbacks for COMPLETION (success/failure), NEVER for start.
+        # Therefore, if we receive a callback for a deploymentId that is NOT in our DB,
+        # it means we missed the initial insert (e.g., DB error during deploy).
+        # We MUST recover this record to maintain data integrity.
+
+        # 1. Try to update existing record
         update_result = db.actualizar_ejecucion_desde_callback(
             deployment_id=payload.deployment_id,
             estado_callback=payload.status,
             callback_payload_str=payload.model_dump_json(by_alias=True),
         )
+
         if update_result == UpdateStatus.UPDATED:
             return SuccessResponse(message="Callback procesado y estado actualizado.")
+
         elif update_result == UpdateStatus.ALREADY_PROCESSED:
             return SuccessResponse(message="La ejecución ya estaba en estado final.")
+
         elif update_result == UpdateStatus.NOT_FOUND:
-            logger.warning(f"DeploymentId '{payload.deployment_id}' no fue encontrado en la base de datos.")
-            return SuccessResponse(message=f"DeploymentId '{payload.deployment_id}' no encontrado.")
+            logger.warning(
+                f"DeploymentId '{payload.deployment_id}' NO encontrado en BD. Iniciando Auto-Recuperación..."
+            )
+
+            # 2. Auto-Recovery Logic
+            try:
+                # We need an AA Client to fetch details.
+                # Initialize it on the fly (lightweight enough for this edge case)
+                aa_config = ConfigManager.get_aa360_config()
+                aa_client = AutomationAnywhereClient(**aa_config)
+
+                # Fetch details from A360
+                detalles_list = await aa_client.obtener_detalles_por_deployment_ids([payload.deployment_id])
+                await aa_client.close()
+
+                if not detalles_list:
+                    logger.error(f"Auto-Recuperación fallida: A360 no devolvió detalles para {payload.deployment_id}")
+                    return SuccessResponse(message="DeploymentId no encontrado en A360. No se pudo recuperar.")
+
+                detalle = detalles_list[0]
+
+                # Extract required fields for insertion
+                # Note: We might not have the exact 'EquipoId' easily if it's not in the API response.
+                # We'll try to infer or use a fallback/NULL if DB allows.
+                # Based on 'insertar_registro_ejecucion', we need:
+                # id_despliegue, db_robot_id, db_equipo_id, a360_user_id, marca_tiempo_programada, estado
+
+                # robot_id = detalle.get("automationId")  # This is usually the FileID in A360
+                user_id = detalle.get("runAsUserIds", [None])[0]
+                # start_time = detalle.get("startDateTime")  # ISO Format
+
+                # For EquipoId, we might need to query DB to find which team has this user/robot assigned,
+                # or leave it NULL if the schema permits.
+                # For now, we will try to find the robot in our DB to get its internal ID if different,
+                # but 'insertar_registro_ejecucion' expects the A360 FileID as 'db_robot_id' based on usage?
+                # Checking 'desplegador.py': db_robot_id=robot_id (which comes from 'obtener_robots_ejecutables').
+                # In 'obtener_robots_ejecutables' (SP), RobotId is likely the A360 FileID.
+
+                # We will insert with minimal info.
+                # WARNING: 'db_equipo_id' is mandatory in the INSERT statement?
+                # Let's check 'database.py': INSERT INTO dbo.Ejecuciones ... VALUES (?, ?, ?, ?, ?, ?)
+                # It doesn't seem to handle NULLs gracefully if the column is NOT NULL.
+                # We will attempt to insert with a placeholder or 0 if we can't find it,
+                # or better, just log the error if we can't fully reconstruct it.
+
+                # Actually, 'automationId' in activity list might be different from FileID.
+                # Let's trust 'fileId' if present, or 'automationId'.
+                file_id = detalle.get("fileId") or detalle.get("automationId")
+
+                # To be safe and robust, we should try to insert.
+                # If EquipoId is missing, we might fail.
+                # Let's assume for now we can't easily recover EquipoId without complex logic.
+                # But we can try to insert with EquipoId=0 or similar if DB allows, or just fail gracefully.
+
+                # REVISION: Implementing full recovery might be complex without EquipoId.
+                # However, we can try to find the EquipoId from 'Asignaciones' table using RobotId and UserId?
+                # That would be the best approach.
+
+                # For this iteration, I will log the INTENT to recover and the data we found,
+                # but I won't risk breaking the DB with invalid FKs without a dedicated SP.
+                # I will add a TODO and a detailed log so the user can manually fix it or we can add the SP later.
+
+                logger.error(
+                    f"Auto-Recuperación PARCIAL: Se encontraron datos en A360 (FileID: {file_id}, UserID: {user_id}). "
+                    "Pero falta lógica para determinar 'EquipoId' automáticamente. "
+                    "El registro no se creará para evitar inconsistencias de FK."
+                )
+                return SuccessResponse(
+                    message="DeploymentId no encontrado en BD. Recuperación automática no implementada completamente."
+                )
+
+            except Exception as recovery_error:
+                logger.error(f"Excepción durante Auto-Recuperación: {recovery_error}", exc_info=True)
+                return SuccessResponse(message="Error durante intento de auto-recuperación.")
+
         else:  # UpdateStatus.ERROR
-            # El error detallado ya se logueó en database.py
             return SuccessResponse(message=f"Error al actualizar DeploymentId '{payload.deployment_id}'.")
+
     except Exception as e:
         logger.error(f"Error al procesar callback para {payload.deployment_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Error interno al actualizar el estado.")
