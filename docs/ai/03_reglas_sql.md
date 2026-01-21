@@ -802,7 +802,31 @@ async def actualizar_robot_mal(robot_id, prioridad):
 
 ---
 
-## 7. OPTIMIZACIÓN Y PERFORMANCE
+## 7. HERRAMIENTAS DE DIAGNÓSTICO
+
+ ### db_tools.py
+
+ Existe un script de utilidad en `scripts/db_tools.py` que permite ejecutar consultas rápidas a la base de datos SAM desde la terminal, cargando automáticamente la configuración desde el archivo `.env`.
+
+ **Uso recomendado para Agentes:**
+
+ ```python
+ # Para probar una consulta rápida o diagnóstico
+ from scripts.db_tools import run_query
+
+ # Ejemplo: Verificar estado de un robot
+ res = run_query("SELECT Robot, ActivoSAM FROM dbo.Robots WHERE Robot = ?", ("MiRobot",))
+ print(res)
+ ```
+
+ **Ventajas:**
+ - Carga automática de `.env`.
+ - Manejo de pool de conexiones.
+ - Formateo de resultados como lista de diccionarios.
+
+ ---
+
+ ## 8. OPTIMIZACIÓN Y PERFORMANCE
 
 ### Índices
 

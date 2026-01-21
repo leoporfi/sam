@@ -12,6 +12,7 @@ Este documento proporciona **guías paso a paso** para tareas comunes que un Age
 - 📚 Documentación relevante a consultar
 - ⚠️ Precauciones importantes
 - 💡 Salida esperada
+- 🛠️ **Herramienta Recomendada:** Usa `scripts/db_tools.py` para ejecutar consultas de diagnóstico de forma rápida y segura.
 
 ---
 

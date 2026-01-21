@@ -33,5 +33,13 @@ Sigue estos pasos para realizar un commit:
     git commit -m "tipo: mensaje descriptivo"
     ```
 
-5.  **Verificación**:
-    Si el commit falla debido a `pre-commit` hooks (linting, formateo), corrige los errores reportados y repite desde el paso 3.
+5.  **Verificación y Re-intento**:
+    Si el commit falla debido a `pre-commit` hooks (linting, formateo), es muy probable que los hooks hayan modificado archivos para corregirlos.
+    En este caso:
+    1.  Ejecuta `git status` para confirmar que hay cambios no stageados.
+    2.  Ejecuta `git add .` para incluir las correcciones automáticas.
+    3.  Ejecuta el commit nuevamente con el mismo mensaje.
+    ```bash
+    git add .
+    git commit -m "tipo: mensaje descriptivo"
+    ```

@@ -814,6 +814,7 @@ def get_system_status(db: DatabaseConnector) -> Dict:
                 "EquiposViale": row.get("EquiposViale", 0),
                 "EquiposVelez": row.get("EquiposVelez", 0),
             },
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
     except Exception as e:
