@@ -14,6 +14,7 @@ Para realizar cualquier tarea, **DEBES** consultar la guía específica en docs/
 | **Base de Datos / SPs** | 🗄️ [docs/ai/03_reglas_sql.md](docs/ai/03_reglas_sql.md) |
 | **Seguridad / Credenciales** | 🔒 [docs/ai/04_seguridad.md](docs/ai/04_seguridad.md) |
 | **Diagnóstico / Tareas** | 🛠️ [docs/ai/05_ejemplos_tareas.md](docs/ai/05_ejemplos_tareas.md) |
+| **Alertas / Notificaciones** | 🚨 [docs/ai/08_alertas.md](docs/ai/08_alertas.md) |
 
 ## **⛔ REGLAS DE ORO (Hard Rules)**
 
