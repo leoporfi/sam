@@ -349,6 +349,8 @@ def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state)
                         html.li(link({"to": "/programaciones", "data-route": "/programaciones"}, "Programaciones")),
                         html.li(link({"to": "/pools", "data-route": "/pools"}, "Pools")),
                         html.li(link({"to": "/mapeos", "data-route": "/mapeos"}, "Mapeos")),
+                        html.li(link({"to": "/glosario", "data-route": "/glosario"}, "Glosario")),
+                        html.li(link({"to": "/faq", "data-route": "/faq"}, "FAQ")),
                     ),
                     html.ul(
                         html.li(

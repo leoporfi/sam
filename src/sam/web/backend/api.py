@@ -1153,3 +1153,56 @@ def delete_mapping_endpoint(request: Request, mapeo_id: int, db: DatabaseConnect
         return {"message": "Mapeo eliminado"}
     except Exception as e:
         _handle_endpoint_errors("delete_mapping", e, "Mapeos", mapeo_id)
+
+
+# ------------------------------------------------------------------
+# Documentation routes
+# ------------------------------------------------------------------
+@router.get("/api/docs/navigation", tags=["Documentación"])
+def get_docs_navigation():
+    """Obtiene la estructura de navegación de la documentación."""
+    from .docs_data import NAVIGATION_STRUCTURE
+
+    return NAVIGATION_STRUCTURE
+
+
+@router.get("/api/docs/glossary", tags=["Documentación"])
+def get_glossary_full():
+    """Obtiene la estructura completa del glosario."""
+    from .docs_data import GLOSSARY_DATA
+
+    return {"sections": GLOSSARY_DATA}
+
+
+@router.get("/api/docs/glossary/{section_id}", tags=["Documentación"])
+def get_glossary_section(section_id: str):
+    """Obtiene una sección específica del glosario."""
+    from .docs_data import GLOSSARY_DATA
+
+    if section_id not in GLOSSARY_DATA:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Sección de glosario '{section_id}' no encontrada."
+        )
+
+    return GLOSSARY_DATA[section_id]
+
+
+@router.get("/api/docs/faq", tags=["Documentación"])
+def get_faq_full():
+    """Obtiene la estructura completa de FAQ."""
+    from .docs_data import FAQ_DATA
+
+    return {"sections": FAQ_DATA}
+
+
+@router.get("/api/docs/faq/{section_id}", tags=["Documentación"])
+def get_faq_section(section_id: str):
+    """Obtiene una sección específica de FAQ."""
+    from .docs_data import FAQ_DATA
+
+    if section_id not in FAQ_DATA:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Sección de FAQ '{section_id}' no encontrada."
+        )
+
+    return FAQ_DATA[section_id]
