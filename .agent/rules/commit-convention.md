@@ -1,6 +1,11 @@
+---
+trigger: always_on
+---
+
 # 📝 Convención de Commits
 
-Para mantener el historial limpio, usa los siguientes prefijos en tus mensajes de commit:
+Para mantener el historial limpio, usa los siguientes prefijos en tus mensajes de commit.
+**IMPORTANTE: El mensaje debe estar escrito obligatoriamente en ESPAÑOL.**
 
 - `feat:` Nuevas funcionalidades.
 - `fix:` Corrección de errores.
