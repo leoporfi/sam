@@ -5,6 +5,7 @@
    - `feature/`: Nuevas funcionalidades.
    - `fix/`: Corrección de errores.
    - `hotfix/`: Urgencias en producción.
+   > 📘 Para una guía detallada de Git, consulta [docs/ai/12_guia_git.md](docs/ai/12_guia_git.md).
 2. **Entorno**: Instala el entorno con `uv sync`.
 3. **Hooks**: Activa los hooks con `pre-commit install`.
 
