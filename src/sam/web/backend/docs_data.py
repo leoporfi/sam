@@ -62,9 +62,9 @@ GLOSSARY_DATA = {
 
 **Objetivo:** Aislar recursos y garantizar capacidad para procesos críticos.
 
-**Reglas:**
-- Los equipos de un pool solo pueden ejecutar robots de ese pool (si `BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO` es TRUE).
-- Permite segmentar la granja de robots.""",
+**Tipos:**
+- **Aislamiento Estricto**: Equipos solo para robots del pool.
+- **Aislamiento Flexible**: Equipos pueden compartirse.""",
             },
             {
                 "slug": "ejecucion",
@@ -103,6 +103,48 @@ GLOSSARY_DATA = {
 **Objetivo:** Evitar oscilaciones (flapping) y dar tiempo a que los cambios surtan efecto.
 
 **Valor Default:** 300 segundos (5 minutos).""",
+            },
+            {
+                "slug": "prioridad-balanceo",
+                "term": "Prioridad de Balanceo",
+                "description": """**Descripción:** Valor numérico (1-100) que determina la importancia de un robot. **Menor número = mayor prioridad**.
+
+- `1-20`: Críticos (ej. procesos financieros)
+- `21-80`: Normales
+- `81-100`: Secundarios (ej. reportes)""",
+            },
+            {
+                "slug": "max-equipos",
+                "term": "MaxEquipos",
+                "description": """**Descripción:** Límite máximo de equipos que el Balanceador puede asignar a un robot. Valor `-1` significa ilimitado.""",
+            },
+            {
+                "slug": "min-equipos",
+                "term": "MinEquipos",
+                "description": """**Descripción:** Cantidad mínima garantizada de equipos para un robot, independiente de la carga.""",
+            },
+            {
+                "slug": "es-online",
+                "term": "EsOnline",
+                "description": """**Descripción:** Campo booleano en `dbo.Robots` que indica si el robot responde a demanda (1) o solo a programaciones (0).
+
+- `EsOnline = 1`: Robot **online** (balanceo dinámico)
+- `EsOnline = 0`: Robot **programado** (solo ejecuta según agenda)""",
+            },
+            {
+                "slug": "tickets-equipo-adicional",
+                "term": "Tickets por Equipo Adicional",
+                "description": """**Descripción:** Parámetro que define cuántos tickets pendientes justifican asignar un equipo adicional a un robot.
+
+**Ejemplo:**
+TicketsPorEquipoAdicional = 10, Carga actual = 100 tickets → Balanceador asigna 10 equipos.""",
+            },
+            {
+                "slug": "tolerancia",
+                "term": "Tolerancia",
+                "description": """**Descripción:** Ventana de tiempo (en minutos) después de la hora programada en la que SAM reintentará ejecutar un robot si falló.
+
+**Ejemplo:** Hora Inicio: 09:00, Tolerancia: 30 min → Si falla a las 9:00, reintenta hasta las 9:30.""",
             },
         ],
     },
@@ -148,84 +190,40 @@ GLOSSARY_DATA = {
 
 **Uso en SAM:** Operaciones masivas, como asignar 50 equipos a un pool en una sola llamada.""",
             },
-        ],
-    },
-    "arquitectura": {
-        "title": "Arquitectura General",
-        "terms": [
             {
-                "slug": "vision-general",
-                "term": "Visión General",
-                "description": """SAM es un orquestador RPA que extiende las capacidades de Automation Anywhere 360, añadiendo balanceo de carga dinámico, priorización y recuperación ante fallos. Funciona como un sistema de 4 microservicios acoplados por una base de datos central.""",
+                "slug": "a360",
+                "term": "A360 (Automation Anywhere 360)",
+                "description": """**Descripción:** Plataforma RPA cloud nativa que ejecuta los bots. SAM orquesta las ejecuciones sobre A360.""",
             },
             {
-                "slug": "capas",
-                "term": "Capas",
-                "description": """1. **Frontend (Web):** Interfaz de usuario ReactPy para gestión y monitoreo.
-2. **Backend (API):** FastAPI para servir datos al frontend y recibir webhooks.
-3. **Core Services:**
-   - **Lanzador:** Motor de ejecución y monitoreo.
-   - **Balanceador:** Cerebro de optimización de recursos.
-   - **Callback:** Receptor de eventos tiempo real de A360.
-4. **Datos:** SQL Server como Single Source of Truth.""",
+                "slug": "bot-runner",
+                "term": "Bot Runner",
+                "description": """**Descripción:** Agente de Automation Anywhere instalado en una máquina Windows que ejecuta los bots. En SAM se llama **Equipo**.""",
             },
             {
-                "slug": "comunicacion",
-                "term": "Comunicación",
-                "description": """- **Interna:** A través de la Base de Datos (Polling/Updates).
-- **Externa (Salida):** API REST de Automation Anywhere 360 (httpx).
-- **Externa (Entrada):** Webhooks (Callback) desde A360.""",
-            },
-        ],
-    },
-    "componentes-frontend": {
-        "title": "Componentes Frontend",
-        "terms": [
-            {
-                "slug": "robot-list-py",
-                "term": "robot_list.py",
-                "description": """**Tipo:** Page / Feature Component
-
-**Responsabilidad:** Dashboard principal de robots. Muestra estado, carga, asignaciones y permite acciones de control (activar/desactivar).
-
-**Hooks:** `use_robots_hook`""",
+                "slug": "control-room",
+                "term": "Control Room",
+                "description": """**Descripción:** Interfaz web de Automation Anywhere donde se gestionan bots, dispositivos y ejecuciones.""",
             },
             {
-                "slug": "equipo-list-py",
-                "term": "equipo_list.py",
-                "description": """**Tipo:** Page / Feature Component
-
-**Responsabilidad:** Gestión de equipos. Muestra estado de conexión, pool asignado y permite editar propiedades.
-
-**Hooks:** `use_equipos_hook`""",
+                "slug": "deployment-id",
+                "term": "DeploymentId",
+                "description": """**Descripción:** Identificador único de una ejecución en A360. SAM lo almacena en `dbo.Ejecuciones.DeploymentId`.""",
             },
             {
-                "slug": "schedule-list-py",
-                "term": "schedule_list.py",
-                "description": """**Tipo:** Page / Feature Component
-
-**Responsabilidad:** Gestión de programaciones (Cron jobs).
-
-**Hooks:** `use_schedules_hook`""",
+                "slug": "nssm",
+                "term": "NSSM",
+                "description": """**Descripción:** Non-Sucking Service Manager. Herramienta utilizada para ejecutar los scripts de Python como servicios de Windows.""",
             },
             {
-                "slug": "bot-input-editor-py",
-                "term": "bot_input_editor.py",
-                "description": """**Tipo:** Shared Component
-
-**Responsabilidad:** Editor JSON visual para configurar los parámetros de entrada (bot_input) de los robots.""",
-            },
-            {
-                "slug": "data-table-py",
-                "term": "data_table.py",
-                "description": """**Tipo:** Shared Component
-
-**Responsabilidad:** Tabla genérica con soporte para ordenamiento, paginación y filtrado. Usada en todas las listas.""",
+                "slug": "jwt",
+                "term": "JWT (JSON Web Token)",
+                "description": """**Descripción:** Estándar para la creación de tokens de acceso. Utilizado para la autenticación con la API de A360.""",
             },
         ],
     },
-    "servicios-apis": {
-        "title": "Servicios y APIs",
+    "componentes-servicios": {
+        "title": "Componentes y Servicios",
         "terms": [
             {
                 "slug": "servicio-lanzador",
@@ -256,8 +254,6 @@ GLOSSARY_DATA = {
 
 **Endpoint:** `POST /api/callback`
 
-**Inputs:** JSON con `deploymentId`, status, `botOutput`.
-
 **Responsabilidad:** Recibir notificación inmediata de fin de robot y actualizar `dbo.Ejecuciones`.""",
             },
             {
@@ -265,20 +261,85 @@ GLOSSARY_DATA = {
                 "term": "API Web",
                 "description": """**Tipo:** API REST (FastAPI)
 
-**Endpoints Clave:**
-- `GET /api/robots`: Listado de robots.
-- `GET /api/analytics/executions`: Dashboard de ejecuciones recientes.
-- `POST /api/executions/{id}/unlock`: Destrabe manual de ejecuciones.
-- `POST /api/sync/robots`: Forzar sincronización con A360.""",
+**Responsabilidad:** Interfaz de gestión ABM de SAM. Permite configurar robots, equipos, pools, programaciones y mapeos.""",
             },
             {
-                "slug": "sistema-de-alertas",
-                "term": "Sistema de Alertas",
-                "description": """**Componentes:** `EmailAlertClient`, `AlertContext`.
+                "slug": "desplegador",
+                "term": "Desplegador",
+                "description": """**Descripción:** Componente del Lanzador que ejecuta robots consultando `dbo.ObtenerRobotsEjecutables()` y desplegándolos vía API A360.
 
-**Niveles:** `CRITICAL`, `HIGH`, `MEDIUM`.
+**Frecuencia:** 15 segundos (configurable).""",
+            },
+            {
+                "slug": "conciliador",
+                "term": "Conciliador",
+                "description": """**Descripción:** Componente del Lanzador que audita el estado de ejecuciones activas consultando la API de A360. Detecta discrepancias y actualiza estados.
 
-**Throttling:** Mecanismo que agrupa alertas idénticas para evitar spam (ej. 1 correo cada 30 mins para el mismo error).""",
+**Frecuencia:** 5-15 minutos (configurable).""",
+            },
+            {
+                "slug": "sincronizador",
+                "term": "Sincronizador",
+                "description": """**Descripción:** Componente del Lanzador que actualiza los catálogos de robots y equipos consultando la API de A360.
+
+**Frecuencia:** 1 hora (configurable).""",
+            },
+            {
+                "slug": "proveedor-carga",
+                "term": "Proveedor de Carga",
+                "description": """**Descripción:** Componente del Balanceador que consulta sistemas externos (Clouders, RPA360 Work Queues) para obtener la demanda (tickets pendientes).""",
+            },
+        ],
+    },
+    "conceptos-a360": {
+        "title": "Conceptos A360",
+        "terms": [
+            {
+                "slug": "target",
+                "term": "Target (Compatible Target)",
+                "description": """**Descripción:** Configuración en A360 que define qué Bot Runners pueden ejecutar un bot específico.
+
+**Errores comunes:**
+- "No compatible targets found" → El bot no tiene targets configurados.
+- "Bad Request" → Problemas de integridad en el bot.""",
+            },
+            {
+                "slug": "taskbot",
+                "term": "Taskbot",
+                "description": """**Descripción:** El archivo de código del bot en A360.
+
+**Errores de Integridad:** Paquetes faltantes, variables eliminadas, dependencias rotas.""",
+            },
+        ],
+    },
+    "estados": {
+        "title": "Estados de Ejecución",
+        "terms": [
+            {
+                "slug": "estado",
+                "term": "Estado",
+                "description": """**Descripción:** Valor que indica el ciclo de vida de una ejecución:
+- `DEPLOYED`: Enviado a A360.
+- `RUNNING`: En ejecución.
+- `QUEUED`: En cola.
+- `COMPLETED`: Finalizado exitosamente.
+- `RUN_FAILED`: Falló durante ejecución.
+- `DEPLOY_FAILED`: Falló al desplegar.
+- `UNKNOWN`: Pérdida de comunicación.
+- `COMPLETED_INFERRED`: Inferido tras intentos fallidos.""",
+            },
+            {
+                "slug": "unknown",
+                "term": "UNKNOWN",
+                "description": """**Descripción:** Estado de una ejecución cuando SAM pierde comunicación con A360.
+
+**Causas:** Timeout API, ejecución purgada, red.
+**Resolución:** El Conciliador intenta recuperar o inferir el estado.""",
+            },
+            {
+                "slug": "inferencia-completitud",
+                "term": "Inferencia de Completitud",
+                "description": """**Descripción:** Mecanismo del Conciliador que marca una ejecución como `COMPLETED_INFERRED` cuando no aparece en A360 tras múltiples intentos.""",
             },
         ],
     },
@@ -295,55 +356,43 @@ GLOSSARY_DATA = {
             {
                 "slug": "principio-minimo-privilegio",
                 "term": "Principio de Mínimo Privilegio",
-                "description": """**Descripción:** Estrategia de seguridad donde cada usuario/servicio tiene solo los permisos estrictamente necesarios.
-
-**Implementación:** El usuario de BD de SAM solo tiene `EXECUTE` sobre el esquema `dbo`, sin permisos directos de `DELETE` o `DROP` en tablas.""",
+                "description": """**Descripción:** Estrategia de seguridad donde cada usuario/servicio tiene solo los permisos estrictamente necesarios.""",
             },
             {
                 "slug": "auditoria-manual",
                 "term": "Auditoría Manual",
                 "description": """**Descripción:** Tabla `dbo.AuditoriaManual` y procedimiento asociado.
 
-**Uso:** Obligatorio registrar aquí cualquier cambio manual de datos (UPDATE/DELETE) realizado por un operador humano para corregir incidentes.""",
+**Uso:** Obligatorio registrar aquí cualquier cambio manual de datos (UPDATE/DELETE) realizado por un operador humano.""",
+            },
+            {
+                "slug": "sistema-de-alertas",
+                "term": "Sistema de Alertas",
+                "description": """**Componentes:** `EmailAlertClient`, `AlertContext`.
+
+**Niveles:** `CRITICAL`, `HIGH`, `MEDIUM`.
+
+**Throttling:** Mecanismo que agrupa alertas idénticas para evitar spam.""",
             },
         ],
     },
-    "flujos-clave": {
-        "title": "Flujos Clave",
+    "general": {
+        "title": "General",
         "terms": [
             {
-                "slug": "despliegue-online",
-                "term": "Despliegue de Robot (Online)",
-                "description": """1. **Balanceador:** Detecta carga → Asigna Equipo en `dbo.Asignaciones`.
-2. **Lanzador:** Consulta `dbo.ObtenerRobotsEjecutables` → Encuentra Robot+Equipo libre.
-3. **Lanzador:** Llama API A360 (`deploy`).
-4. **Lanzador:** Inserta registro en `dbo.Ejecuciones` (Estado `DEPLOYED`).""",
+                "slug": "sam",
+                "term": "SAM",
+                "description": """**Sistema Automático de Robots** - Orquestador RPA que gestiona ejecuciones sobre Automation Anywhere 360.""",
             },
             {
-                "slug": "fin-de-ejecucion",
-                "term": "Fin de Ejecución (Happy Path)",
-                "description": """1. **Robot A360:** Termina su tarea.
-2. **A360:** Envía POST a `sam.callback`.
-3. **Callback:** Valida tokens → Actualiza `dbo.Ejecuciones` a `COMPLETED`.
-4. **BD:** Libera el equipo para la siguiente tarea.""",
+                "slug": "mapeo",
+                "term": "Mapeo",
+                "description": """**Descripción:** Relación entre el nombre de un robot en sistemas externos (Clouders, RPA360) y el nombre interno en SAM.""",
             },
             {
-                "slug": "manejo-error-412",
-                "term": "Manejo de Error 412 (Integridad)",
-                "description": """1. **Lanzador:** Intenta deploy → Recibe 412 de A360.
-2. **Lanzador:** Analiza mensaje. Si es "No compatible targets":
-   - Marca error permanente.
-   - **Elimina la asignación** en `dbo.Asignaciones` para detener el ciclo de error.
-   - Envía Alerta Crítica.
-   - Inserta `DEPLOY_FAILED` en `dbo.Ejecuciones`.""",
-            },
-            {
-                "slug": "preemption-prioridad",
-                "term": "Preemption (Prioridad)",
-                "description": """1. **Balanceador:** Detecta Robot A (Prio 1) con carga y sin equipos.
-2. **Balanceador:** Busca en el mismo Pool robots de menor prioridad (ej. Robot B, Prio 10) con equipos.
-3. **Balanceador:** Quita equipo a Robot B (`DELETE Asignacion`).
-4. **Balanceador:** (En siguiente ciclo) Encuentra equipo libre y lo asigna a Robot A.""",
+                "slug": "abm",
+                "term": "ABM",
+                "description": """Alta, Baja, Modificación (CRUD).""",
             },
         ],
     },
@@ -354,56 +403,91 @@ GLOSSARY_DATA = {
 # ============================================================================
 
 FAQ_DATA = {
-    "faq-negocio": {
-        "title": "Negocio",
+    "faq-general": {
+        "title": "Conceptos Generales",
         "questions": [
             {
-                "slug": "que-problema-resuelve",
-                "question": "¿Qué problema resuelve el sistema SAM?",
-                "answer": """SAM resuelve la ineficiencia en la asignación de robots a equipos en Automation Anywhere. El agendador nativo no permite balanceo dinámico ni priorización inteligente. SAM actúa como un "Dispatcher" que asigna recursos en tiempo real basándose en la demanda (tickets pendientes) y la prioridad del negocio, maximizando el uso de licencias y equipos.""",
-            },
-            {
-                "slug": "comportamiento-alta-demanda",
-                "question": "¿Cómo se comporta ante escenarios de alta demanda?",
-                "answer": """El sistema utiliza el **Servicio Balanceador** para detectar cuellos de botella. Si un robot de alta prioridad tiene mucha carga, SAM puede quitar equipos a robots de menor prioridad (ver **Preemption** en Glosario) para asignárselos al proceso crítico, siempre respetando los límites de `MaxEquipos` configurados.""",
-            },
-            {
-                "slug": "reglas-criticas",
-                "question": "¿Qué reglas son críticas para el negocio?",
-                "answer": """1. **Prioridad Estricta:** Un proceso de prioridad 1 siempre debe ejecutarse antes que uno de prioridad 10.
-2. **Aislamiento de Pools:** Si `BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO` está activo, los equipos de Finanzas nunca deben ejecutar robots de RRHH.
-3. **Integridad de Datos:** La base de datos SQL Server es la única fuente de verdad. Lo que dice A360 es secundario ante lo que dice SAM.""",
-            },
-            {
-                "slug": "que-no-hace-sam",
-                "question": "¿Qué NO hace el sistema?",
-                "answer": """- No ejecuta la lógica del negocio del robot (eso lo hace el Taskbot .bot).
-- No gestiona credenciales de aplicaciones finales (SAP, Salesforce); solo gestiona las credenciales de ejecución del robot.
-- No reemplaza al Control Room de A360, sino que lo orquesta vía API.""",
+                "slug": "que-es-sam",
+                "question": "¿Qué es SAM y cuál es su objetivo principal?",
+                "answer": """**SAM (Sistema Automático de Robots)** es un orquestador inteligente que gestiona la ejecución de robots de Automation Anywhere 360 (A360).
+
+**Objetivo principal:**
+- **Balanceo dinámico de carga:** Asigna equipos automáticamente según la demanda.
+- **Priorización inteligente:** Garantiza recursos a robots críticos.
+- **Programaciones avanzadas:** Ejecuciones cíclicas y tolerancias.
+- **Monitoreo en tiempo real:** Recuperación automática de fallos.""",
             },
         ],
     },
-    "faq-funcional": {
-        "title": "Funcional",
+    "faq-balanceador": {
+        "title": "Servicio Balanceador",
         "questions": [
             {
-                "slug": "flujo-despliegue",
-                "question": "¿Cómo funciona el flujo de despliegue?",
-                "answer": """El **Lanzador** consulta cada 15 segundos la BD. Si encuentra un robot con asignación válida y sin ejecución activa, llama a la API de A360. Si A360 responde con un `deploymentId`, se registra en `dbo.Ejecuciones` como `DEPLOYED`.""",
+                "slug": "como-sabe-sam-tickets",
+                "question": "¿Cómo sabe SAM cuántos tickets tiene cada robot?",
+                "answer": """SAM consulta **proveedores de carga externos** (Clouders, RPA360) cada `BALANCEADOR_INTERVALO_CICLO_SEG` (default: 60s).
+
+**Ejemplo:** 100 tickets / 10 tickets_por_equipo = 10 equipos necesarios.""",
             },
             {
-                "slug": "manejo-fallos-despliegue",
-                "question": "¿Qué sucede si un despliegue falla?",
-                "answer": """Depende del error:
-- **Error 412 (Integridad):** Se asume que el robot está roto. Se elimina la asignación y se alerta.
-- **Error 400 (Bad Request):** Se asume error de configuración. Se elimina la asignación y se alerta.
-- **Error 500 (Server):** Se reintenta si es caída general, o se elimina asignación si es específico del robot.
-- **Timeout/Red:** Se reintenta hasta `max_reintentos_deploy`.""",
+                "slug": "sin-equipos-disponibles",
+                "question": "¿Qué pasa si no hay equipos disponibles en la bolsa general?",
+                "answer": """Si un pool flexible busca equipos y no encuentra:
+1. **Sin Preemption:** El robot espera.
+2. **Con Preemption:** Si hay robots de menor prioridad, SAM les quita equipos para dárselos al prioritario.""",
             },
             {
-                "slug": "ejecuciones-huerfanas",
-                "question": '¿Cómo se manejan estados especiales como "Huérfanas"?',
-                "answer": """Una ejecución es "Huérfana" si está en `QUEUED` por más de 5 minutos sin pasar a `RUNNING`. El **Conciliador** las detecta y, dependiendo de la configuración, puede marcarlas como `RUN_FAILED` o intentar recuperarlas.""",
+                "slug": "como-funciona-preemption",
+                "question": "¿Cómo funciona la Preemption?",
+                "answer": """SAM reasigna equipos de un robot de baja prioridad a uno de alta.
+**Importante:** Modifica la BD inmediatamente pero **NO detiene ejecuciones en curso** en A360. El robot prioritario "captura" el equipo para la siguiente ejecución.""",
+            },
+            {
+                "slug": "balanceo-sin-tickets",
+                "question": "¿Cómo se balancean robots que NO trabajan con tickets?",
+                "answer": """Para robots sin tickets (no on-demand), usa:
+1. **Programaciones Cíclicas:** `EsCiclico=1`.
+2. **Asignaciones Fijas:** Manualmente desde el panel.
+3. **Prioridad Mínima Garantizada:** Configurar `MinEquipos`.""",
+            },
+        ],
+    },
+    "faq-configuracion": {
+        "title": "Configuración y Programaciones",
+        "questions": [
+            {
+                "slug": "priorizar-dias-semana",
+                "question": "¿Puedo priorizar un robot solo ciertos días de la semana?",
+                "answer": """**No automáticamente.** La prioridad es fija.
+**Soluciones:**
+1. Cambio manual de prioridad.
+2. Usar programaciones fijas con equipos dedicados esos días.
+3. Ajustar `MinEquipos` manualmente.""",
+            },
+            {
+                "slug": "parametros-por-pool",
+                "question": "¿La variable `in_NumRepeticion` se puede variar por pool?",
+                "answer": """**No.** Los parámetros son a nivel de **Robot**.
+**Alternativa:** Modificar el Taskbot para leer configuración externa local en cada equipo, o crear dos robots lógicos distintos en SAM.""",
+            },
+            {
+                "slug": "conflicto-programacion",
+                "question": "¿Qué pasa si programo 2 robots para la misma hora en la misma VM?",
+                "answer": """SAM valida conflictos y ejecuta solo uno basado en prioridad:
+1. Programados > Online.
+2. Menor `PrioridadBalanceo` gana.
+3. Hora más temprana gana.""",
+            },
+        ],
+    },
+    "faq-reportes": {
+        "title": "Reportes y Monitoreo",
+        "questions": [
+            {
+                "slug": "reportes-ejecuciones",
+                "question": "¿SAM genera reportes de ejecuciones?",
+                "answer": """**Actualmente:** Dashboard web en tiempo real.
+**Histórico:** Consultar tablas `dbo.Ejecuciones` y `dbo.Ejecuciones_Historico` o usar Control Room de A360.""",
             },
         ],
     },
@@ -413,52 +497,17 @@ FAQ_DATA = {
             {
                 "slug": "decision-arquitectura",
                 "question": "¿Por qué se eligió esta arquitectura de microservicios en Windows?",
-                "answer": """Se eligió para desacoplar responsabilidades. El **Lanzador** debe ser rápido y reactivo. El **Balanceador** requiere cálculos pesados que no deben bloquear al Lanzador. El **Callback** debe ser una API HTTP siempre disponible. Correr como servicios Windows (NSSM) permite integración nativa con la infraestructura del cliente y reinicio automático.""",
+                "answer": """Para desacoplar responsabilidades. Lanzador (rápido), Balanceador (cálculos pesados), Callback (API HTTP). Servicios Windows permiten integración nativa y reinicio automático.""",
             },
             {
                 "slug": "por-que-reactpy",
-                "question": "¿Por qué se eligió ReactPy en lugar de React/Angular?",
-                "answer": """Para mantener el stack tecnológico 100% en Python. Esto permite que el equipo de backend pueda mantener el frontend sin necesidad de aprender un ecosistema completamente diferente (Node.js, npm, Webpack). ReactPy genera la UI en el servidor y la envía al cliente, simplificando el despliegue.""",
+                "question": "¿Por qué se eligió ReactPy?",
+                "answer": """Para mantener el stack 100% en Python, permitiendo que el equipo de backend mantenga el frontend sin aprender JS/Node.js.""",
             },
             {
                 "slug": "por-que-stored-procedures",
                 "question": "¿Por qué es OBLIGATORIO usar Stored Procedures?",
-                "answer": """1. **Seguridad:** Previene Inyección SQL al separar datos de comandos.
-2. **Rendimiento:** SQL Server cachea los planes de ejecución.
-3. **Integridad:** Garantiza que las transacciones ACID se manejen en el motor de base de datos.
-4. **Centralización:** Si la lógica de negocio cambia, solo se actualiza el SP, no múltiples servicios Python.""",
-            },
-            {
-                "slug": "manejo-errores",
-                "question": "¿Cómo se manejan errores y edge cases?",
-                "answer": """- **Base de Datos:** Uso de transacciones y bloques `TRY...CATCH` en Stored Procedures.
-- **API:** Middleware de manejo de excepciones global en FastAPI.
-- **Lanzador:** Circuit Breaker local (`_cooldown_despliegues`) para evitar bucles de error con A360.""",
-            },
-        ],
-    },
-    "faq-operaciones": {
-        "title": "Operaciones",
-        "questions": [
-            {
-                "slug": "correccion-manual-datos",
-                "question": "¿Qué hago si necesito corregir datos manualmente en Producción?",
-                "answer": """Si es una emergencia (ej. destrabar una ejecución):
-1. **No hagas UPDATE directo.**
-2. Usa el procedimiento de auditoría: `INSERT INTO dbo.AuditoriaManual ...` explicando la razón.
-3. Luego ejecuta el cambio dentro de una transacción.
-
-Esto garantiza que quede rastro de quién y por qué se modificó la data.""",
-            },
-            {
-                "slug": "disparo-alertas",
-                "question": "¿Cuándo se dispara una Alerta?",
-                "answer": """El sistema envía correos (vía `EmailAlertClient`) en casos como:
-- **Críticos:** Excepciones no controladas en los bucles principales de los servicios.
-- **Funcionales:** Errores 412 persistentes (el equipo no se conecta).
-- **Seguridad:** Fallos de autenticación con A360.
-
-Las alertas se agrupan (throttling) para no saturar el correo.""",
+                "answer": """Seguridad (SQL Injection), Rendimiento (caché de planes), Integridad (ACID) y Centralización de lógica.""",
             },
         ],
     },
