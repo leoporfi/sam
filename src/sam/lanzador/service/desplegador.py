@@ -284,11 +284,11 @@ class Desplegador:
                                 alert_level=AlertLevel.CRITICAL,
                                 alert_scope=AlertScope.ROBOT,
                                 alert_type=AlertType.PERMANENT,
-                                subject=f"Fallo de Integridad/Configuración en '{robot_nombre}' - ASIGNACIÓN ELIMINADA",
+                                subject=f"Fallo de Integridad/Configuración en '{robot_nombre}' - ROBOT INACTIVADO",
                                 summary=(
                                     f"El robot '{robot_nombre}' presenta un fallo de integridad o configuración en A360 (Error 412). "
                                     "Esto puede deberse a falta de dispositivos compatibles o errores internos en el Taskbot. "
-                                    "La asignación ha sido ELIMINADA de SAM para evitar reintentos fallidos."
+                                    "El robot ha sido INACTIVADO en SAM para evitar reintentos fallidos en todos los equipos."
                                 ),
                                 technical_details={
                                     "Robot": f"{robot_nombre} (ID: {robot_id})",
@@ -305,8 +305,8 @@ class Desplegador:
                                     "1. Ingresar a A360 Control Room > Bots > " + robot_nombre,
                                     "2. Abrir el bot en el editor y verificar si hay errores de integridad (íconos rojos).",
                                     "3. En 'Run settings', asegurar que el dispositivo o el pool estén permitidos.",
-                                    "4. UNA VEZ RESUELTO: Volver a asignar el equipo al robot manualmente en el panel de SAM.",
-                                    "NOTA: El sistema NO volverá a intentar este lanzamiento hasta que se realice la re-asignación manual.",
+                                    "4. UNA VEZ RESUELTO: Volver a activar el Robot manualmente desde la interfaz web de SAM (Sección Robots, usando el switch de activación).",
+                                    "NOTA: El sistema NO volverá a intentar este lanzamiento hasta que se reactive el robot.",
                                 ],
                             )
                             alert_sent = self._notificador.send_alert_v2(context)
@@ -330,18 +330,16 @@ class Desplegador:
                         except Exception as db_e:
                             logger.error(f"Error al registrar fallo 412 en BD: {db_e}")
 
-                        # DESACTIVAR ASIGNACIÓN (Error permanente de configuración)
+                        # INACTIVAR ROBOT (Error permanente de configuración)
                         try:
                             self._db_connector.ejecutar_consulta(
-                                "DELETE FROM dbo.Asignaciones WHERE RobotId = ? AND EquipoId = ?",
-                                (robot_id, equipo_id),
+                                "UPDATE dbo.Robots SET Activo = 0 WHERE RobotId = ?",
+                                (robot_id,),
                                 es_select=False,
                             )
-                            logger.info(
-                                f"Asignación desactivada por Error 412: Robot {robot_id} ({robot_nombre}) - Equipo {equipo_id} ({equipo_nombre})"
-                            )
+                            logger.info(f"Robot inactivado por Error 412: Robot {robot_id} ({robot_nombre})")
                         except Exception as db_e:
-                            logger.error(f"Error al desactivar asignación por 412: {db_e}")
+                            logger.error(f"Error al inactivar robot por 412: {db_e}")
 
                         # No reintentar, es un error permanente del robot
                         break
