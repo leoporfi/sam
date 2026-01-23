@@ -353,6 +353,7 @@ def get_recent_executions(
     critical_only: bool = Query(True),
     robot_name: Optional[str] = Query(None, description="Filtrar por nombre de robot"),
     equipo_name: Optional[str] = Query(None, description="Filtrar por nombre de equipo"),
+    grouped: bool = Query(False, description="Agrupar fallos por Robot, Equipo, Estado, Mensaje y Origen"),
     db: DatabaseConnector = Depends(get_db),
 ):
     """
@@ -386,6 +387,7 @@ def get_recent_executions(
             filtro_ejecuciones_cortas_minutos=filtro_ejecuciones_cortas_minutos,
             robot_name=robot_name,
             equipo_name=equipo_name,
+            grouped=grouped,
         )
     except Exception as e:
         logger.error(f"Error obteniendo ejecuciones recientes: {e}", exc_info=True)

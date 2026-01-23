@@ -1,6 +1,7 @@
 # web/backend/database.py
 import asyncio
 import logging
+from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -1024,6 +1025,7 @@ def get_recent_executions(
     filtro_ejecuciones_cortas_minutos: int = 2,
     robot_name: Optional[str] = None,
     equipo_name: Optional[str] = None,
+    grouped: bool = False,
 ) -> Dict[str, List[Dict]]:
     """
     Obtiene las ejecuciones recientes usando SP.
@@ -1053,6 +1055,56 @@ def get_recent_executions(
 
         fallos = result_sets[0] if result_sets and len(result_sets) > 0 else []
         demoras = result_sets[1] if result_sets and len(result_sets) > 1 else []
+
+        if grouped and fallos:
+            # Agrupar fallos por Robot, Equipo, Estado, MensajeError, Origen
+            grupos = defaultdict(
+                lambda: {
+                    "Robot": "",
+                    "Equipo": "",
+                    "Estado": "",
+                    "MensajeError": "",
+                    "Origen": "",
+                    "Cantidad": 0,
+                    "TiempoTotal": 0.0,
+                    "FechaInicio": None,
+                    "FechaUltima": None,
+                }
+            )
+
+            for f in fallos:
+                key = (f.get("Robot"), f.get("Equipo"), f.get("Estado"), f.get("MensajeError"), f.get("Origen"))
+                g = grupos[key]
+                if g["Cantidad"] == 0:
+                    g["Robot"] = f.get("Robot")
+                    g["Equipo"] = f.get("Equipo")
+                    g["Estado"] = f.get("Estado")
+                    g["MensajeError"] = f.get("MensajeError")
+                    g["Origen"] = f.get("Origen")
+                    g["FechaInicio"] = f.get("FechaInicio")
+                    g["FechaUltima"] = f.get("FechaInicio")
+                else:
+                    # Actualizar fechas
+                    fi = f.get("FechaInicio")
+                    if fi:
+                        if not g["FechaInicio"] or fi < g["FechaInicio"]:
+                            g["FechaInicio"] = fi
+                        if not g["FechaUltima"] or fi > g["FechaUltima"]:
+                            g["FechaUltima"] = fi
+
+                g["Cantidad"] += 1
+                g["TiempoTotal"] += f.get("TiempoTranscurridoMinutos") or 0.0
+
+            # Calcular promedios y limpiar
+            fallos_agrupados = []
+            for g in grupos.values():
+                g["TiempoPromedio"] = g["TiempoTotal"] / g["Cantidad"] if g["Cantidad"] > 0 else 0
+                g.pop("TiempoTotal")
+                fallos_agrupados.append(g)
+
+            # Ordenar por cantidad descendente
+            fallos_agrupados.sort(key=lambda x: x["Cantidad"], reverse=True)
+            fallos = fallos_agrupados
 
         return {"fallos": fallos, "demoras": demoras}
 
