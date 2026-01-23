@@ -805,9 +805,6 @@ def App():
                 # para que todos los componentes (incluido el ThemeSwitcher)
                 # reciban siempre el valor actualizado de `is_dark`.
                 html.div(
-                    {
-                        "key": f"router-theme-{is_dark}",
-                    },
                     browser_router(
                         route("/", AnalyticsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/robots", RobotsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
