@@ -1018,7 +1018,6 @@ def resolver_robot_id(db: DatabaseConnector, nombre_externo: str, proveedor: str
 def get_recent_executions(
     db: DatabaseConnector,
     limit: int = 50,
-    critical_only: bool = True,
     umbral_fijo_minutos: int = 25,
     factor_umbral_dinamico: float = 1.5,
     piso_umbral_dinamico_minutos: int = 10,
@@ -1034,7 +1033,6 @@ def get_recent_executions(
     try:
         params = {
             "Limit": limit,
-            "CriticalOnly": critical_only,
             "UmbralFijoMinutos": umbral_fijo_minutos,
             "FactorUmbralDinamico": factor_umbral_dinamico,
             "PisoUmbralDinamicoMinutos": piso_umbral_dinamico_minutos,

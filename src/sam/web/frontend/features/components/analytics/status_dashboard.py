@@ -24,7 +24,6 @@ def StatusDashboard(scroll_to=None):
     active_tab, set_active_tab = use_state("fallos")
 
     # Nuevo estado para el filtro
-    critical_only, set_critical_only = use_state(True)
     grouped_view, set_grouped_view = use_state(False)
 
     # Estados para filtros (valores en inputs)
@@ -60,8 +59,8 @@ def StatusDashboard(scroll_to=None):
             set_status_data(data)
 
             # 2. Fetch Recent Executions
-            # Pasamos el filtro critical_only y los filtros aplicados
-            exec_params = {"limit": applied_limit, "critical_only": critical_only}
+            # Pasamos los filtros aplicados
+            exec_params = {"limit": applied_limit}
 
             # Agregar filtros opcionales solo si tienen valor
             if applied_robot:
@@ -169,7 +168,7 @@ def StatusDashboard(scroll_to=None):
         return f"{hours:02}:{mins:02}:{secs:02}"
 
     # Efecto para cargar datos al inicio y cuando cambia el filtro
-    @use_effect(dependencies=[critical_only, grouped_view, active_tab])
+    @use_effect(dependencies=[grouped_view, active_tab])
     def load_data():
         # Crear tarea asíncrona para cargar datos
         task = asyncio.create_task(fetch_status())
@@ -429,27 +428,6 @@ def StatusDashboard(scroll_to=None):
                 html.h3({"style": {"margin": "0"}}, "Estado de Ejecuciones Recientes"),
                 html.div(
                     {"style": {"display": "flex", "align-items": "center", "gap": "1rem"}},
-                    # Toggle Switch
-                    html.label(
-                        {
-                            "style": {
-                                "cursor": "pointer",
-                                "display": "flex",
-                                "align-items": "center",
-                                "gap": "0.5rem",
-                                "margin": "0",
-                            }
-                        },
-                        html.input(
-                            {
-                                "type": "checkbox",
-                                "role": "switch",
-                                "checked": critical_only,
-                                "on_change": lambda e: set_critical_only(e["target"]["checked"]),
-                            }
-                        ),
-                        "Mostrar solo críticos",
-                    ),
                     # Toggle Agrupado (Solo para fallos)
                     html.label(
                         {

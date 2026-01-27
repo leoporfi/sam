@@ -350,7 +350,6 @@ def get_tiempos_ejecucion_dashboard(
 @router.get("/api/analytics/executions", tags=["Analytics"])
 def get_recent_executions(
     limit: int = Query(50, ge=1, le=500),
-    critical_only: bool = Query(True),
     robot_name: Optional[str] = Query(None, description="Filtrar por nombre de robot"),
     equipo_name: Optional[str] = Query(None, description="Filtrar por nombre de equipo"),
     grouped: bool = Query(False, description="Agrupar fallos por Robot, Equipo, Estado, Mensaje y Origen"),
@@ -380,7 +379,6 @@ def get_recent_executions(
         return db_service.get_recent_executions(
             db,
             limit=limit,
-            critical_only=critical_only,
             umbral_fijo_minutos=umbral_fijo_minutos,
             factor_umbral_dinamico=factor_umbral_dinamico,
             piso_umbral_dinamico_minutos=piso_umbral_dinamico_minutos,
