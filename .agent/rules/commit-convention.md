@@ -23,6 +23,6 @@ Si el commit es de tipo `feat:` o `fix:`, es **OBLIGATORIO** incrementar la vers
 - `fix:` → Incrementa **PATCH** (ej: 1.9.1 → 1.9.2).
 
 ### 3. Etiquetas (Tags)
-Para hitos importantes o releases:
-- Crear un tag anotado: `git tag -a vX.Y.Z -m "Release version X.Y.Z"`
+Para hitos importantes, releases, o **siempre que se incremente la versión** (commits `feat` o `fix`):
+- Crear un tag anotado coincidiendo con la nueva versión: `git tag -a vX.Y.Z -m "Release version X.Y.Z"`
 - Subir los tags al remoto: `git push origin --tags`

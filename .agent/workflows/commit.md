@@ -62,6 +62,21 @@ Sigue estos pasos para realizar un commit:
     2.  Ejecuta `git add src/sam/__init__.py`
     3.  Ejecuta el commit nuevamente
     ```bash
-    git add src/sam/__init__.py
     git commit -m "tipo: mensaje descriptivo"
+    ```
+
+6.  **Verificación de Tag y Push**:
+    Si el commit incrementó la versión (fue `feat` o `fix`):
+    1.  Verifica la nueva versión en `src/sam/__init__.py`.
+    2.  Crea el tag correspondiente:
+        ```bash
+        git tag -a vX.Y.Z -m "Release version X.Y.Z"
+        ```
+    3.  Sube los cambios y los tags:
+        ```bash
+        git push origin develop --tags
+        ```
+    Si no hubo incremento de versión, solo haz push:
+    ```bash
+    git push origin develop
     ```
