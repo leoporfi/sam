@@ -26,60 +26,101 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
     # Si tenemos datos iniciales, no estamos cargando
     loading, set_loading = use_state(not bool(initial_data))
     error, set_error = use_state(None)
+    last_updated, set_last_updated = use_state(None)
 
     api_client = get_api_client()
 
-    async def fetch_all_data():
+    async def fetch_critical_data():
+        """Carga datos críticos/rápidos: Status y Ejecuciones Recientes."""
         try:
-            set_loading(True)
-            set_error(None)
-
-            # Ejecutar peticiones en paralelo
+            # Ejecutar peticiones críticas en paralelo
             status_task = api_client.get("/api/analytics/status")
             critical_task = api_client.get("/api/analytics/executions", params={"limit": 500, "critical_only": True})
-            # Para tiempos, traemos un resumen general (sin filtros específicos de percentiles por ahora)
-            performance_task = api_client.get("/api/analytics/tiempos-ejecucion")
-            success_task = api_client.get("/api/analytics/tasas-exito")
 
-            results = await asyncio.gather(
-                status_task, critical_task, performance_task, success_task, return_exceptions=True
-            )
+            results = await asyncio.gather(status_task, critical_task, return_exceptions=True)
 
             new_data = {}
 
-            # Procesar resultados
-            # Status
+            # Procesar Status
             if isinstance(results[0], Exception):
                 logger.error(f"Error fetching status: {results[0]}")
             else:
                 set_status_data(results[0])
                 new_data["status"] = results[0]
 
-            # Critical Executions
+            # Procesar Critical Executions
             if isinstance(results[1], Exception):
                 logger.error(f"Error fetching critical executions: {results[1]}")
             else:
                 set_critical_executions(results[1])
                 new_data["critical"] = results[1]
 
-            # Performance
-            if isinstance(results[2], Exception):
-                logger.error(f"Error fetching performance: {results[2]}")
-            else:
-                set_performance_data(results[2])
-                new_data["performance"] = results[2]
+            return new_data
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Error en fetch_critical_data: {e}")
+            return {}
 
-            # Success Rates
-            if isinstance(results[3], Exception):
-                logger.error(f"Error fetching success rates: {results[3]}")
+    async def fetch_analytical_data():
+        """Carga datos analíticos/lentos: Performance, Success Rates."""
+        try:
+            # Ejecutar peticiones analíticas en paralelo
+            performance_task = api_client.get("/api/analytics/tiempos-ejecucion")
+            success_task = api_client.get("/api/analytics/tasas-exito")
+
+            results = await asyncio.gather(performance_task, success_task, return_exceptions=True)
+
+            new_data = {}
+
+            # Procesar Performance
+            if isinstance(results[0], Exception):
+                logger.error(f"Error fetching performance: {results[0]}")
             else:
-                set_success_data(results[3])
-                new_data["success"] = results[3]
+                set_performance_data(results[0])
+                new_data["performance"] = results[0]
+
+            # Procesar Success Rates
+            if isinstance(results[1], Exception):
+                logger.error(f"Error fetching success rates: {results[1]}")
+            else:
+                set_success_data(results[1])
+                new_data["success"] = results[1]
+
+            return new_data
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Error en fetch_analytical_data: {e}")
+            return {}
+
+    async def fetch_all_data():
+        """Carga todos los datos en dos etapas: críticos primero, luego analíticos."""
+        try:
+            set_loading(True)
+            set_error(None)
+
+            # Etapa 1: Datos críticos (rápidos)
+            critical_data = await fetch_critical_data()
+
+            # Reducir estado de loading para permitir renderizado parcial
+            # Nota: Mantenemos loading=True hasta que todo esté listo
+            # pero los datos críticos ya están disponibles
+
+            # Etapa 2: Datos analíticos (más lentos, cacheados)
+            analytical_data = await fetch_analytical_data()
+
+            # Combinar todos los datos
+            all_data = {**critical_data, **analytical_data}
 
             # Notificar al padre los nuevos datos para caché
-            if on_refresh and new_data:
-                on_refresh(new_data)
+            if on_refresh and all_data:
+                on_refresh(all_data)
 
+            # Actualizar timestamp
+            from datetime import datetime
+
+            set_last_updated(datetime.now().strftime("%H:%M:%S"))
             set_loading(False)
         except asyncio.CancelledError:
             # Silenciar errores de cancelación y NO actualizar estado
@@ -219,7 +260,27 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
 
     return html.div(
         {"class_name": "analytics-summary-container"},
-        html.h2("Resumen General"),
+        # Header con título y timestamp
+        html.div(
+            {
+                "style": {
+                    "display": "flex",
+                    "justify-content": "space-between",
+                    "align-items": "center",
+                    "margin-bottom": "1rem",
+                }
+            },
+            html.h2({"style": {"margin": "0"}}, "Resumen General"),
+            html.small(
+                {
+                    "style": {
+                        "color": "var(--pico-muted-color)",
+                        "font-size": "0.85rem",
+                    }
+                },
+                f"Última actualización: {last_updated}" if last_updated else "Cargando...",
+            ),
+        ),
         html.div(
             {
                 "class_name": "summary-grid",
