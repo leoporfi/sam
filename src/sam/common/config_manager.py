@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+import time
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -23,9 +24,62 @@ class ConfigManager:
     """
     Gestor de Configuración Centralizado para el Proyecto SAM.
 
-    Todos los métodos públicos son @classmethod para mantener la consistencia,
-    centralizar la lógica y permitir la extensibilidad futura.
+    Soporta lectura híbrida:
+    1. Base de Datos (ConfiguracionSistema) - Prioridad Alta (si está disponible)
+    2. Variables de Entorno (.env) - Fallback
+    3. Valor por defecto
     """
+
+    _db_connector = None
+    _config_cache: Dict[str, Any] = {}
+    _cache_ttl = 60  # Segundos
+    _last_cache_update = 0
+
+    @classmethod
+    def set_db_connector(cls, db_connector):
+        """Inyecta el conector de BD para permitir lectura de configuración dinámica."""
+        cls._db_connector = db_connector
+
+    @classmethod
+    def _get_config_value(cls, key: str, default: Any = None, warning_msg: str = None) -> Any:
+        """
+        Obtiene un valor de configuración con la siguiente precedencia:
+        1. Caché local (si es válido)
+        2. Base de Datos (si hay conector)
+        3. Variable de Entorno
+        4. Default
+        """
+        # 1. Intentar leer de BD (con caché)
+        if cls._db_connector:
+            current_time = time.time()
+            # Si el caché expiró o no tiene la clave, intentamos refrescar
+            if current_time - cls._last_cache_update > cls._cache_ttl or key not in cls._config_cache:
+                try:
+                    # Leemos TODO la config de una vez para optimizar
+                    # Nota: Esto asume que db_connector tiene un método para ejecutar querys.
+                    # Usamos una query directa para evitar dependencia circular con métodos complejos de DB
+                    # Pero debemos usar el método público ejecutar_consulta
+                    rows = cls._db_connector.ejecutar_consulta(
+                        "SELECT Clave, Valor FROM dbo.ConfiguracionSistema", es_select=True
+                    )
+                    if rows:
+                        for row in rows:
+                            cls._config_cache[row["Clave"]] = row["Valor"]
+                        cls._last_cache_update = current_time
+                except Exception as e:
+                    # Si falla la BD, logueamos (una sola vez por ciclo idealmente) y seguimos con env
+                    # Para no spammear logs, solo logueamos si es debug o si es un error nuevo
+                    logger.debug(f"No se pudo leer configuración de BD: {e}")
+
+            # Si está en caché (ya sea por lectura reciente o anterior), lo usamos
+            if key in cls._config_cache:
+                val = cls._config_cache[key]
+                # Si el valor es "True"/"False" (string), convertir a booleans si el default es bool?
+                # No, mejor dejar que el caller haga el cast, pero ConfigManager suele devolver strings o ints casteados.
+                return val
+
+        # 2. Fallback a Variable de Entorno
+        return cls._get_env_with_warning(key, default, warning_msg)
 
     @classmethod
     def _get_env_with_warning(cls, key: str, default: Any = None, warning_msg: str = None) -> Any:
@@ -48,7 +102,7 @@ class ConfigManager:
         """Obtiene la configuración de logging de forma unificada."""
         return {
             "directory": cls._get_env_with_warning("LOG_DIRECTORY", "C:/RPA/Logs/SAM"),
-            "level_str": cls._get_env_with_warning("LOG_LEVEL", "INFO"),
+            "level_str": cls._get_config_value("LOG_LEVEL", "INFO"),  # Migrable a BD
             "format": cls._get_env_with_warning(
                 "LOG_FORMAT", "%(asctime)s - PID:%(process)d - %(name)s - %(levelname)s - %(funcName)s - %(message)s"
             ),
@@ -76,7 +130,10 @@ class ConfigManager:
         """Obtiene la configuración de email para alertas."""
         # Filtrar cadenas vacías de la lista de destinatarios
         # Soportar tanto comas como punto y coma como delimitadores
-        recipients_raw = cls._get_env_with_warning("EMAIL_RECIPIENTS", "")
+
+        # AHORA USA _get_config_value para permitir DB
+        recipients_raw = cls._get_config_value("EMAIL_RECIPIENTS", "")
+
         # Reemplazar punto y coma por coma para normalizar
         recipients_normalized = recipients_raw.replace(";", ",")
         recipients = [email.strip() for email in recipients_normalized.split(",") if email.strip()]
@@ -114,9 +171,11 @@ class ConfigManager:
     @classmethod
     def get_lanzador_config(cls) -> Dict[str, Any]:
         """Obtiene la configuración específica para el servicio Lanzador."""
-        pausa_inicio = cls._get_env_with_warning("LANZADOR_PAUSA_INICIO_HHMM", "22:00")
-        pausa_fin = cls._get_env_with_warning("LANZADOR_PAUSA_FIN_HHMM", "06:00")
-        default_params_str = cls._get_env_with_warning("LANZADOR_PARAMETROS_DEFAULT_JSON", "{}")
+        # Migrados a DB
+        pausa_inicio = cls._get_config_value("LANZADOR_PAUSA_INICIO_HHMM", "22:00")
+        pausa_fin = cls._get_config_value("LANZADOR_PAUSA_FIN_HHMM", "06:00")
+
+        default_params_str = cls._get_config_value("LANZADOR_PARAMETROS_DEFAULT_JSON", "{}")
         default_params = {}
         try:
             default_params = json.loads(default_params_str)
@@ -130,27 +189,26 @@ class ConfigManager:
                 "Error al decodificar LANZADOR_PARAMETROS_DEFAULT_JSON. Se usarán parámetros vacíos.", exc_info=True
             )
             default_params = {}
+
         return {
-            "intervalo_lanzamiento": int(cls._get_env_with_warning("LANZADOR_INTERVALO_LANZAMIENTO_SEG", 15)),
-            "intervalo_sincronizacion": int(cls._get_env_with_warning("LANZADOR_INTERVALO_SINCRONIZACION_SEG", 3600)),
-            "intervalo_conciliacion": int(cls._get_env_with_warning("LANZADOR_INTERVALO_CONCILIACION_SEG", 900)),
+            "intervalo_lanzamiento": int(cls._get_config_value("LANZADOR_INTERVALO_LANZAMIENTO_SEG", 15)),
+            "intervalo_sincronizacion": int(cls._get_config_value("LANZADOR_INTERVALO_SINCRONIZACION_SEG", 3600)),
+            "intervalo_conciliacion": int(cls._get_config_value("LANZADOR_INTERVALO_CONCILIACION_SEG", 900)),
             "pausa_lanzamiento": (pausa_inicio, pausa_fin),
-            "max_workers_lanzador": int(cls._get_env_with_warning("LANZADOR_MAX_WORKERS", 10)),
-            "max_reintentos_deploy": int(cls._get_env_with_warning("LANZADOR_MAX_REINTENTOS_DEPLOY", 2)),
-            "delay_reintentos_deploy_seg": int(cls._get_env_with_warning("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 5)),
-            "dias_tolerancia_unknown": int(cls._get_env_with_warning("CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN", 30)),
-            "conciliador_batch_size": int(cls._get_env_with_warning("LANZADOR_CONCILIADOR_BATCH_SIZE", 25)),
-            "shutdown_timeout_seg": int(cls._get_env_with_warning("LANZADOR_SHUTDOWN_TIMEOUT_SEG", 60)),
-            "habilitar_sync": os.getenv("LANZADOR_HABILITAR_SYNC", "True").lower() == "true",
-            "repeticiones": int(cls._get_env_with_warning("LANZADOR_BOT_INPUT_VUELTAS", 3)),
-            "umbral_alertas_412": int(cls._get_env_with_warning("LANZADOR_UMBRAL_ALERTAS_412", 20)),
+            "max_workers_lanzador": int(cls._get_config_value("LANZADOR_MAX_WORKERS", 10)),
+            "max_reintentos_deploy": int(cls._get_config_value("LANZADOR_MAX_REINTENTOS_DEPLOY", 2)),
+            "delay_reintentos_deploy_seg": int(cls._get_config_value("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 5)),
+            "dias_tolerancia_unknown": int(cls._get_config_value("CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN", 30)),
+            "conciliador_batch_size": int(cls._get_config_value("LANZADOR_CONCILIADOR_BATCH_SIZE", 25)),
+            "shutdown_timeout_seg": int(cls._get_env_with_warning("LANZADOR_SHUTDOWN_TIMEOUT_SEG", 60)),  # Infra
+            "habilitar_sync": str(cls._get_config_value("LANZADOR_HABILITAR_SYNC", "True")).lower() == "true",
+            "repeticiones": int(cls._get_config_value("LANZADOR_BOT_INPUT_VUELTAS", 3)),
+            "umbral_alertas_412": int(cls._get_config_value("LANZADOR_UMBRAL_ALERTAS_412", 20)),
             "parametros_default": default_params,
-            "conciliador_mensaje_inferido": cls._get_env_with_warning(
+            "conciliador_mensaje_inferido": cls._get_config_value(
                 "CONCILIADOR_MENSAJE_INFERIDO", "Finalizado (Inferido por ausencia en lista de activos)"
             ),
-            "conciliador_max_intentos_inferencia": int(
-                cls._get_env_with_warning("CONCILIADOR_MAX_INTENTOS_INFERENCIA", 5)
-            ),
+            "conciliador_max_intentos_inferencia": int(cls._get_config_value("CONCILIADOR_MAX_INTENTOS_INFERENCIA", 5)),
             "links": cls.get_external_links(),
         }
 
@@ -158,15 +216,15 @@ class ConfigManager:
     def get_balanceador_config(cls) -> Dict[str, Any]:
         """Obtiene la configuración específica para el servicio Balanceador."""
         return {
-            "cooling_period_seg": int(cls._get_env_with_warning("BALANCEADOR_COOLING_PERIOD_SEG", 300)),
-            "intervalo_ciclo_seg": int(cls._get_env_with_warning("BALANCEADOR_INTERVALO_CICLO_SEG", 120)),
-            "aislamiento_estricto_pool": cls._get_env_with_warning(
-                "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", "True"
+            "cooling_period_seg": int(cls._get_config_value("BALANCEADOR_COOLING_PERIOD_SEG", 300)),
+            "intervalo_ciclo_seg": int(cls._get_config_value("BALANCEADOR_INTERVALO_CICLO_SEG", 120)),
+            "aislamiento_estricto_pool": str(
+                cls._get_config_value("BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", "True")
             ).lower()
             == "true",
             "proveedores_carga": [
                 p.strip()
-                for p in cls._get_env_with_warning("BALANCEADOR_PROVEEDORES_CARGA", "clouders,rpa360").split(",")
+                for p in str(cls._get_config_value("BALANCEADOR_PROVEEDORES_CARGA", "clouders,rpa360")).split(",")
             ],
         }
 
@@ -192,7 +250,7 @@ class ConfigManager:
             "host": cls._get_env_with_warning("INTERFAZ_WEB_HOST", "0.0.0.0"),
             "port": int(cls._get_env_with_warning("INTERFAZ_WEB_PORT", 8000)),
             "debug": cls._get_env_with_warning("INTERFAZ_WEB_DEBUG", "False").lower() == "true",
-            "session_timeout_min": int(cls._get_env_with_warning("INTERFAZ_WEB_SESSION_TIMEOUT_MIN", 30)),
+            "session_timeout_min": int(cls._get_config_value("INTERFAZ_WEB_SESSION_TIMEOUT_MIN", 30)),
             "max_upload_size_mb": int(cls._get_env_with_warning("INTERFAZ_WEB_MAX_UPLOAD_SIZE_MB", 16)),
         }
 
@@ -229,7 +287,7 @@ class ConfigManager:
         Obtiene el mapeo de nombres de robots desde la variable de entorno MAPA_ROBOTS.
         La variable debe contener un string JSON válido.
         """
-        mapa_str = cls._get_env_with_warning("MAPA_ROBOTS", "{}")
+        mapa_str = cls._get_config_value("MAPA_ROBOTS", "{}")
         try:
             mapa = json.loads(mapa_str)
             if not isinstance(mapa, dict):
@@ -284,18 +342,16 @@ class ConfigManager:
     def get_external_links(cls) -> Dict[str, str]:
         """Obtiene enlaces externos a documentación y estados de servicio."""
         return {
-            "aa_status_page": cls._get_env_with_warning(
-                "AA_STATUS_PAGE_URL", "https://status.automationanywhere.digital/"
-            ),
-            "aa_docs_run_settings": cls._get_env_with_warning(
+            "aa_status_page": cls._get_config_value("AA_STATUS_PAGE_URL", "https://status.automationanywhere.digital/"),
+            "aa_docs_run_settings": cls._get_config_value(
                 "AA_DOCS_RUN_SETTINGS_URL",
                 "https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/control-room/bots/my-bots/run-bot-settings.html",
             ),
-            "aa_docs_bot_agent_status": cls._get_env_with_warning(
+            "aa_docs_bot_agent_status": cls._get_config_value(
                 "AA_DOCS_BOT_AGENT_STATUS_URL",
                 "https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/bot-agent/install/bot-agent-status.html",
             ),
-            "aa_docs_api_key": cls._get_env_with_warning(
+            "aa_docs_api_key": cls._get_config_value(
                 "AA_DOCS_API_KEY_URL",
                 "https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/control-room/administration/settings/cr-settings-api-key.html",
             ),

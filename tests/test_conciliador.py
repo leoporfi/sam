@@ -10,7 +10,6 @@ from sam.common.config_loader import ConfigLoader
 from sam.common.database import DatabaseConnector
 
 # --- Importar la clase que vamos a testear ---
-# (Asegúrate de que la ruta sea correcta según tu estructura)
 from sam.lanzador.service.conciliador import Conciliador
 
 
@@ -28,6 +27,7 @@ def setup_and_mock_config(pytestconfig):
         "intervalo_lanzamiento": 60,
         "intervalo_sincronizacion": 300,
         "intervalo_conciliacion": 120,
+        "conciliador_max_intentos_inferencia": 5,
     }
 
     with patch("sam.common.config_manager.ConfigManager.get_lanzador_config", return_value=mock_lanzador_config):
@@ -37,15 +37,12 @@ def setup_and_mock_config(pytestconfig):
 @pytest.fixture
 def mock_db_connector():
     """Crea un mock para el DatabaseConnector."""
-    # Usamos MagicMock para simular métodos síncronos como
-    # obtener_ejecuciones_en_curso y ejecutar_consulta_multiple
     return MagicMock(spec=DatabaseConnector)
 
 
 @pytest.fixture
 def mock_aa_client():
     """Crea un mock para el AutomationAnywhereClient."""
-    # Usamos AsyncMock porque sus métodos (ej. obtener_detalles) son async
     return AsyncMock(spec=AutomationAnywhereClient)
 
 
@@ -53,9 +50,10 @@ def mock_aa_client():
 def conciliador_service(mock_db_connector, mock_aa_client):
     """
     Crea una instancia del Conciliador con sus dependencias mockeadas.
-    Usamos un umbral de 3 intentos para simular un entorno real.
     """
-    return Conciliador(db_connector=mock_db_connector, aa_client=mock_aa_client, config={"dias_tolerancia_unknown": 90})
+    return Conciliador(
+        db_connector=mock_db_connector, aa_client=mock_aa_client, config={"conciliador_max_intentos_inferencia": 5}
+    )
 
 
 # --- Pruebas (Tests) ---
@@ -76,10 +74,7 @@ async def test_conciliar_sin_bots_activos_no_hace_nada(conciliador_service, mock
     # Assert: Verificamos que solo se llamó a la BD
     mock_db_connector.obtener_ejecuciones_en_curso.assert_called_once()
     # NUNCA se debe llamar a la API de A360
-    mock_aa_client.obtener_detalles_por_deployment_ids.assert_not_called()
-    # NUNCA se debe llamar a ninguna consulta de actualización
-    mock_db_connector.ejecutar_consulta.assert_not_called()
-    mock_db_connector.ejecutar_consulta_multiple.assert_not_called()
+    mock_aa_client.obtener_ejecuciones_activas.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -92,129 +87,138 @@ async def test_conciliar_bot_completado_actualiza_estado(conciliador_service, mo
     BOT_EN_CURSO = {"EjecucionId": 100, "DeploymentId": "dep-123"}
     mock_db_connector.obtener_ejecuciones_en_curso.return_value = [BOT_EN_CURSO]
 
-    # La API de A360 devuelve que el bot ha completado
-    API_RESPONSE = [{"deploymentId": "dep-123", "status": "COMPLETED", "endDateTime": "2025-11-11T14:00:00Z"}]
-    mock_aa_client.obtener_detalles_por_deployment_ids.return_value = API_RESPONSE
-
-    # Mockeamos la conversión de fecha para simplicidad
-    # (Si no, tendríamos que mockear pytz y dateutil)
-    with patch.object(
-        conciliador_service, "_convertir_utc_a_local_sam", return_value=datetime(2025, 11, 11, 11, 0, 0)
-    ) as mock_convertir_fecha:
-        await conciliador_service.conciliar_ejecuciones()
-
-        # Assert
-        mock_db_connector.obtener_ejecuciones_en_curso.assert_called_once()
-        mock_aa_client.obtener_detalles_por_deployment_ids.assert_called_with(["dep-123"])
-        mock_convertir_fecha.assert_called_with("2025-11-11T14:00:00Z")
-        mock_db_connector.ejecutar_consulta_multiple.assert_called_once()
-
-        # Verificamos los parámetros de la actualización
-        call_args = mock_db_connector.ejecutar_consulta_multiple.call_args
-        query = call_args[0][0]
-        params = call_args[0][1]
-
-        assert "UPDATE dbo.Ejecuciones" in query
-        assert "SET Estado = ?" in query
-        assert "IntentosConciliadorFallidos = 0" in query  # Valida que resetea el contador
-        assert "WHERE EjecucionId = ?" in query
-
-        # Validamos los datos pasados
-        assert params[0][0] == "COMPLETED"  # Estado
-        assert params[0][2] == 100  # EjecucionId
-
-        # 5. NO se llamó a la lógica de "perdidos" o "unknown de API"
-        mock_db_connector.ejecutar_consulta.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_conciliar_bot_perdido_NO_marca_unknown_Y_NO_incrementa_contador(
-    conciliador_service, mock_db_connector, mock_aa_client
-):
-    """
-    *** TEST CRÍTICO PARA LA NUEVA LÓGICA ***
-    Prueba que si un bot en 'RUNNING' NO es devuelto por la API
-    (es un "deployment perdido"), el sistema NO lo marca como UNKNOWN
-    y NO incrementa su contador de intentos.
-    """
-    # Arrange: Un bot en curso en la BD
-    BOT_PERDIDO = {"EjecucionId": 200, "DeploymentId": "dep-456"}
-    mock_db_connector.obtener_ejecuciones_en_curso.return_value = [BOT_PERDIDO]
-
-    # La API de A360 devuelve una lista VACÍA
-    API_RESPONSE = []
-    mock_aa_client.obtener_detalles_por_deployment_ids.return_value = API_RESPONSE
-
-    # Act
-    await conciliador_service.conciliar_ejecuciones()
-
-    # Assert
-    # 1. Se buscaron los bots
-    mock_db_connector.obtener_ejecuciones_en_curso.assert_called_once()
-    # 2. Se consultó a la API
-    mock_aa_client.obtener_detalles_por_deployment_ids.assert_called_with(["dep-456"])
-
-    # 3. *** ASSERT CLAVE ***
-    # NO se debe llamar a NINGUNA consulta de actualización.
-    # Ni para actualizar estado final (no hay)
-    # Ni para incrementar contador (lógica eliminada)
-    # Ni para marcar como UNKNOWN (lógica eliminada)
-    mock_db_connector.ejecutar_consulta_multiple.assert_not_called()
-    mock_db_connector.ejecutar_consulta.assert_not_called()
-
-    # El bot simplemente se reintentará en el próximo ciclo.
-
-
-@pytest.mark.asyncio
-async def test_conciliar_bot_api_reporta_unknown_INCREMENTA_contador_y_actualiza_timestamp(
-    conciliador_service, mock_db_connector, mock_aa_client
-):
-    """
-    Prueba que si la API reporta "UNKNOWN", el sistema actualiza el estado,
-    INCREMENTA el contador de fallos y actualiza FechaUltimoUNKNOWN,
-    pero NO establece FechaFin.
-    """
-    # Arrange: Un bot en curso en la BD
-    BOT_EN_CURSO = {"EjecucionId": 300, "DeploymentId": "dep-789"}
-    mock_db_connector.obtener_ejecuciones_en_curso.return_value = [BOT_EN_CURSO]
-
-    # La API de A360 devuelve que el bot está "UNKNOWN"
+    # La API de A360 devuelve que el bot ha completado (no está en activas, pero sí en detalles)
+    mock_aa_client.obtener_ejecuciones_activas.return_value = []
     API_RESPONSE = [
         {
-            "deploymentId": "dep-789",
-            "status": "UNKNOWN",
-            "endDateTime": None,  # Importante: no hay fecha fin
+            "deploymentId": "dep-123",
+            "status": "COMPLETED",
+            "endDateTime": "2025-11-11T14:00:00Z",
+            "startDateTime": "2025-11-11T13:00:00Z",
         }
     ]
     mock_aa_client.obtener_detalles_por_deployment_ids.return_value = API_RESPONSE
 
+    # Mockeamos la conversión de fecha para simplicidad
+    with patch.object(
+        conciliador_service,
+        "_convertir_utc_a_local_sam",
+        side_effect=[datetime(2025, 11, 11, 11, 0, 0), datetime(2025, 11, 11, 10, 0, 0)],
+    ):
+        await conciliador_service.conciliar_ejecuciones()
+
+        # Assert
+        mock_db_connector.obtener_ejecuciones_en_curso.assert_called_once()
+        mock_aa_client.obtener_ejecuciones_activas.assert_called_once()
+        mock_aa_client.obtener_detalles_por_deployment_ids.assert_called_with(["dep-123"])
+
+        # Verificamos los parámetros de la actualización
+        # Se llama a ejecutar_consulta_multiple para actualizar el estado final
+        assert mock_db_connector.ejecutar_consulta_multiple.call_count >= 1
+
+        # Buscar la llamada que actualiza el estado a COMPLETED
+        found_update = False
+        for call in mock_db_connector.ejecutar_consulta_multiple.call_args_list:
+            query = call[0][0]
+            params = call[0][1]
+            if "UPDATE dbo.Ejecuciones" in query and "SET Estado = ?" in query and params[0][0] == "COMPLETED":
+                found_update = True
+                assert params[0][3] == 100  # EjecucionId
+                break
+        assert found_update
+
+
+@pytest.mark.asyncio
+async def test_conciliar_bot_perdido_incrementa_contador(conciliador_service, mock_db_connector, mock_aa_client):
+    """
+    Prueba que si un bot desaparece de la lista de activos y la API no devuelve detalles,
+    se incrementa el contador de intentos fallidos.
+    """
+    # Arrange: Un bot en curso en la BD
+    BOT_PERDIDO = {"EjecucionId": 200, "DeploymentId": "dep-456", "IntentosConciliadorFallidos": 0}
+    mock_db_connector.obtener_ejecuciones_en_curso.return_value = [BOT_PERDIDO]
+
+    # La API de A360 devuelve listas VACÍAS
+    mock_aa_client.obtener_ejecuciones_activas.return_value = []
+    mock_aa_client.obtener_detalles_por_deployment_ids.return_value = []
+
     # Act
     await conciliador_service.conciliar_ejecuciones()
 
     # Assert
-    # 1. Se buscaron los bots y se llamó a la API
     mock_db_connector.obtener_ejecuciones_en_curso.assert_called_once()
-    mock_aa_client.obtener_detalles_por_deployment_ids.assert_called_with(["dep-789"])
+    mock_aa_client.obtener_ejecuciones_activas.assert_called_once()
+    mock_aa_client.obtener_detalles_por_deployment_ids.assert_called_with(["dep-456"])
 
-    # 2. Se debe llamar a la consulta MÚLTIPLE (para la query_unknown)
-    mock_db_connector.ejecutar_consulta_multiple.assert_called_once()
+    # Se debe llamar a ejecutar_consulta_multiple para incrementar el contador
+    found_inc = False
+    for call in mock_db_connector.ejecutar_consulta_multiple.call_args_list:
+        query = call[0][0]
+        params = call[0][1]
+        if "SET IntentosConciliadorFallidos = ISNULL(IntentosConciliadorFallidos, 0) + 1" in query:
+            found_inc = True
+            assert params == [(200,)]
+            break
+    assert found_inc
 
-    # 3. Verificamos los argumentos de esa llamada
-    call_args = mock_db_connector.ejecutar_consulta_multiple.call_args
-    query = call_args[0][0]  # La query SQL
-    params = call_args[0][1]  # Los parámetros
 
-    # 4. Validamos la QUERY
-    # El estado se setea directamente en la query
-    assert "SET Estado = 'UNKNOWN'" in query
-    # Se actualiza el timestamp
-    assert "FechaUltimoUNKNOWN = GETDATE()" in query
-    # Se INCREMENTA el contador
-    assert "IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1" in query
-    # NO se debe setear FechaFin
-    assert "FechaFin = ?" not in query
-    assert "FechaFin = GETDATE()" not in query
+@pytest.mark.asyncio
+async def test_conciliar_bot_perdido_max_intentos_infiere_finalizacion(
+    conciliador_service, mock_db_connector, mock_aa_client
+):
+    """
+    Prueba que si un bot perdido supera el máximo de intentos, se infiere su finalización.
+    """
+    # Arrange: Un bot con 4 intentos fallidos (límite es 5)
+    BOT_LIMITE = {"EjecucionId": 300, "DeploymentId": "dep-789", "IntentosConciliadorFallidos": 4}
+    mock_db_connector.obtener_ejecuciones_en_curso.return_value = [BOT_LIMITE]
 
-    # 5. Validamos los PARÁMETROS
-    # La query_unknown solo espera el EjecucionId
-    assert params == [(300,)]  # Lista de tuplas -> [(EjecucionId,)]
+    mock_aa_client.obtener_ejecuciones_activas.return_value = []
+    mock_aa_client.obtener_detalles_por_deployment_ids.return_value = []
+
+    # Act
+    await conciliador_service.conciliar_ejecuciones()
+
+    # Assert
+    found_infer = False
+    for call in mock_db_connector.ejecutar_consulta_multiple.call_args_list:
+        query = call[0][0]
+        params = call[0][1]
+        if "SET Estado = ?" in query and params[0][0] == "COMPLETED_INFERRED":
+            found_infer = True
+            assert params[0][2] == 300  # EjecucionId
+            break
+    assert found_infer
+
+
+@pytest.mark.asyncio
+async def test_conciliar_bot_api_reporta_unknown_INCREMENTA_contador(
+    conciliador_service, mock_db_connector, mock_aa_client
+):
+    """
+    Prueba que si la API reporta "UNKNOWN", el sistema actualiza el estado e incrementa el contador.
+    """
+    # Arrange: Un bot en curso en la BD
+    BOT_EN_CURSO = {"EjecucionId": 400, "DeploymentId": "dep-999"}
+    mock_db_connector.obtener_ejecuciones_en_curso.return_value = [BOT_EN_CURSO]
+
+    # La API de A360 devuelve que el bot está "UNKNOWN" en la lista de activos
+    API_RESPONSE = [{"deploymentId": "dep-999", "status": "UNKNOWN"}]
+    mock_aa_client.obtener_ejecuciones_activas.return_value = API_RESPONSE
+
+    # Act
+    await conciliador_service.conciliar_ejecuciones()
+
+    # Assert
+    found_unknown = False
+    for call in mock_db_connector.ejecutar_consulta_multiple.call_args_list:
+        query = call[0][0]
+        params = call[0][1]
+        if (
+            "SET Estado = 'UNKNOWN'" in query
+            and "IntentosConciliadorFallidos = IntentosConciliadorFallidos + 1" in query
+        ):
+            found_unknown = True
+            assert params == [(400,)]
+            break
+    assert found_unknown

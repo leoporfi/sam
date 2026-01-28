@@ -124,7 +124,7 @@ def DocsBreadcrumbs(items: List[dict]):
 
     return html.nav(
         {
-            "aria_label": "breadcrumb",
+            "aria-label": "breadcrumb",
             "style": {"margin-bottom": "1.5rem", "font-size": "0.9rem"},
         },
         html.ol(
