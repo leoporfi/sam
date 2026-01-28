@@ -1090,3 +1090,154 @@ dialog header h2,
   100% { opacity: 0.6; }
 }
 
+/* -------------------------------------------------------------------------- */
+/* 12. MÓDULO: DOCUMENTACIÓN                                                  */
+/* -------------------------------------------------------------------------- */
+
+/* Docs Layout - Sidebar + Contenido */
+.docs-container {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 3rem;
+  margin-top: 1.5rem;
+  align-items: start;
+}
+
+/* Sidebar de Navegación */
+.docs-sidebar {
+  position: sticky;
+  top: 6rem;
+  max-height: calc(100vh - 8rem);
+  overflow-y: auto;
+  padding-right: 1rem;
+  border-right: 1px solid var(--pico-muted-border-color);
+}
+
+.docs-sidebar h4 {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pico-muted-color);
+  margin-bottom: 1rem;
+}
+
+.docs-sidebar ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.docs-sidebar ul li {
+  margin-bottom: 0.25rem;
+}
+
+.docs-sidebar a {
+  text-decoration: none;
+  color: var(--pico-color);
+  padding: 0.5rem 0.75rem;
+  display: block;
+  border-radius: var(--pico-border-radius);
+  transition: all 0.2s ease;
+  font-size: 0.95rem;
+}
+
+.docs-sidebar a:hover {
+  background-color: var(--pico-muted-background-color);
+  color: var(--pico-primary);
+}
+
+.docs-sidebar a.active {
+  background-color: var(--pico-primary-background);
+  color: var(--pico-primary);
+  font-weight: 600;
+}
+
+/* Contenido Principal */
+.docs-main-content {
+  max-width: 900px;
+}
+
+.docs-main-content header {
+  margin-bottom: 3rem;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  padding-bottom: 2rem;
+}
+
+/* Secciones de Documentación */
+.glossary-section,
+.faq-section {
+  margin-bottom: 4rem;
+  scroll-margin-top: 6rem; /* Para que el scroll al ID no quede tapado por el header */
+}
+
+.glossary-section h2,
+.faq-section h2 {
+  border-bottom: 2px solid var(--pico-primary);
+  display: inline-block;
+  padding-bottom: 0.25rem;
+  margin-bottom: 2rem;
+}
+
+/* Términos de Glosario */
+.glossary-term {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background-color: var(--pico-card-background-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: var(--pico-card-box-shadow);
+  border: 1px solid var(--pico-card-border-color);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glossary-term:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--pico-card-box-shadow), 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.glossary-term h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: var(--pico-primary);
+  font-size: 1.4rem;
+}
+
+/* FAQ Items */
+.faq-item {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background-color: var(--pico-card-background-color);
+  border-left: 4px solid var(--pico-primary);
+  border-radius: 0.5rem;
+  box-shadow: var(--pico-card-box-shadow);
+}
+
+.faq-item h4 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: var(--pico-primary);
+  font-size: 1.2rem;
+}
+
+/* Responsive: Ajustes para tablets y móviles */
+@media (max-width: 1024px) {
+  .docs-container {
+    grid-template-columns: 220px 1fr;
+    gap: 2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .docs-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .docs-sidebar {
+    display: none; /* En móvil ocultamos el sidebar lateral */
+  }
+  
+  .docs-main-content {
+    max-width: 100%;
+  }
+}
+
+

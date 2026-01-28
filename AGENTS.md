@@ -15,6 +15,7 @@ Para realizar cualquier tarea, **DEBES** consultar la guía específica en docs/
 | **Seguridad / Credenciales** | 🔒 [docs/ai/04_seguridad.md](docs/ai/04_seguridad.md) |
 | **Diagnóstico / Tareas** | 🛠️ [docs/ai/05_ejemplos_tareas.md](docs/ai/05_ejemplos_tareas.md) |
 | **Alertas / Notificaciones** | 🚨 [docs/ai/08_alertas.md](docs/ai/08_alertas.md) |
+| **Lógica de Ejecuciones** | ⏱️ [docs/ai/11_logica_ejecuciones.md](docs/ai/11_logica_ejecuciones.md) |
 
 ## **⛔ REGLAS DE ORO (Hard Rules)**
 

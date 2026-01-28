@@ -11,6 +11,7 @@ from sam.common.apigw_client import ApiGatewayClient
 from sam.common.config_manager import ConfigManager
 from sam.common.database import DatabaseConnector
 from sam.web.backend import database as db_service
+from sam.web.backend.cache import cached, get_cache_stats
 from sam.web.backend.dependencies import get_aa_client, get_apigw_client, get_db
 from sam.web.backend.schemas import (
     AssignmentUpdateRequest,
@@ -202,15 +203,183 @@ def get_all_equipos(
         _handle_endpoint_errors("get_all_equipos", e, "Equipos")
 
 
+# ------------------------------------------------------------------
+# Funciones auxiliares cacheadas para Analytics
+# ------------------------------------------------------------------
+
+
+@cached(ttl=300)  # 5 minutos
+def _get_tiempos_ejecucion_cached(
+    db: DatabaseConnector,
+    excluir_porcentaje_inferior: Optional[float],
+    excluir_porcentaje_superior: Optional[float],
+    incluir_solo_completadas: bool,
+    meses_hacia_atras: Optional[int],
+):
+    """Versión cacheada de get_tiempos_ejecucion_dashboard."""
+    return db_service.get_tiempos_ejecucion_dashboard(
+        db=db,
+        excluir_porcentaje_inferior=excluir_porcentaje_inferior,
+        excluir_porcentaje_superior=excluir_porcentaje_superior,
+        incluir_solo_completadas=incluir_solo_completadas,
+        meses_hacia_atras=meses_hacia_atras,
+    )
+
+
+@cached(ttl=300)  # 5 minutos
+def _get_tasas_exito_cached(
+    db: DatabaseConnector,
+    fecha_inicio: Optional[str],
+    fecha_fin: Optional[str],
+    robot_id: Optional[int],
+):
+    """Versión cacheada de get_success_analysis."""
+    from datetime import datetime
+
+    fecha_inicio_dt = None
+    fecha_fin_dt = None
+
+    if fecha_inicio:
+        try:
+            fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace("Z", "+00:00"))
+        except ValueError:
+            fecha_inicio_dt = datetime.fromisoformat(fecha_inicio)
+
+    if fecha_fin:
+        try:
+            fecha_fin_dt = datetime.fromisoformat(fecha_fin.replace("Z", "+00:00"))
+        except ValueError:
+            fecha_fin_dt = datetime.fromisoformat(fecha_fin)
+
+    return db_service.get_success_analysis(
+        db=db,
+        fecha_inicio=fecha_inicio_dt,
+        fecha_fin=fecha_fin_dt,
+        robot_id=robot_id,
+    )
+
+
+@cached(ttl=300)  # 5 minutos
+def _get_utilizacion_cached(
+    db: DatabaseConnector,
+    fecha_inicio: Optional[str],
+    fecha_fin: Optional[str],
+    dias_hacia_atras: Optional[int],
+):
+    """Versión cacheada de get_utilization_analysis."""
+    from datetime import datetime, timedelta
+
+    fecha_inicio_dt = None
+    fecha_fin_dt = None
+
+    if fecha_inicio:
+        try:
+            fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace("Z", "+00:00"))
+        except ValueError:
+            fecha_inicio_dt = datetime.fromisoformat(fecha_inicio)
+
+    if fecha_fin:
+        try:
+            fecha_fin_dt = datetime.fromisoformat(fecha_fin.replace("Z", "+00:00"))
+        except ValueError:
+            fecha_fin_dt = datetime.fromisoformat(fecha_fin)
+
+    # Si no hay fechas, usar dias_hacia_atras
+    if not fecha_inicio_dt and not fecha_fin_dt and dias_hacia_atras:
+        fecha_fin_dt = datetime.now()
+        fecha_inicio_dt = fecha_fin_dt - timedelta(days=dias_hacia_atras)
+
+    return db_service.get_utilization_analysis(
+        db=db,
+        fecha_inicio=fecha_inicio_dt,
+        fecha_fin=fecha_fin_dt,
+    )
+
+
+@cached(ttl=600)  # 10 minutos
+def _get_patrones_temporales_cached(
+    db: DatabaseConnector,
+    fecha_inicio: Optional[str],
+    fecha_fin: Optional[str],
+    robot_id: Optional[int],
+):
+    """Versión cacheada de get_temporal_patterns."""
+    from datetime import datetime
+
+    fecha_inicio_dt = None
+    fecha_fin_dt = None
+
+    if fecha_inicio:
+        try:
+            fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace("Z", "+00:00"))
+        except ValueError:
+            fecha_inicio_dt = datetime.fromisoformat(fecha_inicio)
+
+    if fecha_fin:
+        try:
+            fecha_fin_dt = datetime.fromisoformat(fecha_fin.replace("Z", "+00:00"))
+        except ValueError:
+            fecha_fin_dt = datetime.fromisoformat(fecha_fin)
+
+    return db_service.get_temporal_patterns(
+        db=db,
+        fecha_inicio=fecha_inicio_dt,
+        fecha_fin=fecha_fin_dt,
+        robot_id=robot_id,
+    )
+
+
+@cached(ttl=10)  # 10 segundos - datos casi en tiempo real
+def _get_status_cached(db: DatabaseConnector):
+    """Versión cacheada de get_system_status con TTL corto."""
+    return db_service.get_system_status(db)
+
+
+@cached(ttl=10)  # 10 segundos - datos casi en tiempo real
+def _get_executions_cached(
+    db: DatabaseConnector,
+    limit: int,
+    umbral_fijo_minutos: int,
+    factor_umbral_dinamico: float,
+    piso_umbral_dinamico_minutos: int,
+    filtro_ejecuciones_cortas_minutos: int,
+    robot_name: Optional[str],
+    equipo_name: Optional[str],
+    grouped: bool,
+):
+    """Versión cacheada de get_recent_executions con TTL corto."""
+    return db_service.get_recent_executions(
+        db,
+        limit=limit,
+        umbral_fijo_minutos=umbral_fijo_minutos,
+        factor_umbral_dinamico=factor_umbral_dinamico,
+        piso_umbral_dinamico_minutos=piso_umbral_dinamico_minutos,
+        filtro_ejecuciones_cortas_minutos=filtro_ejecuciones_cortas_minutos,
+        robot_name=robot_name,
+        equipo_name=equipo_name,
+        grouped=grouped,
+    )
+
+
 @router.get("/api/analytics/status", tags=["Analytics"])
 def get_system_status(db: DatabaseConnector = Depends(get_db)):
     """Obtiene un resumen del estado del sistema."""
     try:
-        status_data = db_service.get_system_status(db)
+        status_data = _get_status_cached(db)
         return status_data
     except Exception as e:
         logger.error(f"Error obteniendo estado del sistema: {e}", exc_info=True)
         _handle_endpoint_errors("get_system_status", e, "Analytics")
+
+
+@router.get("/api/analytics/cache-stats", tags=["Analytics"])
+def get_cache_statistics():
+    """Obtiene estadísticas del caché del sistema."""
+    try:
+        return get_cache_stats()
+    except Exception as e:
+        logger.error(f"Error obteniendo estadísticas de caché: {e}", exc_info=True)
+        _handle_endpoint_errors("get_cache_statistics", e, "Analytics")
 
 
 @router.get("/api/analytics/callbacks", tags=["Analytics"])
@@ -333,7 +502,7 @@ def get_tiempos_ejecucion_dashboard(
                 detail="excluir_porcentaje_inferior debe ser menor que excluir_porcentaje_superior",
             )
 
-        return db_service.get_tiempos_ejecucion_dashboard(
+        return _get_tiempos_ejecucion_cached(
             db=db,
             excluir_porcentaje_inferior=excluir_porcentaje_inferior,
             excluir_porcentaje_superior=excluir_porcentaje_superior,
@@ -350,9 +519,9 @@ def get_tiempos_ejecucion_dashboard(
 @router.get("/api/analytics/executions", tags=["Analytics"])
 def get_recent_executions(
     limit: int = Query(50, ge=1, le=500),
-    critical_only: bool = Query(True),
     robot_name: Optional[str] = Query(None, description="Filtrar por nombre de robot"),
     equipo_name: Optional[str] = Query(None, description="Filtrar por nombre de equipo"),
+    grouped: bool = Query(False, description="Agrupar fallos por Robot, Equipo, Estado, Mensaje y Origen"),
     db: DatabaseConnector = Depends(get_db),
 ):
     """
@@ -376,16 +545,16 @@ def get_recent_executions(
         piso_umbral_dinamico_minutos = int(piso_dinamico) if piso_dinamico else 10
         filtro_ejecuciones_cortas_minutos = int(filtro_cortas) if filtro_cortas else 2
 
-        return db_service.get_recent_executions(
+        return _get_executions_cached(
             db,
             limit=limit,
-            critical_only=critical_only,
             umbral_fijo_minutos=umbral_fijo_minutos,
             factor_umbral_dinamico=factor_umbral_dinamico,
             piso_umbral_dinamico_minutos=piso_umbral_dinamico_minutos,
             filtro_ejecuciones_cortas_minutos=filtro_ejecuciones_cortas_minutos,
             robot_name=robot_name,
             equipo_name=equipo_name,
+            grouped=grouped,
         )
     except Exception as e:
         logger.error(f"Error obteniendo ejecuciones recientes: {e}", exc_info=True)
@@ -491,32 +660,11 @@ def get_utilization_analysis(
     Obtiene el análisis de utilización de recursos.
     """
     try:
-        from datetime import datetime, timedelta
-
-        fecha_inicio_dt = None
-        fecha_fin_dt = None
-
-        if fecha_inicio:
-            try:
-                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace("Z", "+00:00"))
-            except ValueError:
-                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio)
-
-        if fecha_fin:
-            try:
-                fecha_fin_dt = datetime.fromisoformat(fecha_fin.replace("Z", "+00:00"))
-            except ValueError:
-                fecha_fin_dt = datetime.fromisoformat(fecha_fin)
-
-        # Si no hay fechas, usar dias_hacia_atras
-        if not fecha_inicio_dt and not fecha_fin_dt and dias_hacia_atras:
-            fecha_fin_dt = datetime.now()
-            fecha_inicio_dt = fecha_fin_dt - timedelta(days=dias_hacia_atras)
-
-        return db_service.get_utilization_analysis(
+        return _get_utilizacion_cached(
             db=db,
-            fecha_inicio=fecha_inicio_dt,
-            fecha_fin=fecha_fin_dt,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            dias_hacia_atras=dias_hacia_atras,
         )
     except Exception as e:
         logger.error(f"Error obteniendo análisis de utilización: {e}", exc_info=True)
@@ -534,27 +682,10 @@ def get_temporal_patterns(
     Obtiene el análisis de patrones temporales (heatmap).
     """
     try:
-        from datetime import datetime
-
-        fecha_inicio_dt = None
-        fecha_fin_dt = None
-
-        if fecha_inicio:
-            try:
-                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace("Z", "+00:00"))
-            except ValueError:
-                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio)
-
-        if fecha_fin:
-            try:
-                fecha_fin_dt = datetime.fromisoformat(fecha_fin.replace("Z", "+00:00"))
-            except ValueError:
-                fecha_fin_dt = datetime.fromisoformat(fecha_fin)
-
-        return db_service.get_temporal_patterns(
+        return _get_patrones_temporales_cached(
             db=db,
-            fecha_inicio=fecha_inicio_dt,
-            fecha_fin=fecha_fin_dt,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
             robot_id=robot_id,
         )
     except Exception as e:
@@ -573,27 +704,10 @@ def get_success_analysis(
     Obtiene el análisis de tasas de éxito y errores.
     """
     try:
-        from datetime import datetime
-
-        fecha_inicio_dt = None
-        fecha_fin_dt = None
-
-        if fecha_inicio:
-            try:
-                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace("Z", "+00:00"))
-            except ValueError:
-                fecha_inicio_dt = datetime.fromisoformat(fecha_inicio)
-
-        if fecha_fin:
-            try:
-                fecha_fin_dt = datetime.fromisoformat(fecha_fin.replace("Z", "+00:00"))
-            except ValueError:
-                fecha_fin_dt = datetime.fromisoformat(fecha_fin)
-
-        return db_service.get_success_analysis(
+        return _get_tasas_exito_cached(
             db=db,
-            fecha_inicio=fecha_inicio_dt,
-            fecha_fin=fecha_fin_dt,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
             robot_id=robot_id,
         )
     except Exception as e:
@@ -1153,3 +1267,56 @@ def delete_mapping_endpoint(request: Request, mapeo_id: int, db: DatabaseConnect
         return {"message": "Mapeo eliminado"}
     except Exception as e:
         _handle_endpoint_errors("delete_mapping", e, "Mapeos", mapeo_id)
+
+
+# ------------------------------------------------------------------
+# Documentation routes
+# ------------------------------------------------------------------
+@router.get("/api/docs/navigation", tags=["Documentación"])
+def get_docs_navigation():
+    """Obtiene la estructura de navegación de la documentación."""
+    from .docs_data import NAVIGATION_STRUCTURE
+
+    return NAVIGATION_STRUCTURE
+
+
+@router.get("/api/docs/glossary", tags=["Documentación"])
+def get_glossary_full():
+    """Obtiene la estructura completa del glosario."""
+    from .docs_data import GLOSSARY_DATA
+
+    return {"sections": GLOSSARY_DATA}
+
+
+@router.get("/api/docs/glossary/{section_id}", tags=["Documentación"])
+def get_glossary_section(section_id: str):
+    """Obtiene una sección específica del glosario."""
+    from .docs_data import GLOSSARY_DATA
+
+    if section_id not in GLOSSARY_DATA:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Sección de glosario '{section_id}' no encontrada."
+        )
+
+    return GLOSSARY_DATA[section_id]
+
+
+@router.get("/api/docs/faq", tags=["Documentación"])
+def get_faq_full():
+    """Obtiene la estructura completa de FAQ."""
+    from .docs_data import FAQ_DATA
+
+    return {"sections": FAQ_DATA}
+
+
+@router.get("/api/docs/faq/{section_id}", tags=["Documentación"])
+def get_faq_section(section_id: str):
+    """Obtiene una sección específica de FAQ."""
+    from .docs_data import FAQ_DATA
+
+    if section_id not in FAQ_DATA:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Sección de FAQ '{section_id}' no encontrada."
+        )
+
+    return FAQ_DATA[section_id]

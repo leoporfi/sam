@@ -75,6 +75,7 @@ notificador.send_alert_v2(context)
 
 *   **Lanzador**:
     *   **Errores Críticos en Ciclos**: Si un ciclo (Lanzamiento, Sincronización, Conciliación) falla con una excepción no controlada.
+    *   **Error 412 (No compatible targets)**: Si un robot falla con "No compatible targets found", se **INACTIVA** el robot en la base de datos para evitar intentos en todos los equipos asignados.
     *   **Error 412 (Device Disconnected)**: Si un robot falla persistentemente (umbral configurable) porque el equipo está desconectado.
     *   **Fallo de Autenticación AA**: Si la API Key es rechazada por el Control Room.
     *   **Recuperación de Autenticación**: Cuando se restablece la conexión con el Control Room.

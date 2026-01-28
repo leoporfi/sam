@@ -349,6 +349,8 @@ def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state)
                         html.li(link({"to": "/programaciones", "data-route": "/programaciones"}, "Programaciones")),
                         html.li(link({"to": "/pools", "data-route": "/pools"}, "Pools")),
                         html.li(link({"to": "/mapeos", "data-route": "/mapeos"}, "Mapeos")),
+                        html.li(link({"to": "/glosario", "data-route": "/glosario"}, "Glosario")),
+                        html.li(link({"to": "/faq", "data-route": "/faq"}, "FAQ")),
                     ),
                     html.ul(
                         html.li(
@@ -377,7 +379,9 @@ def HeaderNav(theme_is_dark: bool, on_theme_toggle, robots_state, equipos_state)
                                 html.i({"class_name": "fa-solid fa-desktop"}),
                             )
                         ),
-                        html.li(ThemeSwitcher(is_dark=theme_is_dark, on_toggle=on_theme_toggle)),
+                        html.li(
+                            ThemeSwitcher(is_dark=theme_is_dark, on_toggle=on_theme_toggle, key=f"ts-{theme_is_dark}")
+                        ),
                     ),
                 ),
             ),
@@ -443,6 +447,7 @@ def ThemeSwitcher(is_dark: bool, on_toggle: Callable):
                 "role": "switch",
                 "checked": is_dark,
                 "on_change": handle_change,
+                "key": f"theme-input-{is_dark}",
             }
         ),
         html.span({"class_name": "material-symbols-outlined"}, "dark_mode"),

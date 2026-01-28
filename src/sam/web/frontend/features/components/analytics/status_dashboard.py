@@ -24,7 +24,7 @@ def StatusDashboard(scroll_to=None):
     active_tab, set_active_tab = use_state("fallos")
 
     # Nuevo estado para el filtro
-    critical_only, set_critical_only = use_state(True)
+    grouped_view, set_grouped_view = use_state(False)
 
     # Estados para filtros (valores en inputs)
     filter_robot, set_filter_robot = use_state("")
@@ -59,14 +59,18 @@ def StatusDashboard(scroll_to=None):
             set_status_data(data)
 
             # 2. Fetch Recent Executions
-            # Pasamos el filtro critical_only y los filtros aplicados
-            exec_params = {"limit": applied_limit, "critical_only": critical_only}
+            # Pasamos los filtros aplicados
+            exec_params = {"limit": applied_limit}
 
             # Agregar filtros opcionales solo si tienen valor
             if applied_robot:
                 exec_params["robot_name"] = applied_robot
             if applied_equipo:
                 exec_params["equipo_name"] = applied_equipo
+
+            # Solo agrupar si estamos en la pestaña de fallos
+            if active_tab == "fallos" and grouped_view:
+                exec_params["grouped"] = True
 
             exec_data = await api_client.get("/api/analytics/executions", params=exec_params)
             set_executions_data(exec_data)
@@ -164,7 +168,7 @@ def StatusDashboard(scroll_to=None):
         return f"{hours:02}:{mins:02}:{secs:02}"
 
     # Efecto para cargar datos al inicio y cuando cambia el filtro
-    @use_effect(dependencies=[critical_only])
+    @use_effect(dependencies=[grouped_view, active_tab])
     def load_data():
         # Crear tarea asíncrona para cargar datos
         task = asyncio.create_task(fetch_status())
@@ -424,7 +428,7 @@ def StatusDashboard(scroll_to=None):
                 html.h3({"style": {"margin": "0"}}, "Estado de Ejecuciones Recientes"),
                 html.div(
                     {"style": {"display": "flex", "align-items": "center", "gap": "1rem"}},
-                    # Toggle Switch
+                    # Toggle Agrupado (Solo para fallos)
                     html.label(
                         {
                             "style": {
@@ -433,17 +437,20 @@ def StatusDashboard(scroll_to=None):
                                 "align-items": "center",
                                 "gap": "0.5rem",
                                 "margin": "0",
+                                "opacity": "1" if active_tab == "fallos" else "0.5",
+                                "pointer-events": "auto" if active_tab == "fallos" else "none",
                             }
                         },
                         html.input(
                             {
                                 "type": "checkbox",
                                 "role": "switch",
-                                "checked": critical_only,
-                                "on_change": lambda e: set_critical_only(e["target"]["checked"]),
+                                "checked": grouped_view,
+                                "on_change": lambda e: set_grouped_view(e["target"]["checked"]),
+                                "disabled": active_tab != "fallos",
                             }
                         ),
-                        "Mostrar solo críticos",
+                        "Vista agrupada",
                     ),
                     # Refresh Button
                     html.button(
@@ -671,8 +678,11 @@ def StatusDashboard(scroll_to=None):
                         html.th("Robot"),
                         html.th("Equipo"),
                         html.th("Estado"),
-                        html.th("Tiempo"),
-                        html.th("Fecha Inicio"),
+                        html.th("Cant.") if active_tab == "fallos" and grouped_view else html.th("Tiempo"),
+                        html.th("Prom.") if active_tab == "fallos" and grouped_view else "",
+                        html.th("Fecha Inicio - Última")
+                        if active_tab == "fallos" and grouped_view
+                        else html.th("Fecha Inicio"),
                         html.th("Mensaje"),
                         html.th("Origen"),
                         html.th("Acción") if active_tab == "demoras" else "",
@@ -704,13 +714,18 @@ def StatusDashboard(scroll_to=None):
                                         else None,
                                         "style": {
                                             "color": "var(--pico-color-red-600)"
-                                            if item.get("TipoCritico") == "Fallo"
+                                            if (
+                                                item.get("TipoCritico") == "Fallo"
+                                                or (active_tab == "fallos" and grouped_view)
+                                            )
                                             else "var(--pico-color-orange-500)"
                                             if item.get("TipoCritico") == "Demorada"
                                             else "var(--pico-color-yellow-500)"
                                             if item.get("TipoCritico") == "Huerfana"
                                             else "inherit",
-                                            "font-weight": "bold" if item.get("TipoCritico") else "normal",
+                                            "font-weight": "bold"
+                                            if (item.get("TipoCritico") or (active_tab == "fallos" and grouped_view))
+                                            else "normal",
                                             "cursor": "help" if item.get("TipoCritico") else "default",
                                             "display": "flex",
                                             "align-items": "center",
@@ -720,7 +735,10 @@ def StatusDashboard(scroll_to=None):
                                     html.i(
                                         {
                                             "class_name": "fa-solid fa-circle-xmark"
-                                            if item.get("TipoCritico") == "Fallo"
+                                            if (
+                                                item.get("TipoCritico") == "Fallo"
+                                                or (active_tab == "fallos" and grouped_view)
+                                            )
                                             else "fa-solid fa-clock"
                                             if item.get("TipoCritico") == "Demorada"
                                             else "fa-solid fa-triangle-exclamation"
@@ -728,13 +746,55 @@ def StatusDashboard(scroll_to=None):
                                             else ""
                                         }
                                     )
-                                    if item.get("TipoCritico")
+                                    if (item.get("TipoCritico") or (active_tab == "fallos" and grouped_view))
                                     else "",
                                     item.get("Estado", "N/A"),
                                 )
                             ),
-                            html.td(format_duration(item.get("TiempoTranscurridoMinutos"))),
+                            # Cantidad (solo agrupado)
                             html.td(
+                                html.span(
+                                    {
+                                        "class_name": "badge",
+                                        "style": {
+                                            "background-color": "var(--pico-color-red-600)",
+                                            "color": "white",
+                                            "padding": "0.1rem 0.4rem",
+                                            "border-radius": "4px",
+                                        },
+                                    },
+                                    str(item.get("Cantidad", 1)),
+                                )
+                            )
+                            if active_tab == "fallos" and grouped_view
+                            else html.td(format_duration(item.get("TiempoTranscurridoMinutos"))),
+                            # Promedio (solo agrupado)
+                            *(
+                                [html.td(format_duration(item.get("TiempoPromedio")))]
+                                if active_tab == "fallos" and grouped_view
+                                else []
+                            ),
+                            # Fechas
+                            html.td(
+                                html.div(
+                                    {"style": {"font-size": "0.85rem"}},
+                                    html.div(str(item.get("FechaInicio", "")).replace("T", " ")[:16]),
+                                    html.div(
+                                        {
+                                            "style": {
+                                                "color": "var(--pico-muted-color)",
+                                                "border-top": "1px solid #eee",
+                                                "margin-top": "2px",
+                                            }
+                                        },
+                                        str(item.get("FechaUltima", "")).replace("T", " ")[:16],
+                                    )
+                                    if item.get("FechaUltima")
+                                    else "",
+                                )
+                            )
+                            if active_tab == "fallos" and grouped_view
+                            else html.td(
                                 str(item.get("FechaInicio", "")).replace("T", " ")[:19]
                                 if item.get("FechaInicio")
                                 else "N/A"

@@ -134,7 +134,9 @@ docs/ai/
 ├── 07_antipatrones.md            → Qué NO hacer
 ├── 08_base_de_datos.md           → Modelo de datos detallado
 ├── 09_glosario.md                → Glosario de términos técnicos
-└── 10_faq.md                     → Preguntas frecuentes de usuarios
+├── 10_faq.md                     → Preguntas frecuentes de usuarios
+└── 11_logica_ejecuciones.md      → Lógica de demoras y ciclos (vueltas)
+├── 12_guia_git.md                → Guía de flujo de trabajo con Git
 
 docs/servicios/
 ├── servicio_lanzador.md          → Motor de ejecución

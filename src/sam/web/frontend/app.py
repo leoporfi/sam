@@ -21,6 +21,8 @@ from .features.components.analytics import (
 )
 
 # Componentes de páginas
+from .features.components.docs_faq import FAQPage
+from .features.components.docs_glossary import GlossaryPage
 from .features.components.equipo_list import EquiposControls, EquiposDashboard
 from .features.components.mappings_page import MappingsPage
 
@@ -803,9 +805,6 @@ def App():
                 # para que todos los componentes (incluido el ThemeSwitcher)
                 # reciban siempre el valor actualizado de `is_dark`.
                 html.div(
-                    {
-                        "key": f"router-theme-{is_dark}",
-                    },
                     browser_router(
                         route("/", AnalyticsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/robots", RobotsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
@@ -813,6 +812,8 @@ def App():
                         route("/programaciones", SchedulesPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/mapeos", MappingsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("/glosario", GlossaryPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("/faq", FAQPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                     ),
                 ),

@@ -15,23 +15,32 @@ ALTER PROCEDURE [dbo].[ObtenerEjecucionesRecientes]
     @RobotName NVARCHAR(255) = NULL,
     @EquipoName NVARCHAR(255) = NULL,
     @PisoUmbralDinamicoMinutos INT = 10,
-    @FiltroEjecucionesCortasMinutos INT = 2
+    @FiltroEjecucionesCortasMinutos INT = 2,
+    @DefaultRepeticiones INT = 1
 AS
 BEGIN
 
     WITH TiemposPromedio AS (
         -- Calcular tiempo promedio por robot (solo si tiene suficiente historial)
         -- Filtramos ejecuciones menores a 2 min para evitar que ejecuciones 'vacías' sesguen el promedio
+        -- Normalizamos el tiempo dividiendo por la cantidad de repeticiones (vueltas)
         SELECT
-            RobotId,
-            AVG(DATEDIFF(MINUTE, FechaInicio, FechaFin)) AS TiempoPromedioMinutos,
+            e.RobotId,
+            AVG(CAST(DATEDIFF(MINUTE, e.FechaInicio, e.FechaFin) AS FLOAT) /
+                NULLIF(
+                    CASE
+                        WHEN r.Parametros IS NOT NULL AND r.Parametros != ''
+                        THEN COALESCE(TRY_CAST(JSON_VALUE(r.Parametros, '$.in_NumRepeticion.number') AS INT), @DefaultRepeticiones)
+                        ELSE @DefaultRepeticiones
+                    END, 0)
+            ) AS TiempoPromedioPorCicloMinutos,
             COUNT(*) AS CantidadEjecuciones
-        FROM dbo.Ejecuciones
-        WHERE FechaFin IS NOT NULL
-          AND Estado = 'RUN_COMPLETED'
-          AND DATEDIFF(MINUTE, FechaInicio, FechaFin) >= @FiltroEjecucionesCortasMinutos
-        GROUP BY RobotId
-        HAVING COUNT(*) >= 5
+        FROM dbo.Ejecuciones e
+        INNER JOIN dbo.Robots r ON e.RobotId = r.RobotId
+        WHERE e.FechaFin IS NOT NULL
+          AND e.Estado = 'RUN_COMPLETED'
+          AND DATEDIFF(MINUTE, e.FechaInicio, e.FechaFin) >= @FiltroEjecucionesCortasMinutos
+        GROUP BY e.RobotId
     ),
     EjecucionesConEstado AS (
         SELECT
@@ -43,21 +52,34 @@ BEGIN
             e.FechaInicio,
             e.FechaFin,
             DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) AS TiempoTranscurridoMinutos,
+            -- Extraer repeticiones actuales para normalizar el tiempo transcurrido
+            CASE
+                WHEN r.Parametros IS NOT NULL AND r.Parametros != ''
+                THEN COALESCE(TRY_CAST(JSON_VALUE(r.Parametros, '$.in_NumRepeticion.number') AS INT), @DefaultRepeticiones)
+                ELSE @DefaultRepeticiones
+            END AS NumRepeticiones,
             CASE
                 -- Fallos inmediatos (Excluyendo RUN_FAILED y RUN_ABORTED por pedido de usuario)
                 WHEN e.Estado LIKE '%FAILED%' AND e.Estado NOT IN ('RUN_FAILED', 'RUN_ABORTED') THEN 'Fallo'
 
                 -- RUNNING o DEPLOYED demorados
+                -- Comparamos (TiempoTranscurrido / NumRepeticiones) contra el promedio por ciclo
                 WHEN e.Estado IN ('RUNNING', 'DEPLOYED') AND (
-                    (tp.TiempoPromedioMinutos IS NOT NULL AND
-                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) >
+                    (tp.TiempoPromedioPorCicloMinutos IS NOT NULL AND
+                     (CAST(DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) AS FLOAT) /
+                      NULLIF(
                         CASE
-                            WHEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
+                            WHEN r.Parametros IS NOT NULL AND r.Parametros != ''
+                            THEN COALESCE(TRY_CAST(JSON_VALUE(r.Parametros, '$.in_NumRepeticion.number') AS INT), @DefaultRepeticiones)
+                            ELSE @DefaultRepeticiones
+                        END, 0)) >
+                        CASE
+                            WHEN tp.TiempoPromedioPorCicloMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
                             THEN @PisoUmbralDinamicoMinutos
-                            ELSE tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                            ELSE tp.TiempoPromedioPorCicloMinutos * @FactorUmbralDinamico
                         END)
                     OR
-                    (tp.TiempoPromedioMinutos IS NULL AND
+                    (tp.TiempoPromedioPorCicloMinutos IS NULL AND
                      DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > @UmbralFijoMinutos)
                 ) THEN 'Demorada'
 
@@ -81,26 +103,37 @@ BEGIN
 
                 -- Mensaje para Demoras
                 WHEN e.Estado IN ('RUNNING', 'DEPLOYED') AND (
-                    (tp.TiempoPromedioMinutos IS NOT NULL AND
-                     DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) >
+                    (tp.TiempoPromedioPorCicloMinutos IS NOT NULL AND
+                     (CAST(DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) AS FLOAT) /
+                      NULLIF(
                         CASE
-                            WHEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
+                            WHEN r.Parametros IS NOT NULL AND r.Parametros != ''
+                            THEN COALESCE(TRY_CAST(JSON_VALUE(r.Parametros, '$.in_NumRepeticion.number') AS INT), @DefaultRepeticiones)
+                            ELSE @DefaultRepeticiones
+                        END, 0)) >
+                        CASE
+                            WHEN tp.TiempoPromedioPorCicloMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
                             THEN @PisoUmbralDinamicoMinutos
-                            ELSE tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                            ELSE tp.TiempoPromedioPorCicloMinutos * @FactorUmbralDinamico
                         END)
                     OR
-                    (tp.TiempoPromedioMinutos IS NULL AND
+                    (tp.TiempoPromedioPorCicloMinutos IS NULL AND
                      DATEDIFF(MINUTE, e.FechaInicio, GETDATE()) > @UmbralFijoMinutos)
                 ) THEN 'Excede umbral de ' + CAST(CAST(
                     CASE
-                        WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN
+                        WHEN tp.TiempoPromedioPorCicloMinutos IS NOT NULL THEN
                             CASE
-                                WHEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
+                                WHEN tp.TiempoPromedioPorCicloMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
                                 THEN @PisoUmbralDinamicoMinutos
-                                ELSE tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                                ELSE tp.TiempoPromedioPorCicloMinutos * @FactorUmbralDinamico
                             END
                         ELSE @UmbralFijoMinutos
-                    END AS DECIMAL(10,1)) AS VARCHAR(10)) + ' min'
+                    END AS DECIMAL(10,1)) AS VARCHAR(10)) + ' min por ciclo (' + CAST(
+                        CASE
+                            WHEN r.Parametros IS NOT NULL AND r.Parametros != ''
+                            THEN COALESCE(TRY_CAST(JSON_VALUE(r.Parametros, '$.in_NumRepeticion.number') AS INT), @DefaultRepeticiones)
+                            ELSE @DefaultRepeticiones
+                        END AS VARCHAR(5)) + ' ciclos)'
 
                 -- Mensaje para Huérfanas
                 WHEN e.Estado = 'QUEUED'
@@ -116,24 +149,24 @@ BEGIN
                 ELSE NULL
             END AS MensajeError,
             CASE
-                WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN
+                WHEN tp.TiempoPromedioPorCicloMinutos IS NOT NULL THEN
                     CASE
-                        WHEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
+                        WHEN tp.TiempoPromedioPorCicloMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
                         THEN @PisoUmbralDinamicoMinutos
-                        ELSE tp.TiempoPromedioMinutos * @FactorUmbralDinamico
+                        ELSE tp.TiempoPromedioPorCicloMinutos * @FactorUmbralDinamico
                     END
                 ELSE @UmbralFijoMinutos
             END AS UmbralUtilizadoMinutos,
             CASE
-                WHEN tp.TiempoPromedioMinutos IS NOT NULL THEN
+                WHEN tp.TiempoPromedioPorCicloMinutos IS NOT NULL THEN
                     CASE
-                        WHEN tp.TiempoPromedioMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
+                        WHEN tp.TiempoPromedioPorCicloMinutos * @FactorUmbralDinamico < @PisoUmbralDinamicoMinutos
                         THEN 'Dinámico (Piso)'
                         ELSE 'Dinámico'
                     END
                 ELSE 'Fijo'
             END AS TipoUmbral,
-            tp.TiempoPromedioMinutos AS TiempoPromedioRobotMinutos,
+            tp.TiempoPromedioPorCicloMinutos AS TiempoPromedioRobotMinutos,
             CASE WHEN e.FechaFin IS NULL THEN 'Activa' ELSE 'Historico' END AS Origen
         FROM dbo.Ejecuciones e
         LEFT JOIN dbo.Robots r ON e.RobotId = r.RobotId

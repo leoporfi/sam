@@ -25,3 +25,11 @@ repos:
         language: system
         files: ^(pyproject\.toml|src/sam/__init__\.py)$
         pass_filenames: false
+
+      - id: check-version-increment
+        name: Check Version Increment (feat/fix commits)
+        entry: python scripts/check_version_increment.py
+        language: system
+        stages: [commit-msg]
+        always_run: true
+        pass_filenames: false
