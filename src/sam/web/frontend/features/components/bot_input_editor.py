@@ -305,7 +305,7 @@ def BotInputEditor(value: Optional[str], on_change: Callable):
                             "type": "button",
                             "class_name": "secondary outline",
                             "on_click": lambda e, vn=var_name: handle_remove_variable(vn),
-                            "aria_label": f"Eliminar {var_name}",
+                            "aria-label": f"Eliminar {var_name}",
                             "style": {"padding": "0.25rem 0.5rem"},
                         },
                         html.i({"class_name": "fa-solid fa-trash"}),

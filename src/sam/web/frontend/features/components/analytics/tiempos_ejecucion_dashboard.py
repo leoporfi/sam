@@ -132,7 +132,7 @@ def TiemposEjecucionDashboard():
             {
                 "class_name": "dashboard-alert dashboard-alert-yellow",
             },
-            "ℹ️ Métricas importantes: El tiempo por repetición es el tiempo real de procesamiento de un ticket. La latencia muestra el delay entre que SAM dispara el robot y A360 realmente lo inicia. Los datos incluyen ejecuciones actuales e históricas. NOTA: Para mayor precisión, se excluyen los outliers (15% más rápidos y 15% más lentos). Si no se detectan repeticiones en los parámetros, se usa el valor por defecto configurado (LANZADOR_BOT_INPUT_VUELTAS).",
+            "ℹ️ Métricas importantes: El tiempo por repetición es el tiempo real de procesamiento de un ticket. La latencia muestra el delay entre que SAM dispara el robot y A360 realmente lo inicia. Los datos incluyen ejecuciones actuales e históricas. NOTA: Para mayor precisión, se excluyen los outliers (15% más rápidos y 15% más lentos). Si no se detectan repeticiones en los parámetros, se usa el valor por defecto configurado (LANZADOR_REPETICIONES_ROBOT).",
         ),
         # Filtros
         html.div(

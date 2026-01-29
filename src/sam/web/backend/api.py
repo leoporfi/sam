@@ -1,7 +1,7 @@
 # sam/web/backend/api.py
 
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pyodbc
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request, status
@@ -30,7 +30,36 @@ from sam.web.backend.schemas import (
 
 logger = logging.getLogger(__name__)
 
+
 router = APIRouter()
+
+
+@router.on_event("startup")
+async def startup_event():
+    """Inicializa componentes al inicio de la aplicación."""
+    try:
+        # Inicializar ConfigManager con conector de BD para configuración dinámica
+        # Usamos get_db() como generador, pero necesitamos una instancia persistente o crear una nueva
+        # Dado que get_db crea una nueva conexión cada vez, aquí creamos una dedicada para ConfigManager
+        # O mejor aún, usamos una lazy property en ConfigManager, pero por ahora inyectamos una instancia.
+
+        # Nota: Esto crea una conexión extra que se mantendrá viva (o se reconectará)
+        # ConfigManager maneja su propio ciclo de vida de conexión si es necesario,
+        # pero aquí le pasamos el conector.
+
+        # Obtenemos la config de conexión desde ENV (bootstrap)
+        sql_config = ConfigManager.get_sql_server_config("SQL_SAM")
+        db_connector = DatabaseConnector(
+            servidor=sql_config["servidor"],
+            base_datos=sql_config["base_datos"],
+            usuario=sql_config["usuario"],
+            contrasena=sql_config["contrasena"],
+            db_config_prefix="SQL_SAM",
+        )
+        ConfigManager.set_db_connector(db_connector)
+        logger.info("ConfigManager inicializado con conector de BD para configuración dinámica.")
+    except Exception as e:
+        logger.warning(f"No se pudo inicializar ConfigManager con BD (usará solo .env): {e}")
 
 
 def _handle_endpoint_errors(endpoint_name: str, e: Exception, tag: str = "General"):
@@ -533,11 +562,22 @@ def get_recent_executions(
     - Huérfanas: QUEUED sin DEPLOYED/RUNNING correspondiente
     """
     try:
-        # Leer configuraciones del sistema
-        umbral_fijo = db_service.get_system_config(db, "UMBRAL_EJECUCION_DEMORADA_MINUTOS")
-        factor_dinamico = db_service.get_system_config(db, "FACTOR_UMBRAL_DINAMICO")
-        piso_dinamico = db_service.get_system_config(db, "PISO_UMBRAL_DINAMICO_MINUTOS")
-        filtro_cortas = db_service.get_system_config(db, "FILTRO_EJECUCIONES_CORTAS_MINUTOS")
+        # Leer configuraciones del sistema con fallback
+        umbral_fijo = db_service.get_system_config(db, "INTERFAZ_WEB_UMBRAL_EJECUCION_DEMORADA_MINUTOS")
+        if umbral_fijo is None:
+            umbral_fijo = db_service.get_system_config(db, "UMBRAL_EJECUCION_DEMORADA_MINUTOS")
+
+        factor_dinamico = db_service.get_system_config(db, "INTERFAZ_WEB_FACTOR_UMBRAL_DINAMICO")
+        if factor_dinamico is None:
+            factor_dinamico = db_service.get_system_config(db, "FACTOR_UMBRAL_DINAMICO")
+
+        piso_dinamico = db_service.get_system_config(db, "INTERFAZ_WEB_PISO_UMBRAL_DINAMICO_MINUTOS")
+        if piso_dinamico is None:
+            piso_dinamico = db_service.get_system_config(db, "PISO_UMBRAL_DINAMICO_MINUTOS")
+
+        filtro_cortas = db_service.get_system_config(db, "INTERFAZ_WEB_FILTRO_EJECUCIONES_CORTAS_MINUTOS")
+        if filtro_cortas is None:
+            filtro_cortas = db_service.get_system_config(db, "FILTRO_EJECUCIONES_CORTAS_MINUTOS")
 
         # Valores por defecto si no existen en la configuración
         umbral_fijo_minutos = int(umbral_fijo) if umbral_fijo else 25
@@ -727,7 +767,9 @@ def update_robot_status(
     if field not in {"Activo", "EsOnline"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Campo no vÃ¡lido.")
     try:
-        db_service.update_robot_status(db, robot_id, field, updates[field])
+        updated = db_service.update_robot_status(db, robot_id, field, updates[field])
+        if not updated:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Robot no encontrado.")
         db_service.log_audit(
             db,
             accion="UPDATE_STATUS",
@@ -740,10 +782,12 @@ def update_robot_status(
     except ValueError as ve:
         # Regla de negocio (robot programado, etc.)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(ve))
+    except HTTPException:
+        raise
     except pyodbc.Error as dbe:
-        _handle_endpoint_errors("update_robot_status", dbe, "Robot", robot_id)
+        _handle_endpoint_errors("update_robot_status", dbe, "Robot")
     except Exception as e:
-        _handle_endpoint_errors("update_robot_status", e, "Robot", robot_id)
+        _handle_endpoint_errors("update_robot_status", e, "Robot")
 
 
 @router.put("/api/robots/{robot_id}", tags=["Robots"])
@@ -1178,7 +1222,7 @@ def set_preemption_mode(
     request: Request, enabled: bool = Body(..., embed=True), db: DatabaseConnector = Depends(get_db)
 ):
     try:
-        val = "TRUE" if enabled else "FALSE"
+        val = "True" if enabled else "False"
         db_service.set_system_config(db, "BALANCEO_PREEMPTION_MODE", val)
         db_service.log_audit(
             db,
@@ -1208,7 +1252,7 @@ def set_isolation_mode(
     request: Request, enabled: bool = Body(..., embed=True), db: DatabaseConnector = Depends(get_db)
 ):
     try:
-        val = "TRUE" if enabled else "FALSE"
+        val = "True" if enabled else "False"
         db_service.set_system_config(db, "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", val)
         db_service.log_audit(
             db,
@@ -1320,3 +1364,66 @@ def get_faq_section(section_id: str):
         )
 
     return FAQ_DATA[section_id]
+
+
+# ------------------------------------------------------------------
+# Configuración Dinámica
+# ------------------------------------------------------------------
+
+
+@router.get("/api/config", tags=["Configuración"])
+def get_all_configs(db: DatabaseConnector = Depends(get_db)):
+    """Obtiene todas las configuraciones del sistema."""
+    try:
+        return db_service.get_all_configs(db)
+    except Exception as e:
+        _handle_endpoint_errors("get_all_configs", e, "Configuración")
+
+
+@router.put("/api/config/{key}", tags=["Configuración"])
+def update_config(
+    key: str, payload: Dict[str, Any] = Body(...), db: DatabaseConnector = Depends(get_db), request: Request = None
+):
+    """Actualiza una configuración del sistema."""
+    try:
+        value = payload.get("value")
+        if value is None:
+            raise HTTPException(status_code=400, detail="Se requiere el campo 'value'")
+
+        # Convertir a string para almacenamiento
+        val_str = str(value).strip()
+
+        # Normalizar booleanos a "True"/"False" (Capitalizado) para consistencia en la BD
+        if val_str.lower() in ("true", "false"):
+            val_str = "True" if val_str.lower() == "true" else "False"
+
+        # Validaciones básicas según sufijo (opcional pero recomendado)
+        if key.endswith("_SEG") or key.endswith("_MIN") or key.endswith("_SIZE") or key.endswith("_COUNT"):
+            if not val_str.isdigit():
+                raise HTTPException(status_code=400, detail=f"La clave {key} requiere un valor numérico entero.")
+
+        if key.endswith("_HHMM"):
+            # Validar formato hora simple
+            import re
+
+            if not re.match(r"^\d{2}:\d{2}$", val_str):
+                raise HTTPException(status_code=400, detail="Formato de hora inválido (HH:MM)")
+
+        # Actualizar en BD
+        db_service.set_system_config(db, key, val_str)
+
+        # Registrar auditoría
+        db_service.log_audit(
+            db,
+            accion="UPDATE_CONFIG",
+            entidad="Configuracion",
+            entidad_id=key,
+            detalle=f"Valor actualizado a: {val_str}",
+            host=request.client.host if request else "unknown",
+        )
+
+        return {"message": f"Configuración {key} actualizada correctamente."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        _handle_endpoint_errors("update_config", e, "Configuración")

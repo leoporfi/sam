@@ -32,7 +32,7 @@ El servicio está construido sobre asyncio para manejar múltiples tareas concur
        2. **Actualización:** Actualiza las ejecuciones locales que coinciden con la lista activa.
        3. **Verificación:** Para las ejecuciones que "desaparecieron" de la lista activa, realiza una consulta específica por ID para obtener su estado final real (COMPLETED, FAILED, etc.) y fechas exactas.
        4. **Tolerancia:** Si la consulta específica tampoco devuelve datos (ej. ejecución purgada), el sistema verifica el contador de intentos fallidos.
-       5. **Inferencia:** Solo si se supera el número máximo de intentos fallidos (`CONCILIADOR_MAX_INTENTOS_INFERENCIA`, por defecto 5), se infiere que ha finalizado (`COMPLETED_INFERRED`). Si no, se incrementa el contador y se reintenta en el siguiente ciclo.
+       5. **Inferencia:** Solo si se supera el número máximo de intentos fallidos (`LANZADOR_CONCILIADOR_MAX_INTENTOS_INFERENCIA`, por defecto 5), se infiere que ha finalizado (`COMPLETED_INFERRED`). Si no, se incrementa el contador y se reintenta en el siguiente ciclo.
 3. **Sincronizador (service/sincronizador.py) \- El Actualizador**:
    * Mantiene los catálogos al día. Trae de A360 la lista completa de:
      * **Robots** (Taskbots).
@@ -65,7 +65,7 @@ SAM implementa un sistema de clasificación tridimensional para las alertas, per
 
 **Comportamiento:**
 - 🔄 **Reintenta automáticamente** (configurable: `LANZADOR_MAX_REINTENTOS_DEPLOY`).
-- 📊 **Tracking de Frecuencia:** Si supera el umbral (`LANZADOR_UMBRAL_ALERTAS_412`), envía alerta.
+- 📊 **Tracking de Frecuencia:** Si supera el umbral (`LANZADOR_UMBRAL_ALERTAS_ERROR_412`), envía alerta.
 - 🔁 **Repetición:** La alerta se repite cada 30 minutos si el problema persiste.
 - ✅ **Auto-recuperación:** Se resetea automáticamente cuando el equipo vuelve a funcionar.
 
@@ -108,7 +108,7 @@ Cuando A360 no responde claramente sobre el estado de un robot, SAM lo marca com
 
 * **UNKNOWN Final (antigüedad > umbral de días):**
   * **Significado:** "La ejecución lleva demasiado tiempo sin respuesta definitiva".
-  * **Acción del Sistema:** Después de superar el umbral configurable (`LANZADOR_DIAS_TOLERANCIA_UNKNOWN`, por defecto 30 días), SAM marca definitivamente como UNKNOWN con `FechaFin`, cerrando la ejecución.
+  * **Acción del Sistema:** Después de superar el umbral configurable (`LANZADOR_CONCILIADOR_DIAS_TOLERANCIA_ESTADO_UNKNOWN`, por defecto 30 días), SAM marca definitivamente como UNKNOWN con `FechaFin`, cerrando la ejecución.
 
 **Nota para Soporte:** El umbral de tolerancia para marcar UNKNOWN final es configurable (por defecto 30 días).
 
@@ -177,7 +177,7 @@ Los parámetros se almacenan en el campo **`Parametros`** de la tabla **`dbo.Rob
      }
    }
    ```
-   El valor `"1"` proviene de la configuración `LANZADOR_REPETICIONES` (por defecto 1).
+   El valor `"1"` proviene de la configuración `LANZADOR_REPETICIONES_ROBOT` (por defecto 1).
 
 ### **5.3. Configuración en Base de Datos**
 
@@ -266,15 +266,15 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Lanzador.
 
 * LANZADOR\_MAX\_WORKERS: Cuántos deploys simultáneos puede hacer (ej. 10).
 * LANZADOR\_PAUSA\_LANZAMIENTO: Tupla con ventana donde **NO** se lanzan robots (formato interno, ej. ("23:00", "06:00")).
-* LANZADOR\_REPETICIONES: Valor por defecto para el parámetro `in_NumRepeticion` cuando un robot NO tiene parámetros personalizados (por defecto 1).
+* LANZADOR\_REPETICIONES_ROBOT: Valor por defecto para el parámetro `in_NumRepeticion` cuando un robot NO tiene parámetros personalizados (por defecto 1).
 * LANZADOR\_MAX\_REINTENTOS\_DEPLOY: Intentos ante errores 412 temporales (por defecto 2).
 * LANZADOR\_DELAY\_REINTENTOS\_DEPLOY\_SEG: Segundos de espera entre reintentos (por defecto 5).
-* LANZADOR\_UMBRAL\_ALERTAS\_412: Fallos consecutivos 412 antes de alertar (por defecto 20).
-* LANZADOR\_DIAS\_TOLERANCIA\_UNKNOWN: Días antes de marcar UNKNOWN definitivo (por defecto 30).
+* LANZADOR\_UMBRAL\_ALERTAS\_ERROR_412: Fallos consecutivos 412 antes de alertar (por defecto 20).
+* LANZADOR\_CONCILIADOR\_DIAS\_TOLERANCIA\_ESTADO_UNKNOWN: Días antes de marcar UNKNOWN definitivo (por defecto 30).
 
 * CONCILIADOR\_ESTADO\_INFERIDO: Estado a asignar cuando se infiere finalización en `BY_STATUS` (ej. `COMPLETED_INFERRED`).
-* CONCILIADOR\_MENSAJE\_INFERIDO: Mensaje explicativo para el estado inferido.
-* CONCILIADOR\_MAX\_INTENTOS\_INFERENCIA: Número de intentos fallidos antes de inferir finalización (por defecto 5).
+* LANZADOR\_CONCILIADOR\_MENSAJE\_INFERIDO: Mensaje explicativo para el estado inferido.
+* LANZADOR\_CONCILIADOR\_MAX\_INTENTOS\_INFERENCIA: Número de intentos fallidos antes de inferir finalización (por defecto 5).
 
 ## **9\. Diagnóstico de Fallos (Troubleshooting)**
 

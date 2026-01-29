@@ -340,6 +340,15 @@ class APIClient:
     async def delete_mapping(self, mapeo_id: int) -> Dict:
         return await self._request("DELETE", f"/api/mappings/{mapeo_id}")
 
+    # MÉTODOS DE CONFIGURACIÓN DINÁMICA
+    async def get_configs(self) -> List[Dict]:
+        """Obtiene todas las configuraciones del sistema."""
+        return await self._request("GET", "/api/config")
+
+    async def update_config(self, key: str, value: Any) -> Dict:
+        """Actualiza una configuración específica."""
+        return await self._request("PUT", f"/api/config/{key}", json_data={"value": value})
+
     async def close(self):
         if self._client:
             await self._client.aclose()

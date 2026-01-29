@@ -713,7 +713,7 @@ WARNING - EjecuciónID 1234: API A360 no devuelve datos (timeout)
 **Causa:** Si la ejecución es muy antigua (>30 días por defecto), A360 la elimina de su historial.
 
 **Acción Recomendada:**
-El sistema marcará automáticamente como UNKNOWN final después de superar el umbral configurado (CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN).
+El sistema marcará automáticamente como UNKNOWN final después de superar el umbral configurado (LANZADOR_CONCILIADOR_DIAS_TOLERANCIA_ESTADO_UNKNOWN).
 
 **Acción Manual Inmediata (si es urgente):**
 ```sql

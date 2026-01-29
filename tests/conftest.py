@@ -7,7 +7,7 @@ from sam.common.config_loader import ConfigLoader
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_and_mock_config(pytestconfig):
+def setup_and_mock_config():
     """
     Se ejecuta una sola vez por sesión para asegurar que la configuración
     esté 'mockeada' antes de que cualquier prueba se ejecute.
@@ -19,18 +19,18 @@ def setup_and_mock_config(pytestconfig):
     # Usamos patch para interceptar las llamadas al ConfigManager.
     # Esto reemplaza la necesidad de un archivo .env durante las pruebas.
     mock_settings = {
-        "CALLBACK_AUTH_TOKEN": "test-token",
-        "A360_CONTROL_ROOM_URL": "https://test.a360.com",
-        "A360_API_KEY": "test-key",
-        "A360_USER": "test-user",
-        "SQL_SAM_SERVER": "test-server",
-        "SQL_SAM_DATABASE": "test-db",
-        "SQL_SAM_USER": "test-user",
-        "SQL_SAM_PASSWORD": "test-password",
+        "CALLBACK_TOKEN": "test_token_123",
+        "AA_CR_URL": "https://test.a360.com",
+        "AA_CR_API_KEY": "test-key",
+        "AA_CR_USER": "test-user",
+        "SQL_SAM_HOST": "test_server",
+        "SQL_SAM_DB_NAME": "test-db",
+        "SQL_SAM_UID": "test-user",
+        "SQL_SAM_PWD": "test-password",
     }
 
     # Creamos un 'side effect' para simular la obtención de valores.
-    def mock_get(key, default=None):
+    def mock_get(key, default=None, warning_msg=None):
         return mock_settings.get(key, default)
 
     # Aplicamos el patch al método interno que usa ConfigManager

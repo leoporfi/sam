@@ -29,7 +29,7 @@ Una ejecución en estado `RUNNING` o `DEPLOYED` se marca como **"Demorada"** si 
 
 La cantidad de ciclos se determina en el siguiente orden de prioridad:
 1.  **Parámetros del Robot**: Se busca en el campo `Parametros` (JSON) de la tabla `Robots`, específicamente la clave `$.in_NumRepeticion.number`.
-2.  **Valor por Defecto**: Si no está en los parámetros, se usa el valor de la variable de entorno `LANZADOR_BOT_INPUT_VUELTAS` (configurado en `ConfigManager`).
+2.  **Valor por Defecto**: Si no está en los parámetros, se usa el valor de la variable de entorno `LANZADOR_REPETICIONES_ROBOT` (configurado en `ConfigManager`).
 
 ## 3. Ejecuciones Huérfanas
 

@@ -112,7 +112,7 @@ def ErrorAlert(message: str):
 
     return html.article(
         {
-            "aria_invalid": "true",
+            "aria-invalid": "true",
             "role": "alert",
             "style": {
                 "backgroundColor": "var(--pico-color-red-200)",

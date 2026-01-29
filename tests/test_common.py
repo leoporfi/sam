@@ -49,7 +49,7 @@ class TestAutomationAnywhereClient:
         mock_async_client.post.return_value = mock_auth_response
 
         with patch("sam.common.a360_client.httpx.AsyncClient", return_value=mock_async_client):
-            aa_client = AutomationAnywhereClient(cr_url="https://fake-cr.com", cr_user="test", api_key="fake_key")
+            aa_client = AutomationAnywhereClient(cr_url="https://fake-cr.com", cr_user="test", cr_api_key="fake_key")
             aa_client._token = "old_expired_token"
 
             robots = await aa_client.obtener_robots()

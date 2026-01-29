@@ -35,10 +35,17 @@ class TestAlgoritmoBalanceo:
         algoritmo.ejecutar_balanceo_interno_de_pool(pool_id=1, estado_global=estado_global)
 
         mock_db_connector.ejecutar_consulta.assert_called()
-        args, _ = mock_db_connector.ejecutar_consulta.call_args
-        assert "INSERT INTO dbo.Asignaciones" in args[0]
-        assert args[1][0] == 1
-        assert args[1][1] == 102
+
+        # Buscar la llamada de asignación entre todas las llamadas a la BD
+        found = False
+        for call in mock_db_connector.ejecutar_consulta.call_args_list:
+            args, _ = call
+            if "INSERT INTO dbo.Asignaciones" in args[0]:
+                assert args[1][0] == 1
+                assert args[1][1] == 102
+                found = True
+                break
+        assert found, "No se encontró la consulta INSERT INTO dbo.Asignaciones"
 
     def test_desasignar_equipos_excedentes(self, mock_db_connector: MagicMock, mock_notificador: MagicMock):
         """Verifica que se desasigna un equipo de un robot sin carga de trabajo."""
@@ -56,7 +63,14 @@ class TestAlgoritmoBalanceo:
         algoritmo.ejecutar_limpieza_global(estado_global=estado_global)
 
         mock_db_connector.ejecutar_consulta.assert_called()
-        args, _ = mock_db_connector.ejecutar_consulta.call_args
-        assert "DELETE FROM dbo.Asignaciones" in args[0]
-        assert args[1][0] == 2
-        assert args[1][1] in [201, 202]
+
+        # Buscar la llamada de desasignación entre todas las llamadas a la BD
+        found = False
+        for call in mock_db_connector.ejecutar_consulta.call_args_list:
+            args, _ = call
+            if "DELETE FROM dbo.Asignaciones" in args[0]:
+                assert args[1][0] == 2
+                assert args[1][1] in [201, 202]
+                found = True
+                break
+        assert found, "No se encontró la consulta DELETE FROM dbo.Asignaciones"

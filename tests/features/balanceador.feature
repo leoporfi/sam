@@ -37,7 +37,7 @@ Feature: Gestión Dinámica de Recursos RPA (Servicio Balanceador)
     Given la configuración "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO" está desactivada ("False")
     And existe un "Pool Dedicado de Contabilidad" con los siguientes recursos:
       | Robot               | Equipos | Prioridad | Tickets Pendientes |
-      | Robot_Calculo_Imp   | 1       | 200       | 150                |
+      | Robot_Calculo_Imp   | 1       | 50        | 150                |
     And existe un "Pool General" con los siguientes recursos:
       | Robot               | Equipos | Prioridad | Tickets Pendientes |
       | Robot_Generico_A    | 5       | 100       | 100                |
@@ -46,7 +46,7 @@ Feature: Gestión Dinámica de Recursos RPA (Servicio Balanceador)
 
     Then el "Robot_Calculo_Imp" es asignado primero al equipo de su "Pool Dedicado de Contabilidad"
     And debido a su alta carga y al modo flexible, el "Robot_Calculo_Imp" compite por los recursos del "Pool General"
-    And por tener mayor prioridad (200 > 100), el "Robot_Calculo_Imp" es asignado a equipos libres del "Pool General" ANTES que el "Robot_Generico_A"
+    And por tener mayor prioridad (50 < 100), el "Robot_Calculo_Imp" es asignado a equipos libres del "Pool General" ANTES que el "Robot_Generico_A"
     And el "Robot_Generico_A" es asignado a los equipos restantes del "Pool General"
     And la decisión de desborde ("overflow") se registra en el histórico
 

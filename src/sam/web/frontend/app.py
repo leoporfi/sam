@@ -21,6 +21,7 @@ from .features.components.analytics import (
 )
 
 # Componentes de páginas
+from .features.components.config_page import ConfigPage
 from .features.components.docs_faq import FAQPage
 from .features.components.docs_glossary import GlossaryPage
 from .features.components.equipo_list import EquiposControls, EquiposDashboard
@@ -94,13 +95,25 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
         set_selected_robot({})
         set_modal_view("edit")
 
+    pending_action, set_pending_action = use_state(None)
+
     async def handle_robot_action(action: str, robot):
         if action in ["toggle_active", "toggle_online"]:
-            status_key = "Activo" if action == "toggle_active" else "EsOnline"
-            await robots_state["update_robot_status"](robot["RobotId"], {status_key: not robot[status_key]})
+            set_pending_action({"action": action, "robot": robot})
         else:
             set_selected_robot(robot)
             set_modal_view(action)
+
+    async def handle_confirm_action():
+        if not pending_action:
+            return
+
+        action = pending_action["action"]
+        robot = pending_action["robot"]
+
+        status_key = "Activo" if action == "toggle_active" else "EsOnline"
+        await robots_state["update_robot_status"](robot["RobotId"], {status_key: not robot[status_key]})
+        set_pending_action(None)
 
     # --- Mapeo del filtro "Online" / "Solo Programados" ---
     robots_filters = robots_state["filters"]
@@ -186,6 +199,13 @@ def RobotsPage(theme_is_dark: bool, on_theme_toggle):
                 on_close=handle_modal_close,
                 on_save_success=handle_save_and_refresh,
                 key=f"{base_key}-schedule",
+            ),
+            ConfirmationModal(
+                is_open=pending_action is not None,
+                title="Confirmar Cambio de Estado",
+                message=f"¿Estás seguro de que deseas {'desactivar' if pending_action and pending_action['robot']['Activo' if pending_action['action'] == 'toggle_active' else 'EsOnline'] else 'activar'} el robot '{pending_action['robot']['Robot'] if pending_action else ''}'?",
+                on_confirm=handle_confirm_action,
+                on_cancel=lambda: set_pending_action(None),
             ),
         ),
     )
@@ -326,6 +346,29 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
         """Callback llamado por el modal tras guardar con éxito."""
         await equipos_state["refresh"]()
 
+    pending_equipo_action, set_pending_equipo_action = use_state(None)
+
+    async def handle_equipo_status_change(equipo_id, field, value):
+        # Encontrar el equipo para el mensaje de confirmación
+        equipo = next((e for e in equipos_state["equipos"] if e["EquipoId"] == equipo_id), None)
+        set_pending_equipo_action(
+            {
+                "equipo_id": equipo_id,
+                "field": field,
+                "value": value,
+                "equipo_name": equipo["Equipo"] if equipo else "Equipo",
+            }
+        )
+
+    async def handle_confirm_equipo_action():
+        if not pending_equipo_action:
+            return
+
+        await equipos_state["update_equipo_status"](
+            pending_equipo_action["equipo_id"], pending_equipo_action["field"], pending_equipo_action["value"]
+        )
+        set_pending_equipo_action(None)
+
     # Inicializar search_input con string vacío, sincronizar con filtros solo una vez al montar
     search_input, set_search_input = use_state("")
     initialized_equipos = use_ref(False)
@@ -371,12 +414,19 @@ def EquiposPage(theme_is_dark: bool, on_theme_toggle):
         equipos_state=equipos_state,
         children=html._(
             page_controls,
-            EquiposDashboard(equipos_state=equipos_state),
+            EquiposDashboard(equipos_state={**equipos_state, "update_equipo_status": handle_equipo_status_change}),
             EquipoEditModal(
                 equipo=None,  # Pasar None para modo creación
                 is_open=is_modal_open,
                 on_close=handle_modal_close,
                 on_save_success=handle_save_success,
+            ),
+            ConfirmationModal(
+                is_open=pending_equipo_action is not None,
+                title="Confirmar Cambio de Estado",
+                message=f"¿Estás seguro de que deseas cambiar el estado de '{pending_equipo_action['field'] if pending_equipo_action else ''}' para el equipo '{pending_equipo_action['equipo_name'] if pending_equipo_action else ''}'?",
+                on_confirm=handle_confirm_equipo_action,
+                on_cancel=lambda: set_pending_equipo_action(None),
             ),
         ),
     )
@@ -514,6 +564,20 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
             set_assign_equipos_sid(sid)
             set_modal_row(schedule_data)
 
+    # Estado para confirmación de toggle
+    pending_schedule_toggle, set_pending_schedule_toggle = use_state(None)
+
+    async def handle_schedule_toggle(sid, activo):
+        row = next((s for s in schedules_state["schedules"] if s["ProgramacionId"] == sid), None)
+        set_pending_schedule_toggle(
+            {"sid": sid, "activo": activo, "robot": row.get("RobotNombre", "Robot") if row else "Robot"}
+        )
+
+    async def confirm_schedule_toggle():
+        if pending_schedule_toggle:
+            await schedules_state["toggle_active"](pending_schedule_toggle["sid"], pending_schedule_toggle["activo"])
+            set_pending_schedule_toggle(None)
+
     # Estado para confirmación de eliminación
     schedule_to_delete, set_schedule_to_delete = use_state(None)
 
@@ -566,7 +630,7 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
             html.div(
                 {"style": {"display": "block" if schedules_state["error"] else "none"}},
                 html.article(
-                    {"aria_invalid": "true", "style": {"color": "var(--pico-color-red-600)"}},
+                    {"aria-invalid": "true", "style": {"color": "var(--pico-color-red-600)"}},
                     f"Error: {schedules_state['error']}",
                 ),
             ),
@@ -580,7 +644,7 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
                 },
                 SchedulesDashboard(
                     schedules=schedules_state["schedules"],
-                    on_toggle=schedules_state["toggle_active"],
+                    on_toggle=handle_schedule_toggle,
                     on_edit=open_edit_modal,
                     on_assign_equipos=open_schedule_equipos_modal,
                     on_delete=handle_delete_schedule,
@@ -592,14 +656,16 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
                     error=schedules_state["error"],
                 ),
             ),
-            # 1. Modal Editar Programación (Detalles)
+            # 1. Modal Edición Programación
             ScheduleEditModal(
                 schedule_id=modal_sid,
                 schedule=modal_row,
                 is_open=modal_sid is not None,
                 on_close=lambda: set_modal_sid(None),
                 on_save=schedules_state["save_schedule"],
-            ),
+            )
+            if modal_sid is not None
+            else None,
             # 2. Modal Asignar Equipos a Programación (NUEVO)
             ScheduleEquiposModal(
                 schedule_id=assign_equipos_sid,
@@ -619,6 +685,16 @@ def SchedulesPage(theme_is_dark: bool, on_theme_toggle):
                 on_cancel=lambda: set_schedule_to_delete(None),
             )
             if schedule_to_delete
+            else None,
+            # 3.5 Modal de Confirmación para Toggle
+            ConfirmationModal(
+                is_open=pending_schedule_toggle is not None,
+                title="Confirmar Cambio de Estado",
+                message=f"¿Estás seguro de que deseas {'desactivar' if pending_schedule_toggle and not pending_schedule_toggle['activo'] else 'activar'} la programación para '{pending_schedule_toggle['robot'] if pending_schedule_toggle else ''}'?",
+                on_confirm=confirm_schedule_toggle,
+                on_cancel=lambda: set_pending_schedule_toggle(None),
+            )
+            if pending_schedule_toggle
             else None,
             # 4. Modal de Creación
             ScheduleCreateModal(
@@ -812,6 +888,7 @@ def App():
                         route("/programaciones", SchedulesPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/pools", PoolsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/mapeos", MappingsPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
+                        route("/configuracion", ConfigPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/glosario", GlossaryPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("/faq", FAQPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),
                         route("*", NotFoundPage(theme_is_dark=is_dark, on_theme_toggle=set_is_dark)),

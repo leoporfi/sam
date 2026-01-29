@@ -172,8 +172,8 @@ def update_robot_status(db: DatabaseConnector, robot_id: int, field: str, value:
     try:
         query = "EXEC dbo.ActualizarRobotEstado @RobotId=?, @Campo=?, @Valor=?"
         params = (str(robot_id), field, value)
-        db.ejecutar_consulta(query, params, es_select=False)
-        return True
+        rows = db.ejecutar_consulta(query, params, es_select=False)
+        return rows > 0
     except ValueError as ve:
         # Relanzar errores de validación de negocio del SP
         raise ve
@@ -227,11 +227,8 @@ def create_robot(db: DatabaseConnector, robot_data: RobotCreateRequest) -> Dict:
 
 # Asignaciones
 def get_asignaciones_by_robot(db: DatabaseConnector, robot_id: int) -> List[Dict]:
-    query = """
-        SELECT A.RobotId, A.EquipoId, A.Equipo, A.EsProgramado, A.Reservado
-        FROM dbo.AsignacionesView AS A
-        WHERE A.RobotId = ?
-    """
+    """Obtiene las asignaciones de un robot usando SP."""
+    query = "EXEC dbo.ListarAsignacionesPorRobot @RobotId = ?"
     return db.ejecutar_consulta(query, (robot_id,), es_select=True)
 
 
@@ -755,6 +752,12 @@ def set_system_config(db: DatabaseConnector, key: str, value: str):
     """Actualiza el valor de una configuración usando SP."""
     query = "EXEC dbo.ActualizarConfiguracion @Clave = ?, @Valor = ?"
     db.ejecutar_consulta(query, (key, str(value)), es_select=False)
+
+
+def get_all_configs(db: DatabaseConnector) -> List[Dict]:
+    """Obtiene todas las configuraciones del sistema usando SP."""
+    query = "EXEC dbo.ListarConfiguraciones"
+    return db.ejecutar_consulta(query, es_select=True)
 
 
 # --- Gestión de Mapeos ---
