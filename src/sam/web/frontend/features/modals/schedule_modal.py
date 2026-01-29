@@ -911,6 +911,13 @@ def ScheduleEquiposModal(
                         else f"Asignar Equipos (ID: {schedule_id})"
                     ),
                 ),
+                html.div(
+                    {"style": {"marginBottom": "1rem", "fontSize": "0.9em", "color": "var(--pico-muted-color)"}},
+                    html.span(
+                        html.strong("ℹ️ Info: "),
+                        "Los equipos asignados aquí se vincularán exclusivamente a esta programación cuando esté activa.",
+                    ),
+                ),
                 # Contenido del modal con GRID de 3 columnas
                 html.div(
                     {

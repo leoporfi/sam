@@ -211,6 +211,16 @@ def PoolAssignmentsModal(pool: Dict, is_open: bool, on_close: Callable, on_save_
                     " Equipos",
                 ),
             ),
+            # Texto explicativo según tab activa
+            html.div(
+                {"style": {"marginBottom": "1rem", "fontSize": "0.9em", "color": "var(--pico-muted-color)"}},
+                html.span(
+                    html.strong("ℹ️ Info: "),
+                    "Los robots asignados a este pool tomarán tareas exclusivamente de aquí."
+                    if active_tab == "robots"
+                    else "Asignar un equipo al Pool permite que ejecute sus tareas. Esta acción NO elimina su asignación actual a un robot.",
+                ),
+            ),
             # Contenido de las solapas
             html.div(
                 {"class_name": "tab-content"},
@@ -308,7 +318,7 @@ def AssignmentBox(
 
 @component
 def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_selected_ids: Callable):
-    """Renderiza una lista de equipos seleccionables con búsqueda."""
+    """Renderiza una lista de recursos seleccionables con búsqueda y estado."""
     search, set_search = use_state("")
     sorted_items = use_memo(lambda: sorted(items, key=lambda x: x.get("Nombre", "").lower()), [items])
     filtered_items = use_memo(
@@ -333,6 +343,41 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
             set_selected_ids(all_filtered_ids)
         else:
             set_selected_ids([])
+
+    def render_status(item):
+        """Renderiza el tag de estado solo para equipos."""
+        if item.get("Tipo") != "Equipo":
+            return None
+
+        es_programado = item.get("EsProgramado", False)
+        es_reservado = item.get("Reservado", False)
+        # Dinámico: tiene RobotId pero no es programado ni reservado
+        tiene_asignacion = item.get("RobotId") is not None
+        es_dinamico = tiene_asignacion and not es_programado and not es_reservado
+
+        if es_programado:
+            return html.span({"class_name": "tag tag-programado", "style": {"marginLeft": "0.5rem"}}, "Programado")
+        if es_reservado:
+            return html.span({"class_name": "tag tag-reservado", "style": {"marginLeft": "0.5rem"}}, "Reservado")
+        if es_dinamico:
+            return html.span({"class_name": "tag tag-dinamico", "style": {"marginLeft": "0.5rem"}}, "Dinámico")
+
+        # Si no cae en ninguna categoría anterior
+        # Si no cae en ninguna categoría anterior y está en la columna de Asignados
+        if title == "Asignados":
+            return html.span(
+                {
+                    "class_name": "tag",
+                    "style": {
+                        "marginLeft": "0.5rem",
+                        "backgroundColor": "var(--pico-primary-background)",
+                        "color": "var(--pico-primary-inverse)",
+                    },
+                },
+                "En Pool",
+            )
+
+        return html.span({"class_name": "tag tag-libre", "style": {"marginLeft": "0.5rem"}}, "Disponible")
 
     return html.div(
         {"class_name": "device-list-section"},
@@ -366,12 +411,13 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
                             ),
                         ),
                         html.th({"scope": "col"}, "Nombre"),
+                        html.th({"scope": "col", "style": {"textAlign": "right"}}, "Estado"),
                     )
                 ),
                 html.tbody(
                     *[
                         html.tr(
-                            {"key": item["ID"]},
+                            {"key": f"{item['Tipo']}-{item['ID']}"},
                             html.td(
                                 html.input(
                                     {
@@ -382,6 +428,7 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
                                 )
                             ),
                             html.td(item["Nombre"]),
+                            html.td({"style": {"textAlign": "right"}}, render_status(item)),
                         )
                         for item in filtered_items
                     ]
@@ -389,7 +436,7 @@ def ResourceListBox(title: str, items: List[Dict], selected_ids: List[int], set_
                     else [
                         html.tr(
                             html.td(
-                                {"colSpan": 2, "style": {"text_align": "center"}},
+                                {"colSpan": 3, "style": {"text_align": "center"}},
                                 "No se encontraron recursos.",
                             )
                         )
