@@ -562,11 +562,22 @@ def get_recent_executions(
     - Huérfanas: QUEUED sin DEPLOYED/RUNNING correspondiente
     """
     try:
-        # Leer configuraciones del sistema
-        umbral_fijo = db_service.get_system_config(db, "UMBRAL_EJECUCION_DEMORADA_MINUTOS")
-        factor_dinamico = db_service.get_system_config(db, "FACTOR_UMBRAL_DINAMICO")
-        piso_dinamico = db_service.get_system_config(db, "PISO_UMBRAL_DINAMICO_MINUTOS")
-        filtro_cortas = db_service.get_system_config(db, "FILTRO_EJECUCIONES_CORTAS_MINUTOS")
+        # Leer configuraciones del sistema con fallback
+        umbral_fijo = db_service.get_system_config(db, "INTERFAZ_WEB_UMBRAL_EJECUCION_DEMORADA_MINUTOS")
+        if umbral_fijo is None:
+            umbral_fijo = db_service.get_system_config(db, "UMBRAL_EJECUCION_DEMORADA_MINUTOS")
+
+        factor_dinamico = db_service.get_system_config(db, "INTERFAZ_WEB_FACTOR_UMBRAL_DINAMICO")
+        if factor_dinamico is None:
+            factor_dinamico = db_service.get_system_config(db, "FACTOR_UMBRAL_DINAMICO")
+
+        piso_dinamico = db_service.get_system_config(db, "INTERFAZ_WEB_PISO_UMBRAL_DINAMICO_MINUTOS")
+        if piso_dinamico is None:
+            piso_dinamico = db_service.get_system_config(db, "PISO_UMBRAL_DINAMICO_MINUTOS")
+
+        filtro_cortas = db_service.get_system_config(db, "INTERFAZ_WEB_FILTRO_EJECUCIONES_CORTAS_MINUTOS")
+        if filtro_cortas is None:
+            filtro_cortas = db_service.get_system_config(db, "FILTRO_EJECUCIONES_CORTAS_MINUTOS")
 
         # Valores por defecto si no existen en la configuración
         umbral_fijo_minutos = int(umbral_fijo) if umbral_fijo else 25

@@ -82,6 +82,19 @@ class ConfigManager:
         return cls._get_env_with_warning(key, default, warning_msg)
 
     @classmethod
+    def _get_with_fallback(cls, new_key: str, old_key: str, default: Any = None) -> Any:
+        """
+        Obtiene un valor de configuración con fallback para compatibilidad hacia atrás.
+        1. Intenta con la nueva clave (new_key)
+        2. Si no existe, intenta con la clave antigua (old_key)
+        3. Si no existe, usa el valor por defecto.
+        """
+        val = cls._get_config_value(new_key)
+        if val is None:
+            val = cls._get_config_value(old_key, default)
+        return val
+
+    @classmethod
     def _get_env_with_warning(cls, key: str, default: Any = None, warning_msg: str = None) -> Any:
         """
         Método de ayuda interno para obtener una variable de entorno.
@@ -132,7 +145,7 @@ class ConfigManager:
         # Soportar tanto comas como punto y coma como delimitadores
 
         # AHORA USA _get_config_value para permitir DB
-        recipients_raw = cls._get_config_value("EMAIL_RECIPIENTS", "")
+        recipients_raw = cls._get_with_fallback("LANZADOR_EMAIL_DESTINATARIOS", "EMAIL_RECIPIENTS", "")
 
         # Reemplazar punto y coma por coma para normalizar
         recipients_normalized = recipients_raw.replace(";", ",")
@@ -175,18 +188,21 @@ class ConfigManager:
         pausa_inicio = cls._get_config_value("LANZADOR_PAUSA_INICIO_HHMM", "22:00")
         pausa_fin = cls._get_config_value("LANZADOR_PAUSA_FIN_HHMM", "06:00")
 
-        default_params_str = cls._get_config_value("LANZADOR_PARAMETROS_DEFAULT_JSON", "{}")
+        default_params_str = cls._get_with_fallback(
+            "LANZADOR_PARAMETROS_PREDETERMINADOS_JSON", "LANZADOR_PARAMETROS_DEFAULT_JSON", "{}"
+        )
         default_params = {}
         try:
             default_params = json.loads(default_params_str)
             if not isinstance(default_params, dict):
                 logger.error(
-                    "LANZADOR_PARAMETROS_DEFAULT_JSON no es un objeto JSON válido. Se usarán parámetros vacíos."
+                    "LANZADOR_PARAMETROS_PREDETERMINADOS_JSON no es un objeto JSON válido. Se usarán parámetros vacíos."
                 )
                 default_params = {}
         except json.JSONDecodeError:
             logger.error(
-                "Error al decodificar LANZADOR_PARAMETROS_DEFAULT_JSON. Se usarán parámetros vacíos.", exc_info=True
+                "Error al decodificar LANZADOR_PARAMETROS_PREDETERMINADOS_JSON. Se usarán parámetros vacíos.",
+                exc_info=True,
             )
             default_params = {}
 
@@ -198,25 +214,49 @@ class ConfigManager:
             "max_workers_lanzador": int(cls._get_config_value("LANZADOR_MAX_WORKERS", 10)),
             "max_reintentos_deploy": int(cls._get_config_value("LANZADOR_MAX_REINTENTOS_DEPLOY", 2)),
             "delay_reintentos_deploy_seg": int(cls._get_config_value("LANZADOR_DELAY_REINTENTO_DEPLOY_SEG", 5)),
-            "dias_tolerancia_unknown": int(cls._get_config_value("CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN", 30)),
-            "conciliador_batch_size": int(cls._get_config_value("LANZADOR_CONCILIADOR_BATCH_SIZE", 25)),
-            "shutdown_timeout_seg": int(cls._get_env_with_warning("LANZADOR_SHUTDOWN_TIMEOUT_SEG", 60)),  # Infra
-            "habilitar_sync": str(cls._get_config_value("LANZADOR_HABILITAR_SYNC", "True")).lower() == "true",
-            "repeticiones": int(cls._get_config_value("LANZADOR_BOT_INPUT_VUELTAS", 3)),
-            "umbral_alertas_412": int(cls._get_config_value("LANZADOR_UMBRAL_ALERTAS_412", 20)),
-            "parametros_default": default_params,
-            "conciliador_mensaje_inferido": cls._get_config_value(
-                "CONCILIADOR_MENSAJE_INFERIDO", "Finalizado (Inferido por ausencia en lista de activos)"
+            "dias_tolerancia_unknown": int(
+                cls._get_with_fallback(
+                    "LANZADOR_CONCILIADOR_DIAS_TOLERANCIA_ESTADO_UNKNOWN", "CONCILIADOR_DIAS_TOLERANCIA_UNKNOWN", 30
+                )
             ),
-            "conciliador_max_intentos_inferencia": int(cls._get_config_value("CONCILIADOR_MAX_INTENTOS_INFERENCIA", 5)),
+            "conciliador_batch_size": int(
+                cls._get_with_fallback("LANZADOR_CONCILIADOR_TAMANO_LOTE", "LANZADOR_CONCILIADOR_BATCH_SIZE", 25)
+            ),
+            "shutdown_timeout_seg": int(cls._get_env_with_warning("LANZADOR_SHUTDOWN_TIMEOUT_SEG", 60)),  # Infra
+            "habilitar_sync": str(
+                cls._get_with_fallback("LANZADOR_HABILITAR_SINCRONIZACION", "LANZADOR_HABILITAR_SYNC", "True")
+            ).lower()
+            == "true",
+            "repeticiones": int(cls._get_with_fallback("LANZADOR_REPETICIONES_ROBOT", "LANZADOR_BOT_INPUT_VUELTAS", 3)),
+            "umbral_alertas_412": int(
+                cls._get_with_fallback("LANZADOR_UMBRAL_ALERTAS_ERROR_412", "LANZADOR_UMBRAL_ALERTAS_412", 20)
+            ),
+            "parametros_default": default_params,
+            "conciliador_mensaje_inferido": cls._get_with_fallback(
+                "LANZADOR_CONCILIADOR_MENSAJE_INFERIDO",
+                "CONCILIADOR_MENSAJE_INFERIDO",
+                "Finalizado (Inferido por ausencia en lista de activos)",
+            ),
+            "conciliador_max_intentos_inferencia": int(
+                cls._get_with_fallback(
+                    "LANZADOR_CONCILIADOR_MAX_INTENTOS_INFERENCIA", "CONCILIADOR_MAX_INTENTOS_INFERENCIA", 5
+                )
+            ),
             "links": cls.get_external_links(),
         }
 
     @classmethod
     def get_balanceador_config(cls) -> Dict[str, Any]:
         """Obtiene la configuración específica para el servicio Balanceador."""
+        # Soporte para BALANCEADOR_POOL_COOLDOWN_SEG (antiguo e inconsistente en docs)
+        cooling_period = cls._get_config_value("BALANCEADOR_PERIODO_ENFRIAMIENTO_SEG")
+        if cooling_period is None:
+            cooling_period = cls._get_config_value("BALANCEADOR_COOLING_PERIOD_SEG")
+        if cooling_period is None:
+            cooling_period = cls._get_config_value("BALANCEADOR_POOL_COOLDOWN_SEG", 300)
+
         return {
-            "cooling_period_seg": int(cls._get_config_value("BALANCEADOR_COOLING_PERIOD_SEG", 300)),
+            "cooling_period_seg": int(cooling_period),
             "intervalo_ciclo_seg": int(cls._get_config_value("BALANCEADOR_INTERVALO_CICLO_SEG", 120)),
             "aislamiento_estricto_pool": str(
                 cls._get_config_value("BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", "True")
@@ -226,6 +266,11 @@ class ConfigManager:
                 p.strip()
                 for p in str(cls._get_config_value("BALANCEADOR_PROVEEDORES_CARGA", "clouders,rpa360")).split(",")
             ],
+            "tickets_por_equipo_default": int(
+                cls._get_with_fallback(
+                    "BALANCEADOR_TICKETS_PREDETERMINADOS_POR_EQUIPO", "BALANCEADOR_DEFAULT_TICKETS_POR_EQUIPO", 15
+                )
+            ),
         }
 
     @classmethod
@@ -372,7 +417,7 @@ class ConfigManager:
         configs_a_verificar = {
             "SQL SAM": (["SQL_SAM_HOST", "SQL_SAM_DB_NAME", "SQL_SAM_UID", "SQL_SAM_PWD"], True),
             "SQL RPA360": (["SQL_RPA360_HOST", "SQL_RPA360_DB_NAME", "SQL_RPA360_UID", "SQL_RPA360_PWD"], True),
-            "EMAIL": (["EMAIL_SMTP_SERVER", "EMAIL_FROM_EMAIL", "EMAIL_RECIPIENTS"], False),
+            "EMAIL": (["EMAIL_SMTP_SERVER", "EMAIL_FROM_EMAIL", "LANZADOR_EMAIL_DESTINATARIOS"], False),
             "Clouders API": (["CLOUDERS_API_URL", "CLOUDERS_AUTH"], False),
             "Callback": (["CALLBACK_TOKEN"], False),
             "API Gateway": (["API_GATEWAY_URL", "API_GATEWAY_CLIENT_ID", "API_GATEWAY_CLIENT_SECRET"], False),

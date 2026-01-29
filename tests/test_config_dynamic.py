@@ -14,10 +14,10 @@ def local_mock_db():
     # Debe devolver una lista de diccionarios con Clave y Valor
     mock_data = [
         {"Clave": "LANZADOR_INTERVALO_LANZAMIENTO_SEG", "Valor": "30"},
-        {"Clave": "LANZADOR_HABILITAR_SYNC", "Valor": "False"},
+        {"Clave": "LANZADOR_HABILITAR_SINCRONIZACION", "Valor": "False"},
         {"Clave": "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", "Valor": "True"},
         {"Clave": "INTERFAZ_WEB_SESSION_TIMEOUT_MIN", "Valor": "45"},
-        {"Clave": "LANZADOR_PARAMETROS_DEFAULT_JSON", "Valor": "{}"},
+        {"Clave": "LANZADOR_PARAMETROS_PREDETERMINADOS_JSON", "Valor": "{}"},
     ]
     db.ejecutar_consulta.return_value = mock_data
 
@@ -44,10 +44,6 @@ def test_config_manager_db_priority(local_mock_db):
 
 def test_config_manager_fallback_to_env(local_mock_db):
     """Verifica que si no está en BD, usa la variable de entorno."""
-    # Configurar el mock para que devuelva datos pero NO la clave que buscamos
-    # Nota: Como _config_cache se llena con lo que devuelve la BD, si la clave no está ahí,
-    # buscará en ENV.
-
     # Mockear _get_env_with_warning para que devuelva env_val
     with patch.object(ConfigManager, "_get_env_with_warning", return_value="env_val"):
         val = ConfigManager._get_config_value("VARIABLE_SOLO_ENV", "default")
@@ -57,8 +53,6 @@ def test_config_manager_fallback_to_env(local_mock_db):
 def test_config_manager_fallback_to_default(local_mock_db):
     """Verifica que si no está en BD ni en ENV, usa el default."""
 
-    # Si no está en caché y _get_env_with_warning devuelve el default (simulando que no existe en env)
-    # patch side_effect: si key es VARIABLE_INEXISTENTE devuelve default, sino lo que sea
     def side_effect(key, default=None, warning_msg=None):
         return default
 
@@ -69,12 +63,34 @@ def test_config_manager_fallback_to_default(local_mock_db):
 
 def test_config_manager_boolean_consistency(local_mock_db):
     """Verifica que los booleanos se interpreten correctamente independientemente del caso."""
-
-    # LANZADOR_HABILITAR_SYNC es "False" en mock_db
-    # ConfigManager.get_lanzador_config() llama a _get_config_value y luego hace cast
+    # LANZADOR_HABILITAR_SINCRONIZACION es "False" en mock_db
     config = ConfigManager.get_lanzador_config()
     assert config["habilitar_sync"] is False
 
     # BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO es "True" en mock_db
     config_bal = ConfigManager.get_balanceador_config()
     assert config_bal["aislamiento_estricto_pool"] is True
+
+
+def test_config_manager_fallback_mechanism(local_mock_db):
+    """Verifica que el mecanismo de fallback (nuevo -> antiguo) funcione."""
+    # Limpiar caché para forzar lectura
+    ConfigManager._config_cache = {}
+
+    # Caso 1: Solo existe la clave antigua
+    mock_data = [{"Clave": "LANZADOR_BOT_INPUT_VUELTAS", "Valor": "5"}]
+    local_mock_db.ejecutar_consulta.return_value = mock_data
+
+    val = ConfigManager._get_with_fallback("LANZADOR_REPETICIONES_ROBOT", "LANZADOR_BOT_INPUT_VUELTAS", "3")
+    assert val == "5"
+
+    # Caso 2: Existen ambas, debe ganar la nueva
+    ConfigManager._config_cache = {}
+    mock_data = [
+        {"Clave": "LANZADOR_REPETICIONES_ROBOT", "Valor": "10"},
+        {"Clave": "LANZADOR_BOT_INPUT_VUELTAS", "Valor": "5"},
+    ]
+    local_mock_db.ejecutar_consulta.return_value = mock_data
+
+    val = ConfigManager._get_with_fallback("LANZADOR_REPETICIONES_ROBOT", "LANZADOR_BOT_INPUT_VUELTAS", "3")
+    assert val == "10"

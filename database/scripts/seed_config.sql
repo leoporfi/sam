@@ -39,7 +39,7 @@ GO
 -- Para una migraciÃ³n real, se deberÃ­a leer del .env y generar este script, pero aquÃ­ usamos los defaults seguros.
 
 -- Email
-EXEC #InsertarConfigSiNoExiste 'EMAIL_RECIPIENTS', 'admin@example.com', 'Lista de correos separados por coma para alertas';
+EXEC #InsertarConfigSiNoExiste 'LANZADOR_EMAIL_DESTINATARIOS', 'admin@example.com', 'Lista de correos separados por coma para alertas';
 
 -- Lanzador
 EXEC #InsertarConfigSiNoExiste 'LANZADOR_INTERVALO_LANZAMIENTO_SEG', '15', 'Intervalo en segundos entre ciclos de lanzamiento';
@@ -47,10 +47,10 @@ EXEC #InsertarConfigSiNoExiste 'LANZADOR_INTERVALO_SINCRONIZACION_SEG', '3600', 
 EXEC #InsertarConfigSiNoExiste 'LANZADOR_INTERVALO_CONCILIACION_SEG', '300', 'Intervalo en segundos para conciliaciÃ³n de estados';
 EXEC #InsertarConfigSiNoExiste 'LANZADOR_PAUSA_INICIO_HHMM', '21:00', 'Hora de inicio de la pausa diaria de lanzamientos';
 EXEC #InsertarConfigSiNoExiste 'LANZADOR_PAUSA_FIN_HHMM', '21:15', 'Hora de fin de la pausa diaria de lanzamientos';
-EXEC #InsertarConfigSiNoExiste 'LANZADOR_HABILITAR_SYNC', 'True', 'Habilita o deshabilita la sincronizaciÃ³n automÃ¡tica';
+EXEC #InsertarConfigSiNoExiste 'LANZADOR_HABILITAR_SINCRONIZACION', 'True', 'Habilita o deshabilita la sincronización automática';
 
 -- Balanceador
-EXEC #InsertarConfigSiNoExiste 'BALANCEADOR_COOLING_PERIOD_SEG', '300', 'Tiempo de espera en segundos tras un error antes de reintentar';
+EXEC #InsertarConfigSiNoExiste 'BALANCEADOR_PERIODO_ENFRIAMIENTO_SEG', '300', 'Tiempo de espera en segundos tras un cambio de pool antes de permitir nuevos cambios';
 EXEC #InsertarConfigSiNoExiste 'BALANCEADOR_INTERVALO_CICLO_SEG', '120', 'Intervalo en segundos del ciclo del balanceador';
 EXEC #InsertarConfigSiNoExiste 'BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO', 'True', 'Si es True, respeta estrictamente las asignaciones de pool';
 

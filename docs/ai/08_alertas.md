@@ -32,7 +32,7 @@ Las siguientes variables de entorno en `.env` controlan el envío de correos:
 | `EMAIL_SMTP_SERVER` | Servidor SMTP | `smtp.office365.com` |
 | `EMAIL_SMTP_PORT` | Puerto SMTP | `587` |
 | `EMAIL_FROM` | Remitente | `rpa-alerts@empresa.com` |
-| `EMAIL_RECIPIENTS` | Destinatarios (separados por coma) | `admin@empresa.com,devops@empresa.com` |
+| `LANZADOR_EMAIL_DESTINATARIOS` | Destinatarios (separados por coma) | `admin@empresa.com,devops@empresa.com` |
 | `EMAIL_USER` | Usuario SMTP (si requiere auth) | `rpa-alerts@empresa.com` |
 | `EMAIL_PASSWORD` | Contraseña SMTP | `******` |
 | `EMAIL_USE_TLS` | Usar TLS | `True` |

@@ -381,11 +381,11 @@ API_TIMEOUT_SECONDS = int(os.getenv("AA_API_TIMEOUT_SECONDS", "30"))
 
 # Reintentos para errores 412 temporales
 # Basado en análisis: 90% se resuelven en 3 intentos
-MAX_DEPLOYMENT_RETRIES = int(os.getenv("LANZADOR_MAX_REINTENTOS", "5"))
+MAX_DEPLOYMENT_RETRIES = int(os.getenv("LANZADOR_MAX_REINTENTOS_DEPLOY", "5"))
 
 # Cooldown de pool (segundos) para evitar fluctuaciones
 # Permite estabilizar antes de reasignar
-POOL_COOLDOWN_SECONDS = int(os.getenv("BALANCEADOR_POOL_COOLDOWN_SEG", "300"))
+POOL_COOLDOWN_SECONDS = int(os.getenv("BALANCEADOR_PERIODO_ENFRIAMIENTO_SEG", "300"))
 ```
 
 **Referencias:** [02_reglas_desarrollo.md](02_reglas_desarrollo.md)

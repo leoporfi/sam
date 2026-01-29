@@ -50,7 +50,7 @@ Componente del Lanzador que audita el estado de ejecuciones activas consultando 
 ### Cooling (Pool Cooling)
 Período de espera (default: 5 minutos) después de modificar asignaciones de un pool. Evita fluctuaciones rápidas en el balanceo.
 
-**Configuración:** `BALANCEADOR_POOL_COOLDOWN_SEG`
+**Configuración:** `BALANCEADOR_PERIODO_ENFRIAMIENTO_SEG`
 
 ### Control Room
 Interfaz web de Automation Anywhere donde se gestionan bots, dispositivos y ejecuciones.
@@ -103,7 +103,7 @@ Valor que indica el ciclo de vida de una ejecución:
 ### Inferencia de Completitud
 Mecanismo del Conciliador que marca una ejecución como `COMPLETED_INFERRED` cuando:
 1. No aparece en la lista de ejecuciones activas de A360
-2. Supera el umbral de intentos fallidos (`CONCILIADOR_MAX_INTENTOS_INFERENCIA`)
+2. Supera el umbral de intentos fallidos (`LANZADOR_CONCILIADOR_MAX_INTENTOS_INFERENCIA`)
 
 **Ver:** [Estrategia "By Status"](../servicios/servicio_lanzador.md)
 

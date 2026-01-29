@@ -37,7 +37,7 @@ El servicio opera en un bucle continuo de análisis y decisión.
 
 Si un usuario reporta que *"hay mucha carga pero el balanceador no asigna máquinas"*, lo primero a verificar es el **Cooling**.
 
-* Si el pool fue modificado hace menos de BALANCEADOR\_COOLING\_PERIOD\_SEG (ej. 300 segundos), el sistema estará en pausa intencional.
+* Si el pool fue modificado hace menos de BALANCEADOR\_PERIODO\_ENFRIAMIENTO\_SEG (ej. 300 segundos), el sistema estará en pausa intencional.
 * **Acción:** Esperar unos minutos o verificar el log buscando el mensaje *"Pool en enfriamiento"*.
 
 ### **B. La Importancia de los Mapeos**
@@ -96,7 +96,7 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Balanceador.
 ### **Reglas de Negocio**
 
 * BALANCEADOR\_INTERVALO\_CICLO\_SEG: Cada cuánto se ejecuta el análisis (ej. 60).
-* BALANCEADOR\_COOLING\_PERIOD\_SEG: Tiempo de bloqueo tras un cambio (ej. 300 \= 5 min).
+* BALANCEADOR\_PERIODO\_ENFRIAMIENTO\_SEG: Tiempo de bloqueo tras un cambio (ej. 300 \= 5 min).
 * BALANCEADOR\_PROVEEDORES\_CARGA: Lista de fuentes activas (ej. clouders,rpa360).
 
 ### **Conectividad Externa**
@@ -114,7 +114,7 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Balanceador.
   2. **Mapeo:** Verificar en la Web que el nombre coincida exactamente con el de Clouders/A360.
   3. **Configuración:** Verificar si el robot está activo y tiene un límite de equipos \> 0\.
 * **Caso: "El sistema mueve los robots constantemente"**
-  1. **Cooling:** Es posible que BALANCEADOR\_COOLING\_PERIOD\_SEG sea muy bajo (ej. 10 seg). Aumentarlo para dar estabilidad.
+  1. **Cooling:** Es posible que BALANCEADOR\_PERIODO\_ENFRIAMIENTO\_SEG sea muy bajo (ej. 10 seg). Aumentarlo para dar estabilidad.
 * **Caso: "Error de conexión con Clouders"**
   1. **Log:** Buscar errores HTTP 401/403 (Credenciales) o 500 (Caída de Clouders).
   2. **Acción:** Si Clouders cae, el balanceador dejará de ver carga, pero los robots ya asignados seguirán trabajando.
