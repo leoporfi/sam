@@ -145,7 +145,7 @@ class ConfigManager:
         # Soportar tanto comas como punto y coma como delimitadores
 
         # AHORA USA _get_config_value para permitir DB
-        recipients_raw = cls._get_with_fallback("LANZADOR_EMAIL_DESTINATARIOS", "EMAIL_RECIPIENTS", "")
+        recipients_raw = cls._get_with_fallback("EMAIL_DESTINATARIOS", "EMAIL_RECIPIENTS", "")
 
         # Reemplazar punto y coma por coma para normalizar
         recipients_normalized = recipients_raw.replace(";", ",")
@@ -417,7 +417,7 @@ class ConfigManager:
         configs_a_verificar = {
             "SQL SAM": (["SQL_SAM_HOST", "SQL_SAM_DB_NAME", "SQL_SAM_UID", "SQL_SAM_PWD"], True),
             "SQL RPA360": (["SQL_RPA360_HOST", "SQL_RPA360_DB_NAME", "SQL_RPA360_UID", "SQL_RPA360_PWD"], True),
-            "EMAIL": (["EMAIL_SMTP_SERVER", "EMAIL_FROM_EMAIL", "LANZADOR_EMAIL_DESTINATARIOS"], False),
+            "EMAIL": (["EMAIL_SMTP_SERVER", "EMAIL_FROM_EMAIL", "EMAIL_DESTINATARIOS"], False),
             "Clouders API": (["CLOUDERS_API_URL", "CLOUDERS_AUTH"], False),
             "Callback": (["CALLBACK_TOKEN"], False),
             "API Gateway": (["API_GATEWAY_URL", "API_GATEWAY_CLIENT_ID", "API_GATEWAY_CLIENT_SECRET"], False),

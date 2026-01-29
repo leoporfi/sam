@@ -39,7 +39,7 @@ GO
 -- Para una migraciÃ³n real, se deberÃ­a leer del .env y generar este script, pero aquÃ­ usamos los defaults seguros.
 
 -- Email
-EXEC #InsertarConfigSiNoExiste 'LANZADOR_EMAIL_DESTINATARIOS', 'admin@example.com', 'Lista de correos separados por coma para alertas';
+EXEC #InsertarConfigSiNoExiste 'EMAIL_DESTINATARIOS', 'admin@example.com', 'Lista de correos separados por coma para alertas';
 
 -- Lanzador
 EXEC #InsertarConfigSiNoExiste 'LANZADOR_INTERVALO_LANZAMIENTO_SEG', '15', 'Intervalo en segundos entre ciclos de lanzamiento';

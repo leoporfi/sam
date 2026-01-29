@@ -46,7 +46,7 @@ class EmailAlertClient:
             logger.error(
                 f"Configuración de email incompleta: faltan {', '.join(missing_parts)}. "
                 "Las alertas por email NO funcionarán. Configure las variables de entorno: "
-                "EMAIL_SMTP_SERVER, EMAIL_FROM, LANZADOR_EMAIL_DESTINATARIOS"
+                "EMAIL_SMTP_SERVER, EMAIL_FROM, EMAIL_DESTINATARIOS"
             )
             # Actualizar recipients con la lista validada
             self.recipients = valid_recipients
