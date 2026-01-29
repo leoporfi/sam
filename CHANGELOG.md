@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-01-29
+
+### Added
+- **Mejoras en Configuración Dinámica**: Se ha incrementado la versión para reflejar mejoras significativas en la gestión de configuración.
+
+### Changed
+- **Refactorización de Variables**: Corrección en `EMAIL_DESTINATARIOS` (removido prefijo `LANZADOR_`) para mayor claridad.
+- **Documentación**: Actualización del sistema de alertas, reglas de agente, glosario y FAQ.
+
 ## [1.8.5] - 2026-01-21
 
 ### Fixed

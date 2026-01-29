@@ -53,9 +53,9 @@ El mecanismo de **Preemption** asegura que los procesos críticos (Prioridad Alt
 
 * **Lógica de Prioridad:** En SAM, un número **menor** significa mayor prioridad (1 es la más alta, 10 la más baja).
 * **Escenario de Conflicto:** Supongamos que no hay equipos libres en un Pool.
-  * El Robot\_A (Prioridad 1\) tiene tickets pendientes.
-  * El Robot\_B (Prioridad 5\) tiene asignados 3 equipos.
-* **Acción del Balanceador:** El sistema detectará que Robot\_A tiene mayor prioridad y necesidad. Procederá a **desasignar** uno o más equipos del Robot\_B (aunque tenga trabajo pendiente) para asignárselos inmediatamente al Robot\_A.
+  * El Robot_A (Prioridad 1) tiene tickets pendientes.
+  * El Robot_B (Prioridad 5) tiene asignados 3 equipos.
+* **Acción del Balanceador:** Si `BALANCEO_PREEMPTION_MODE` está activo (true), el sistema detectará que Robot_A tiene mayor prioridad y necesidad. Procederá a **desasignar** uno o más equipos del Robot_B (aunque tenga trabajo pendiente) para asignárselos inmediatamente al Robot_A.
 * **Síntoma en Soporte:** Es común que los dueños de robots de baja prioridad reporten que *"su capacidad fluctúa"* o que *"pierden máquinas"*. Esto es el comportamiento esperado del sistema para garantizar SLAs críticos.
 
 ### **D. Aislamiento de Pool Estricto**
@@ -63,7 +63,8 @@ El mecanismo de **Preemption** asegura que los procesos críticos (Prioridad Alt
 Esta configuración define si los equipos de un Pool son exclusivos o compartidos. **Importante:** Este valor se lee de la base de datos (tabla ConfiguracionSistema), lo que permite cambiar la estrategia sin reiniciar el servicio.
 
 * **Modo Estricto (true):** "Lo mío es mío". Los equipos de un Pool solo atienden a los robots explícitamente asignados a ese Pool. Si el Pool de "Finanzas" está vacío, sus máquinas se quedan ociosas aunque "RRHH" tenga cola de espera.
-* **Modo Flexible (false):** "Solidaridad de equipos". Si un Pool tiene máquinas ociosas (sin tickets pendientes en sus robots asignados), el Balanceador puede tomarlas prestadas temporalmente para asignarlas a robots de otro Pool con alta demanda.
+* **Modo Flexible (false):** "Solidaridad de equipos" (Overflow). Si un Pool tiene máquinas ociosas (sin tickets pendientes en sus robots asignados), el Balanceador puede tomarlas prestadas temporalmente para asignarlas a robots de otro Pool con alta demanda.
+* **Nota:** Esto es diferente a la Preemption. El aislamiento flexible usa recursos *libres* de otros pools. La Preemption quita recursos *ocupados* a robots de menor prioridad.
 
 ## **4\. Ciclo de Ejecución**
 
@@ -83,9 +84,10 @@ A diferencia de las variables de entorno (.env) que requieren reinicio, SAM disp
 
 | Clave (Key) | Valores Posibles | Descripción |
 | :---- | :---- | :---- |
-| BALANCEADOR\_POOL\_AISLAMIENTO\_ESTRICTO | true / false | Define si se permite el préstamo de equipos entre pools (ver sección 3.D). |
-| BALANCEADOR\_LOG\_LEVEL | DEBUG, INFO | Permite aumentar la verbosidad del log temporalmente para diagnóstico sin reiniciar. |
-| GLOBAL\_MAINTENANCE\_MODE | true / false | (Si aplica) Interruptor general para detener asignaciones en todo el sistema. |
+| BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO | true / false | Define si se permite el préstamo de equipos entre pools (Overflow). |
+| BALANCEO_PREEMPTION_MODE | true / false | Define si se permite quitar equipos a robots de baja prioridad (Preemption). |
+| BALANCEADOR_LOG_LEVEL | DEBUG, INFO | Permite aumentar la verbosidad del log temporalmente para diagnóstico sin reiniciar. |
+| GLOBAL_MAINTENANCE_MODE | true / false | (Si aplica) Interruptor general para detener asignaciones en todo el sistema. |
 
 **Nota:** Para modificar estos valores, se debe realizar un UPDATE directo en la base de datos o utilizar la sección de "Configuración Avanzada" en la Web (si está habilitada para el usuario).
 
@@ -95,7 +97,7 @@ Cualquier cambio requiere reiniciar el servicio SAM\_Balanceador.
 
 ### **Reglas de Negocio**
 
-* BALANCEADOR\_INTERVALO\_CICLO\_SEG: Cada cuánto se ejecuta el análisis (ej. 60).
+* BALANCEADOR\_INTERVALO\_CICLO\_SEG: Cada cuánto se ejecuta el análisis (ej. 120).
 * BALANCEADOR\_PERIODO\_ENFRIAMIENTO\_SEG: Tiempo de bloqueo tras un cambio (ej. 300 \= 5 min).
 * BALANCEADOR\_PROVEEDORES\_CARGA: Lista de fuentes activas (ej. clouders,rpa360).
 

@@ -58,8 +58,9 @@ Robot "Proceso_Pagos" tiene 100 tickets en Clouders
 **Escenario:** Un pool tiene `Aislamiento=0` (flexible) y busca equipos en la bolsa general con `PermiteBalanceoDinamico=1`, pero no encuentra ninguno disponible.
 
 **Comportamiento:**
-1. **Sin Preemption:** Si no hay robots de menor prioridad usando equipos, el robot simplemente **no se ejecuta** hasta que haya recursos disponibles.
-2. **Con Preemption:** Si hay robots de **menor prioridad** ejecutándose, SAM puede **quitar equipos** a esos robots para dárselos al de mayor prioridad (ver siguiente pregunta).
+1. **Aislamiento Estricto (Strict):** El robot debe esperar a que se liberen equipos en su propio Pool.
+2. **Aislamiento Flexible (Overflow):** Si `BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO = FALSE`, el robot puede tomar prestados equipos **libres** del Pool General.
+3. **Preemption (Prioridad Estricta):** Si `BALANCEO_PREEMPTION_MODE = TRUE`, el robot puede **quitar equipos** a robots de menor prioridad (ver siguiente pregunta).
 
 **Recomendación:** Configurar `MinEquipos` para robots críticos garantiza que siempre tengan al menos ese número de equipos reservados.
 
@@ -85,7 +86,7 @@ Robot "Proceso_Pagos" tiene 100 tickets en Clouders
 
 **Resultado:** El robot de alta prioridad "captura" los equipos para **futuras ejecuciones**, sin interrumpir el trabajo en curso. Si Robot B tiene una ejecución activa en un equipo desalojado, esa ejecución terminará normalmente, pero el siguiente ciclo del Lanzador ya no intentará usar ese equipo para Robot B.
 
-> ⚙️ **Configuración:** La Preemption solo se activa si `BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO = FALSE` en `dbo.ConfiguracionSistema`.
+> ⚙️ **Configuración:** La Preemption solo se activa si `BALANCEO_PREEMPTION_MODE = TRUE` en `dbo.ConfiguracionSistema`. (Nota: `BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO` controla el préstamo de equipos libres, no el desalojo).
 
 ---
 

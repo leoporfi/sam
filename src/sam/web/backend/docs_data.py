@@ -64,7 +64,7 @@ GLOSSARY_DATA = {
 
 **Tipos:**
 - **Aislamiento Estricto**: Equipos solo para robots del pool.
-- **Aislamiento Flexible**: Equipos pueden compartirse.""",
+- **Aislamiento Flexible (Overflow)**: Si sobran equipos en el pool, pueden prestarse a otros pools.""",
             },
             {
                 "slug": "ejecucion",
@@ -89,11 +89,12 @@ GLOSSARY_DATA = {
             {
                 "slug": "preemption",
                 "term": "Preemption (Prioridad Estricta)",
-                "description": """**Descripción:** Mecanismo del Balanceador para desalojar robots de baja prioridad y ceder sus equipos a robots de alta prioridad con demanda insatisfecha.
+                "description": """**Descripción:** Mecanismo del Balanceador (activado por `BALANCEO_PREEMPTION_MODE`) que desaloja robots de baja prioridad y cede sus equipos a robots de alta prioridad con demanda insatisfecha.
 
 **Reglas:**
 - Solo ocurre si el robot de alta prioridad tiene "hambre" (déficit de equipos).
-- Solo desaloja si el robot víctima tiene menor prioridad (mayor número).""",
+- Solo desaloja si el robot víctima tiene menor prioridad (mayor número).
+- Es diferente al Overflow: Preemption quita recursos ocupados, Overflow usa recursos libres.""",
             },
             {
                 "slug": "cooling",
@@ -425,22 +426,24 @@ FAQ_DATA = {
             {
                 "slug": "como-sabe-sam-tickets",
                 "question": "¿Cómo sabe SAM cuántos tickets tiene cada robot?",
-                "answer": """SAM consulta **proveedores de carga externos** (Clouders, RPA360) cada `BALANCEADOR_INTERVALO_CICLO_SEG` (default: 60s).
+                "answer": """SAM consulta **proveedores de carga externos** (Clouders, RPA360) cada `BALANCEADOR_INTERVALO_CICLO_SEG` (default: 120s).
 
 **Ejemplo:** 100 tickets / 10 tickets_por_equipo = 10 equipos necesarios.""",
             },
             {
                 "slug": "sin-equipos-disponibles",
                 "question": "¿Qué pasa si no hay equipos disponibles en la bolsa general?",
-                "answer": """Si un pool flexible busca equipos y no encuentra:
-1. **Sin Preemption:** El robot espera.
-2. **Con Preemption:** Si hay robots de menor prioridad, SAM les quita equipos para dárselos al prioritario.""",
+                "answer": """Si un pool busca equipos y no encuentra:
+1. **Aislamiento Estricto:** El robot debe esperar a que se liberen equipos en su propio Pool.
+2. **Aislamiento Flexible (Overflow):** Si `BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO = FALSE`, el robot puede tomar prestados equipos **libres** del Pool General.
+3. **Preemption:** Si `BALANCEO_PREEMPTION_MODE = TRUE`, el robot puede **quitar equipos** a robots de menor prioridad.""",
             },
             {
                 "slug": "como-funciona-preemption",
                 "question": "¿Cómo funciona la Preemption?",
                 "answer": """SAM reasigna equipos de un robot de baja prioridad a uno de alta.
-**Importante:** Modifica la BD inmediatamente pero **NO detiene ejecuciones en curso** en A360. El robot prioritario "captura" el equipo para la siguiente ejecución.""",
+**Importante:** Modifica la BD inmediatamente pero **NO detiene ejecuciones en curso** en A360. El robot prioritario "captura" el equipo para la siguiente ejecución.
+**Configuración:** Solo se activa si `BALANCEO_PREEMPTION_MODE = TRUE` en `dbo.ConfiguracionSistema`. (Nota: `BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO` controla el préstamo de equipos libres, no el desalojo).""",
             },
             {
                 "slug": "balanceo-sin-tickets",

@@ -152,11 +152,12 @@ Grupo lógico de equipos que pueden compartirse entre robots. Permite aislar rec
 **Tabla:** `dbo.Pools`
 
 **Tipos:**
-- **Aislamiento Estricto**: Equipos solo para robots del pool
-- **Aislamiento Flexible**: Equipos pueden compartirse
+**Tipos:**
+- **Aislamiento Estricto**: Equipos solo para robots del pool.
+- **Aislamiento Flexible (Overflow)**: Si sobran equipos en el pool, pueden prestarse a otros pools.
 
 ### Preemption
-Mecanismo del Balanceador que quita equipos a robots de baja prioridad para asignarlos a robots de alta prioridad cuando hay escasez de recursos.
+Mecanismo del Balanceador (activado por `BALANCEO_PREEMPTION_MODE`) que quita equipos a robots de baja prioridad para asignarlos a robots de alta prioridad cuando hay escasez de recursos.
 
 **Ejemplo:**
 ```
