@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.1] - 2026-01-30
+
+### Fixed
+- **Interfaz Web - Mitigación de errores ReactPy en producción**: Agregados límites de conexión (`limit_concurrency=50`) y timeout de keep-alive (`timeout_keep_alive=10s`) en Uvicorn para mitigar errores `Hook stack is in an invalid state` y `Layout object has no attribute _rendering_queue` causados por concurrencia de múltiples usuarios (~30 conexiones).
+  - Nuevas variables de configuración: `INTERFAZ_WEB_LIMITE_CONEXIONES`, `INTERFAZ_WEB_TIMEOUT_KEEPALIVE_SEG`
+  - Actualizado `ConfigManager` y `run_web.py` para aplicar estos límites
+
 ## [1.16.0] - 2026-01-30
 
 ### Added

@@ -392,6 +392,9 @@ class ConfigManager:
                     2,
                 )
             ),
+            # Límites de conexión (mitigación errores ReactPy con concurrencia)
+            "limite_conexiones": int(cls._get_env_with_warning("INTERFAZ_WEB_LIMITE_CONEXIONES", "50")),
+            "timeout_keepalive_seg": int(cls._get_env_with_warning("INTERFAZ_WEB_TIMEOUT_KEEPALIVE_SEG", "10")),
         }
 
     @classmethod
