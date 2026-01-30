@@ -57,7 +57,7 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
 
             return new_data
         except asyncio.CancelledError:
-            pass
+            raise
         except Exception as e:
             logger.error(f"Error en fetch_critical_data: {e}")
             return {}
@@ -89,7 +89,7 @@ def AnalyticsSummary(on_navigate, initial_data=None, on_refresh=None):
 
             return new_data
         except asyncio.CancelledError:
-            pass
+            raise
         except Exception as e:
             logger.error(f"Error en fetch_analytical_data: {e}")
             return {}

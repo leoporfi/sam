@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.3] - 2026-01-30
+
+### Fixed
+- **Interfaz Web - Estabilidad en AnalyticsSummary**: Corregido un error de `NoneType` que ocurría al cancelar la carga de datos (al navegar rápido entre páginas). Ahora se maneja correctamente el ciclo de vida asíncrono.
+- **Interfaz Web - Mayor limpieza de logs**: Se agregó el aviso de asyncio `Task was destroyed but it is pending!` al filtro de logs, ya que es un efecto secundario inofensivo del desmontaje de componentes en ReactPy.
+
 ## [1.16.2] - 2026-01-30
 
 ### Fixed

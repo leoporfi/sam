@@ -37,6 +37,7 @@ class ReactPyErrorFilter(logging.Filter):
             "Hook stack is in an invalid state",
             "'Layout' object has no attribute '_rendering_queue'",
             "Failed to schedule render via",
+            "Task was destroyed but it is pending!",
         ]
         if any(bad in msg for bad in bad_messages):
             # Solo permitimos que se loguee como DEBUG si quisiéramos verlo,
