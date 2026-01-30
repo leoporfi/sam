@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.2] - 2026-01-30
+
+### Fixed
+- **Interfaz Web - Silenciado de errores ReactPy en logs**: Implementación de un filtro de logs (`ReactPyErrorFilter`) y reducción del nivel de log a `CRITICAL` para los módulos internos de ReactPy (`reactpy.core`, `reactpy.backend`) con el fin de evitar ruidos persistentes causados por el bug de concurrencia de la librería en producción.
+
 ## [1.16.1] - 2026-01-30
 
 ### Fixed

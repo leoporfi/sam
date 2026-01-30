@@ -24,6 +24,27 @@ class RelativePathFormatter(logging.Formatter):
         return super().format(record)
 
 
+class ReactPyErrorFilter(logging.Filter):
+    """
+    Filtra errores conocidos de ReactPy que son ruidosos y no afectan
+    el funcionamiento core de SAM (bugs internos de ReactPy 1.1.0).
+    """
+
+    def filter(self, record):
+        msg = record.getMessage()
+        # Filtramos los errores específicos que provienen del core de ReactPy
+        bad_messages = [
+            "Hook stack is in an invalid state",
+            "'Layout' object has no attribute '_rendering_queue'",
+            "Failed to schedule render via",
+        ]
+        if any(bad in msg for bad in bad_messages):
+            # Solo permitimos que se loguee como DEBUG si quisiéramos verlo,
+            # pero por ahora lo silenciamos del flujo normal de errores.
+            return False
+        return True
+
+
 def setup_logging(service_name: str):
     """
     Configura el sistema de logging para un servicio específico.
@@ -59,14 +80,22 @@ def setup_logging(service_name: str):
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
 
+    # Filtro específico para ReactPy en la Interfaz Web
+    if service_name == "interfaz_web":
+        rp_filter = ReactPyErrorFilter()
+        file_handler.addFilter(rp_filter)
+        console_handler.addFilter(rp_filter)
+
     # Configurar el logger raíz para que envíe los logs a ambos handlers
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
     root_logger.handlers = [file_handler, console_handler]
 
-    # RFR-33: Se añade esta línea para silenciar los logs de INFO de httpx.
-    # Esto limpia la consola de mensajes de peticiones HTTP exitosas,
-    # pero seguirá mostrando WARNINGS y ERRORS de la librería.
     logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    if service_name == "interfaz_web":
+        # RFR-40: Reducimos ruidos de reactpy si el filtro no captura algo (bugs concurrencia 1.1.0)
+        logging.getLogger("reactpy.core").setLevel(logging.CRITICAL)
+        logging.getLogger("reactpy.backend").setLevel(logging.CRITICAL)
 
     logging.info(f"Logging configurado para el servicio '{service_name}'. Los logs se guardarán en: {log_file_path}")
