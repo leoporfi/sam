@@ -33,3 +33,10 @@ repos:
         stages: [commit-msg]
         always_run: true
         pass_filenames: false
+
+      - id: check-env-naming
+        name: Check Environment Variable Naming Convention
+        entry: python scripts/check_env_naming.py
+        language: system
+        files: ^\.env\.example$
+        pass_filenames: false

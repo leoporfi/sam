@@ -1,7 +1,7 @@
 # src/sam/web/frontend/features/modals/config_modals.py
 from typing import Any, Callable, Dict, Optional
 
-from reactpy import component, html, use_state
+from reactpy import component, html, use_effect, use_state
 
 
 @component
@@ -13,9 +13,15 @@ def ConfigEditModal(
 ):
     """Modal para editar un valor de configuración."""
     # Los hooks deben llamarse SIEMPRE en el mismo orden, antes de cualquier return condicional.
-    local_value, set_local_value = use_state(config.get("Valor", "") if config else "")
+    local_value, set_local_value = use_state("")
     is_saving, set_is_saving = use_state(False)
     show_confirm, set_show_confirm = use_state(False)
+
+    @use_effect(dependencies=[config.get("Clave") if config else None])
+    def sync_local_value():
+        """Sincroniza el valor local cuando cambia la configuración seleccionada."""
+        if config:
+            set_local_value(config.get("Valor", ""))
 
     if not is_open or not config:
         return None
@@ -31,10 +37,17 @@ def ConfigEditModal(
         if v_str in ("true", "false", "1", "0"):
             return "boolean"
         # Números: Basado en sufijos comunes o si el valor es puramente numérico
-        if k.endswith(("_SEG", "_MIN", "_SIZE", "_COUNT", "_ID", "_PORT", "_VUELTAS")) or v_str.isdigit():
+        if (
+            k.endswith(("_SEG", "_MIN", "_SIZE", "_COUNT", "_ID", "_PORT", "_VUELTAS", "_MAX", "_PUERTO", "_TAMANO"))
+            or v_str.isdigit()
+        ):
             return "number"
         # Listas: Basado en sufijos o presencia de comas/punto y coma
-        if k.endswith(("_LIST", "_RECIPIENTS", "_EMAILS", "_PROVIDERS")) or "," in str(v) or ";" in str(v):
+        if (
+            k.endswith(("_LIST", "_RECIPIENTS", "_EMAILS", "_PROVIDERS", "_DESTINATARIOS"))
+            or "," in str(v)
+            or ";" in str(v)
+        ):
             return "list"
         # JSON: Si empieza con { o [
         if v_str.startswith(("{", "[")):
@@ -129,6 +142,7 @@ def ConfigEditModal(
                 "type": "number",
                 "value": local_value,
                 "on_change": handle_value_change,
+                "placeholder": "Ej: 30",
             }
         )
     elif val_type in ("list", "json"):
@@ -137,7 +151,9 @@ def ConfigEditModal(
                 "rows": 5 if val_type == "json" else 3,
                 "value": local_value,
                 "on_change": handle_value_change,
-                "placeholder": "Elemento 1, Elemento 2, ..." if val_type == "list" else '{"key": "value"}',
+                "placeholder": "ej: admin@empresa.com, soporte@empresa.com"
+                if val_type == "list"
+                else '{"key": "value"}',
                 "style": {"font-family": "monospace", "font-size": "0.9rem"} if val_type == "json" else {},
             }
         )
@@ -147,6 +163,7 @@ def ConfigEditModal(
                 "type": "text",
                 "value": local_value,
                 "on_change": handle_value_change,
+                "placeholder": "Ingrese el valor...",
             }
         )
 

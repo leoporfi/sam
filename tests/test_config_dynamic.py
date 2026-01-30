@@ -12,12 +12,13 @@ def local_mock_db():
 
     # Configurar el comportamiento de ejecutar_consulta
     # Debe devolver una lista de diccionarios con Clave y Valor
+    # Usamos los NUEVOS nombres de las variables (convención: SERVICIO_TEMA_ACCION_UNIDAD)
     mock_data = [
-        {"Clave": "LANZADOR_INTERVALO_LANZAMIENTO_SEG", "Valor": "30"},
-        {"Clave": "LANZADOR_HABILITAR_SINCRONIZACION", "Valor": "False"},
+        {"Clave": "LANZADOR_CICLO_INTERVALO_SEG", "Valor": "30"},
+        {"Clave": "LANZADOR_SYNC_HABILITAR", "Valor": "False"},
         {"Clave": "BALANCEADOR_POOL_AISLAMIENTO_ESTRICTO", "Valor": "True"},
-        {"Clave": "INTERFAZ_WEB_SESSION_TIMEOUT_MIN", "Valor": "45"},
-        {"Clave": "LANZADOR_PARAMETROS_PREDETERMINADOS_JSON", "Valor": "{}"},
+        {"Clave": "INTERFAZ_WEB_SESION_TIMEOUT_MIN", "Valor": "45"},
+        {"Clave": "LANZADOR_ROBOT_PARAMETROS_JSON", "Valor": "{}"},
     ]
     db.ejecutar_consulta.return_value = mock_data
 
@@ -37,8 +38,8 @@ def test_config_manager_db_priority(local_mock_db):
     """Verifica que el valor de BD tenga prioridad sobre ENV y Default."""
     # Mockear _get_env_with_warning para que devuelva 15
     with patch.object(ConfigManager, "_get_env_with_warning", return_value="15"):
-        # En BD es 30, en ENV es 15. Debe ganar BD.
-        val = ConfigManager._get_config_value("LANZADOR_INTERVALO_LANZAMIENTO_SEG", "10")
+        # En BD es 30 (LANZADOR_CICLO_INTERVALO_SEG), en ENV es 15. Debe ganar BD.
+        val = ConfigManager._get_config_value("LANZADOR_CICLO_INTERVALO_SEG", "10")
         assert val == "30"
 
 
@@ -63,7 +64,7 @@ def test_config_manager_fallback_to_default(local_mock_db):
 
 def test_config_manager_boolean_consistency(local_mock_db):
     """Verifica que los booleanos se interpreten correctamente independientemente del caso."""
-    # LANZADOR_HABILITAR_SINCRONIZACION es "False" en mock_db
+    # LANZADOR_SYNC_HABILITAR es "False" en mock_db
     config = ConfigManager.get_lanzador_config()
     assert config["habilitar_sync"] is False
 
@@ -77,20 +78,58 @@ def test_config_manager_fallback_mechanism(local_mock_db):
     # Limpiar caché para forzar lectura
     ConfigManager._config_cache = {}
 
-    # Caso 1: Solo existe la clave antigua
+    # Caso 1: Solo existe la clave antigua (LANZADOR_BOT_INPUT_VUELTAS)
     mock_data = [{"Clave": "LANZADOR_BOT_INPUT_VUELTAS", "Valor": "5"}]
     local_mock_db.ejecutar_consulta.return_value = mock_data
 
-    val = ConfigManager._get_with_fallback("LANZADOR_REPETICIONES_ROBOT", "LANZADOR_BOT_INPUT_VUELTAS", "3")
+    # El fallback debe encontrar el nombre antiguo
+    val = ConfigManager._get_with_fallback("LANZADOR_ROBOT_REPETICIONES", "LANZADOR_BOT_INPUT_VUELTAS", "3")
     assert val == "5"
 
-    # Caso 2: Existen ambas, debe ganar la nueva
+    # Caso 2: Existen ambas claves, debe ganar la nueva
     ConfigManager._config_cache = {}
     mock_data = [
-        {"Clave": "LANZADOR_REPETICIONES_ROBOT", "Valor": "10"},
+        {"Clave": "LANZADOR_ROBOT_REPETICIONES", "Valor": "10"},
         {"Clave": "LANZADOR_BOT_INPUT_VUELTAS", "Valor": "5"},
     ]
     local_mock_db.ejecutar_consulta.return_value = mock_data
 
-    val = ConfigManager._get_with_fallback("LANZADOR_REPETICIONES_ROBOT", "LANZADOR_BOT_INPUT_VUELTAS", "3")
+    val = ConfigManager._get_with_fallback("LANZADOR_ROBOT_REPETICIONES", "LANZADOR_BOT_INPUT_VUELTAS", "3")
     assert val == "10"
+
+
+def test_config_manager_new_naming_convention(local_mock_db):
+    """Verifica que la nueva convención de nombres funcione correctamente."""
+    # Caso: Solo existe el nombre nuevo
+    ConfigManager._config_cache = {}
+    mock_data = [
+        {"Clave": "LANZADOR_SYNC_HABILITAR", "Valor": "True"},
+        {"Clave": "LANZADOR_SYNC_INTERVALO_SEG", "Valor": "7200"},
+        {"Clave": "LANZADOR_CONCILIACION_INTERVALO_SEG", "Valor": "600"},
+    ]
+    local_mock_db.ejecutar_consulta.return_value = mock_data
+
+    config = ConfigManager.get_lanzador_config()
+
+    assert config["habilitar_sync"] is True
+    assert config["intervalo_sincronizacion"] == 7200
+    assert config["intervalo_conciliacion"] == 600
+
+
+def test_config_manager_backward_compatibility(local_mock_db):
+    """Verifica compatibilidad hacia atrás con nombres antiguos."""
+    # Caso: Solo existen nombres antiguos (entorno que no ha migrado)
+    ConfigManager._config_cache = {}
+    mock_data = [
+        {"Clave": "LANZADOR_HABILITAR_SINCRONIZACION", "Valor": "False"},
+        {"Clave": "LANZADOR_INTERVALO_SINCRONIZACION_SEG", "Valor": "1800"},
+        {"Clave": "LANZADOR_INTERVALO_CONCILIACION_SEG", "Valor": "450"},
+    ]
+    local_mock_db.ejecutar_consulta.return_value = mock_data
+
+    config = ConfigManager.get_lanzador_config()
+
+    # Debe funcionar aunque existan solo los nombres antiguos
+    assert config["habilitar_sync"] is False
+    assert config["intervalo_sincronizacion"] == 1800
+    assert config["intervalo_conciliacion"] == 450

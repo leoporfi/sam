@@ -1,5 +1,5 @@
 # src/sam/web/frontend/features/components/config_page.py
-from reactpy import component, html, use_memo, use_state
+from reactpy import component, event, html, use_memo, use_state
 
 from ...hooks.use_config_hook import use_config
 from ...hooks.use_equipos_hook import use_equipos
@@ -87,18 +87,18 @@ def ConfigPage(theme_is_dark: bool, on_theme_toggle):
                             *[
                                 html.tr(
                                     {"key": c["Clave"]},
-                                    html.td(html.code(c["Clave"])),
+                                    html.td(html.p(c["Clave"])),
                                     html.td(
                                         (
-                                            html.mark("True")
+                                            html.p("True")
                                             if str(c["Valor"]).strip().lower() in ("true", "1")
-                                            else html.mark("False")
+                                            else html.p("False")
                                         )
                                         if str(c["Valor"]).strip().lower() in ("true", "false", "1", "0")
                                         else (
-                                            html.mark(c["Valor"])
+                                            html.p(c["Valor"])
                                             if len(str(c["Valor"])) < 50
-                                            else html.small(str(c["Valor"])[:50] + "...")
+                                            else html.p(str(c["Valor"])[:50] + "...")
                                         )
                                     ),
                                     html.td(html.small(c["Descripcion"] or "-")),
@@ -126,13 +126,19 @@ def ConfigPage(theme_is_dark: bool, on_theme_toggle):
                                     ),
                                     html.td(
                                         {"style": {"text-align": "center"}},
-                                        html.button(
-                                            {
-                                                "class_name": "outline secondary",
-                                                "on_click": lambda e, c=c: handle_edit(c),
-                                                "data-tooltip": "Editar parámetro",
-                                            },
-                                            html.i({"class_name": "fa-solid fa-pen-to-square"}),
+                                        html.div(
+                                            {"class_name": "grid"},
+                                            html.a(
+                                                {
+                                                    "href": "#",
+                                                    "class_name": "secondary",
+                                                    "on_click": event(
+                                                        lambda e, c=c: handle_edit(c), prevent_default=True
+                                                    ),
+                                                    "data-tooltip": "Editar parámetro",
+                                                },
+                                                html.i({"class_name": "fa-solid fa-pencil"}),
+                                            ),
                                         ),
                                     ),
                                 )
