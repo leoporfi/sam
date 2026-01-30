@@ -5,10 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-01-30
+
+### Added
+- **Validación Automática de Configuración**: Introducción de `scripts/check_env_naming.py` y hook de pre-commit para asegurar la adherencia a la nueva convención de nombres.
+- **Migración de Base de Datos**: Script SQL para renombrar claves de configuración existentes de forma segura (`migracion_renombrar_claves_v2.sql`).
+
+### Changed
+- **Reorganización Semántica de Variables**: Implementación de la convención `{SERVICIO}_{TEMA}_{ACCION}[_{UNIDAD}]` para más de 80 variables, mejorando el agrupamiento alfabético.
+- **ConfigManager con Fallback**: Soporte para compatibilidad hacia atrás, permitiendo el uso de nombres antiguos y nuevos simultáneamente.
+- **Mejoras en Interfaz Web**:
+    - El modal de edición de configuración ahora mantiene el valor actual al abrirse.
+    - Agregado de placeholders descriptivos dinámicos según el tipo de variable.
+    - Estandarización visual de acciones en la tabla de configuración para coincidir con el resto del dashboard.
+
+## [1.15.0] - 2026-01-29
+
+### Added
+- **Mejoras en Configuración Dinámica**: Se ha incrementado la versión para reflejar mejoras significativas en la gestión de configuración.
+
 ## [1.14.0] - 2026-01-29
 
 ### Added
 - **Mejoras en Configuración Dinámica**: Se ha incrementado la versión para reflejar mejoras significativas en la gestión de configuración.
+
 
 ### Changed
 - **Refactorización de Variables**: Corrección en `EMAIL_DESTINATARIOS` (removido prefijo `LANZADOR_`) para mayor claridad.
