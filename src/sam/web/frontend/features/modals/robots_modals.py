@@ -1086,11 +1086,11 @@ def DeviceList(
                 "Asignado automáticamente por el balanceador",
             )
 
-        # PRIORIDAD 4: Libre (estado por defecto)
+        # PRIORIDAD 4: Disponible (estado por defecto)
         # Equipos sin ninguna asignación activa
         # Aparece en lista de "Disponibles" cuando no tienen EsProgramado=1
         return (
-            "Libre",
+            "Disponible",
             "tag-libre",
             "Disponible para asignación",
         )
@@ -1701,7 +1701,13 @@ def DeviceSelector(available_devices: List[Dict], selected_devices: List[int], o
         on_change(current_devices)
 
     return html.fieldset(
-        html.legend("Asignar Equipos"),
+        html.legend(
+            "Asignar Equipos ",
+            html.span(
+                {"style": {"fontSize": "0.8em", "fontWeight": "normal", "color": "var(--pico-muted-color)"}},
+                "ℹ️ Info: Los equipos seleccionados aquí trabajarán para esta programación específica, ignorando asignaciones dinámicas.",
+            ),
+        ),
         html.input(
             {
                 "type": "search",

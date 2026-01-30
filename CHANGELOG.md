@@ -5,10 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-01-30
+
+### Added
+- **Base de Datos - Vista de Auditoría**: Creación de la vista `dbo.AuditoriaExtendida` (migración `008`) que enriquece la tabla de auditoría resolviendo los nombres de Robots, Equipos y Programaciones para facilitar el análisis y reporte.
+
+
+## [1.16.3] - 2026-01-30
+
+### Fixed
+- **Interfaz Web - Estabilidad en AnalyticsSummary**: Corregido un error de `NoneType` que ocurría al cancelar la carga de datos (al navegar rápido entre páginas). Ahora se maneja correctamente el ciclo de vida asíncrono.
+- **Interfaz Web - Mayor limpieza de logs**: Se agregó el aviso de asyncio `Task was destroyed but it is pending!` al filtro de logs, ya que es un efecto secundario inofensivo del desmontaje de componentes en ReactPy.
+
+## [1.16.2] - 2026-01-30
+
+### Fixed
+- **Interfaz Web - Silenciado de errores ReactPy en logs**: Implementación de un filtro de logs (`ReactPyErrorFilter`) y reducción del nivel de log a `CRITICAL` para los módulos internos de ReactPy (`reactpy.core`, `reactpy.backend`) con el fin de evitar ruidos persistentes causados por el bug de concurrencia de la librería en producción.
+
+## [1.16.1] - 2026-01-30
+
+### Fixed
+- **Interfaz Web - Mitigación de errores ReactPy en producción**: Agregados límites de conexión (`limit_concurrency=50`) y timeout de keep-alive (`timeout_keep_alive=10s`) en Uvicorn para mitigar errores `Hook stack is in an invalid state` y `Layout object has no attribute _rendering_queue` causados por concurrencia de múltiples usuarios (~30 conexiones).
+  - Nuevas variables de configuración: `INTERFAZ_WEB_LIMITE_CONEXIONES`, `INTERFAZ_WEB_TIMEOUT_KEEPALIVE_SEG`
+  - Actualizado `ConfigManager` y `run_web.py` para aplicar estos límites
+
+## [1.16.0] - 2026-01-30
+
+### Added
+- **Validación Automática de Configuración**: Introducción de `scripts/check_env_naming.py` y hook de pre-commit para asegurar la adherencia a la nueva convención de nombres.
+- **Migración de Base de Datos**: Script SQL para renombrar claves de configuración existentes de forma segura (`migracion_renombrar_claves_v2.sql`).
+
+### Changed
+- **Reorganización Semántica de Variables**: Implementación de la convención `{SERVICIO}_{TEMA}_{ACCION}[_{UNIDAD}]` para más de 80 variables, mejorando el agrupamiento alfabético.
+- **ConfigManager con Fallback**: Soporte para compatibilidad hacia atrás, permitiendo el uso de nombres antiguos y nuevos simultáneamente.
+- **Mejoras en Interfaz Web**:
+    - El modal de edición de configuración ahora mantiene el valor actual al abrirse.
+    - Agregado de placeholders descriptivos dinámicos según el tipo de variable.
+    - Estandarización visual de acciones en la tabla de configuración para coincidir con el resto del dashboard.
+
+## [1.15.0] - 2026-01-29
+
+### Added
+- **Mejoras en Configuración Dinámica**: Se ha incrementado la versión para reflejar mejoras significativas en la gestión de configuración.
+
 ## [1.14.0] - 2026-01-29
 
 ### Added
 - **Mejoras en Configuración Dinámica**: Se ha incrementado la versión para reflejar mejoras significativas en la gestión de configuración.
+
 
 ### Changed
 - **Refactorización de Variables**: Corrección en `EMAIL_DESTINATARIOS` (removido prefijo `LANZADOR_`) para mayor claridad.

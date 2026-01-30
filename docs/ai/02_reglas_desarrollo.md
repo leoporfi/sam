@@ -1,8 +1,8 @@
 # 🐍 REGLAS DE DESARROLLO (PYTHON & WEB) - PROYECTO SAM
 
 ---
-**Versión:** 2.0.0
-**Última Actualización:** 2025-01-19
+**Versión:** 2.1.0
+**Última Actualización:** 2026-01-30
 ---
 
 ## 📋 ÍNDICE
@@ -15,8 +15,10 @@
 6. [Async/Await](#6-asyncawait)
 7. [Manejo de Errores](#7-manejo-de-errores)
 8. [Infraestructura Windows](#8-infraestructura-windows)
+9. [Convención de Variables de Entorno](#9-convención-de-variables-de-entorno)
 
 ---
+
 
 ## 1. ESTILO Y CALIDAD
 
@@ -699,6 +701,100 @@ sp_file = Path("C:/Proyectos/SAM/database/procedures/dbo_ObtenerRobotsEjecutable
 
 ---
 
+## 9. CONVENCIÓN DE VARIABLES DE ENTORNO
+
+### Regla de Oro
+
+**TODAS las variables de entorno deben seguir la convención:**
+
+```
+{SERVICIO}_{TEMA}_{ACCION}[_{UNIDAD}]
+```
+
+Esto permite que al ordenarse alfabéticamente, las variables queden **agrupadas por servicio y tema**.
+
+### Estructura
+
+| Componente | Descripción | Ejemplo |
+|------------|-------------|---------|
+| `SERVICIO` | Nombre del servicio o módulo | `LANZADOR`, `BALANCEADOR`, `INTERFAZ_WEB` |
+| `TEMA` | Área funcional o componente | `SYNC`, `CONCILIACION`, `POOL`, `DEPLOY` |
+| `ACCION` | Qué hace o qué es | `HABILITAR`, `INTERVALO`, `MAX`, `UMBRAL` |
+| `UNIDAD` | (Opcional) Unidad de medida | `SEG`, `MIN`, `MB` |
+
+### Abreviaciones Estándar
+
+| Abreviación | Significado |
+|-------------|-------------|
+| `SEG` | Segundos |
+| `MIN` | Minutos |
+| `MB` | Megabytes |
+| `MAX` | Máximo |
+| `SYNC` | Sincronización |
+| `BD` | Base de Datos |
+
+### Ejemplos
+
+```python
+# ✅ BIEN: Sigue la convención
+LANZADOR_SYNC_HABILITAR=true                    # SERVICIO_TEMA_ACCION
+LANZADOR_SYNC_INTERVALO_SEG=3600                # SERVICIO_TEMA_ACCION_UNIDAD
+LANZADOR_CONCILIACION_INTERVALO_SEG=300
+LANZADOR_DEPLOY_REINTENTOS_MAX=3
+BALANCEADOR_POOL_ENFRIAMIENTO_SEG=300
+INTERFAZ_WEB_EJECUCION_DEMORA_UMBRAL_MIN=25
+
+# ❌ MAL: No sigue la convención
+LANZADOR_HABILITAR_SINCRONIZACION=true          # Verbo antes de tema
+LANZADOR_INTERVALO_SINCRONIZACION_SEG=3600      # Tema intercalado
+BALANCEADOR_PERIODO_ENFRIAMIENTO_SEG=300        # Falta tema POOL
+```
+
+### Resultado del Orden Alfabético
+
+Cuando las variables siguen la convención, el orden alfabético las agrupa naturalmente:
+
+```
+LANZADOR_ALERTAS_ERROR_412_UMBRAL
+LANZADOR_CICLO_INTERVALO_SEG
+LANZADOR_CONCILIACION_INFERENCIA_MAX_INTENTOS
+LANZADOR_CONCILIACION_INFERENCIA_MENSAJE
+LANZADOR_CONCILIACION_INTERVALO_SEG
+LANZADOR_CONCILIACION_LOTE_TAMANO
+LANZADOR_DEPLOY_REINTENTO_DELAY_SEG
+LANZADOR_DEPLOY_REINTENTOS_MAX
+LANZADOR_PAUSA_FIN_HHMM
+LANZADOR_PAUSA_INICIO_HHMM
+LANZADOR_SYNC_HABILITAR
+LANZADOR_SYNC_INTERVALO_SEG
+```
+
+### Compatibilidad Hacia Atrás
+
+Al renombrar variables, **SIEMPRE usar `_get_with_fallback()`** en `ConfigManager`:
+
+```python
+# ✅ BIEN: Soporta nombre nuevo y antiguo
+habilitar_sync = cls._get_with_fallback(
+    "LANZADOR_SYNC_HABILITAR",           # Nuevo nombre
+    "LANZADOR_HABILITAR_SINCRONIZACION", # Nombre antiguo
+    "True"                                # Valor por defecto
+)
+
+# ❌ MAL: Solo soporta un nombre
+habilitar_sync = cls._get_config_value("LANZADOR_SYNC_HABILITAR", "True")
+```
+
+### Pre-commit Hook
+
+El proyecto incluye un script de validación que verifica los nombres de variables en `.env.example`. Ejecuta:
+
+```bash
+uv run python scripts/check_env_naming.py
+```
+
+---
+
 ## 📋 CHECKLIST ANTES DE COMMIT
 
 Usa esta checklist antes de cada commit:
@@ -712,6 +808,7 @@ Usa esta checklist antes de cada commit:
 - [ ] **Rutas:** Uso `pathlib.Path`, no strings
 - [ ] **Excepciones:** Capturo excepciones específicas, no genéricas
 - [ ] **Documentación:** Actualicé docstrings si cambié firma de funciones
+- [ ] **Variables:** Nuevas variables de entorno siguen la convención `SERVICIO_TEMA_ACCION_UNIDAD`
 
 ---
 
@@ -725,4 +822,4 @@ Usa esta checklist antes de cada commit:
 
 ---
 
-*Última revisión: 2025-01-19 (Python version defined in pyproject.toml)*
+*Última revisión: 2026-01-30 (Python version defined in pyproject.toml)*

@@ -206,19 +206,12 @@ def get_tipo_asignacion(equipo: Dict) -> tuple[str, str, str]:
     Estados posibles:
         - 'N/A': Equipo sin asignación
         - 'Programado': Asignado vía programación (EsProgramado=1)
-        - 'Reservado': Reservado manualmente (Reservado=1) - NOTA: Requiere que el SP devuelva este campo
+        - 'Reservado': Reservado manualmente (Reservado=1)
         - 'Dinámico': Asignado por balanceador (ni programado ni reservado)
-
-    NOTA: Actualmente el SP ListarEquipos no devuelve el campo 'Reservado'.
-          Cuando se agregue, actualizar esta función para detectar correctamente el estado Reservado.
     """
     robot_asignado = equipo.get("RobotAsignado")
 
-    # Si no tiene robot asignado
-    if not robot_asignado or robot_asignado == "N/A":
-        return ("N/A", TAG_SECONDARY, "Sin asignación")
-
-    # Orden de prioridad (consistente con los modales)
+    # 1. Programado
     if equipo.get("EsProgramado"):
         return (
             "Programado",
@@ -226,20 +219,24 @@ def get_tipo_asignacion(equipo: Dict) -> tuple[str, str, str]:
             f"Asignado vía programación a {robot_asignado}",
         )
 
-    # NOTA: Cuando el SP ListarEquipos devuelva 'Reservado', agregar esta verificación:
-    # if equipo.get("Reservado"):
-    #     return (
-    #         "Reservado",
-    #         "tag-reservado",
-    #         f"Reservado manualmente para {robot_asignado}",
-    #     )
+    # 2. Reservado
+    if equipo.get("Reservado"):
+        return (
+            "Reservado",
+            "tag-reservado",
+            f"Reservado manualmente para {robot_asignado}",
+        )
 
-    # Si tiene robot pero no es programado (y no tenemos info de Reservado) → Dinámico
-    return (
-        "Dinámico",
-        "tag-dinamico",
-        f"Asignado dinámicamente a {robot_asignado} por el balanceador",
-    )
+    # 3. Dinámico (Si tiene robot pero no es programado ni reservado)
+    if robot_asignado and robot_asignado != "N/A":
+        return (
+            "Dinámico",
+            "tag-dinamico",
+            f"Asignado dinámicamente a {robot_asignado} por el balanceador",
+        )
+
+    # 4. Disponible (Por defecto o si no tiene robot)
+    return ("Disponible", "tag-libre", "Disponible para asignar")
 
 
 @component

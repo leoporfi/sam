@@ -136,6 +136,12 @@ def _run_service(deps: Dict[str, Any]) -> None:
 
     logging.info(f"Configuración del servidor: http://{host}:{port} (Reload: {reload})")
 
+    # Límites de conexión para mitigar errores de ReactPy
+    limite_conexiones = web_config.get("limite_conexiones", 50)
+    timeout_keepalive = web_config.get("timeout_keepalive_seg", 10)
+
+    logging.info(f"Límites concurrencia: max_conexiones={limite_conexiones}, keepalive={timeout_keepalive}s")
+
     # Forzar loop="asyncio" y workers=1
     config = uvicorn.Config(
         app,
@@ -144,6 +150,8 @@ def _run_service(deps: Dict[str, Any]) -> None:
         reload=reload,
         workers=1,  # ReactPy necesita 1 worker para mantener estado en memoria
         loop="asyncio",  # Evita el loop 'auto' que elige Proactor en Windows
+        limit_concurrency=limite_conexiones,  # Limitar conexiones simultáneas
+        timeout_keep_alive=timeout_keepalive,  # Reducir timeout de keep-alive
     )
     _server_instance = uvicorn.Server(config)
     # # Verificar el loop antes de iniciar

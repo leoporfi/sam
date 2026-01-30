@@ -25,19 +25,24 @@ Sigue estos pasos para realizar un commit:
     *   `feat:` → Incrementa MINOR (ej: 1.8.5 → 1.9.0)
     *   `fix:` → Incrementa PATCH (ej: 1.8.5 → 1.8.6)
 
-3.  **Staging**:
+3.  **Actualizar Documentación**:
+    Es **OBLIGATORIO** mantener el archivo `CHANGELOG.md` actualizado en cada commit de tipo `feat:` o `fix:`.
+    *   Registra los cambios bajo la nueva versión (usando el formato [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)).
+    *   Asegúrate de que otros documentos relevantes (reglas, arquitectura, etc.) reflejen los cambios realizados.
+
+4.  **Staging**:
     Agrega los archivos al stage. Generalmente todo:
     ```bash
     git add .
     ```
 
-4.  **Commit**:
+5.  **Commit**:
     Ejecuta el commit con el mensaje generado.
     ```bash
     git commit -m "tipo: mensaje descriptivo"
     ```
 
-5.  **Verificación y Re-intento**:
+6.  **Verificación y Re-intento**:
     Si el commit falla debido a `pre-commit` hooks, pueden ocurrir dos casos:
 
     **Caso A: Correcciones automáticas (linting, formateo)**
@@ -65,7 +70,7 @@ Sigue estos pasos para realizar un commit:
     git commit -m "tipo: mensaje descriptivo"
     ```
 
-6.  **Verificación de Tag y Push**:
+7.  **Verificación de Tag y Push**:
     Si el commit incrementó la versión (fue `feat` o `fix`):
     1.  Verifica la nueva versión en `src/sam/__init__.py`.
     2.  Crea el tag correspondiente:

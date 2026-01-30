@@ -35,7 +35,8 @@ BEGIN
             -- Prioridad: Programado (1) > Reservado (1) > Dinámico (0)
             SELECT TOP 1
                 r.Robot,
-                a.EsProgramado
+                a.EsProgramado,
+                a.Reservado
             FROM dbo.Asignaciones a
             JOIN dbo.Robots r ON a.RobotId = r.RobotId
             WHERE a.EquipoId = e.EquipoId
@@ -83,7 +84,8 @@ BEGIN
         'SELECT
             e.EquipoId, e.Equipo, e.UserName, e.Licencia, e.Activo_SAM, e.PermiteBalanceoDinamico,
             ISNULL(AsignacionInfo.Robot, ''N/A'') as RobotAsignado,
-            ISNULL(AsignacionInfo.EsProgramado, 0) as EsProgramado, -- <-- NUEVA COLUMNA
+            ISNULL(AsignacionInfo.EsProgramado, 0) as EsProgramado,
+            ISNULL(AsignacionInfo.Reservado, 0) as Reservado,
             ISNULL(p.Nombre, ''N/A'') as Pool
          ' + @SelectFromClause + ' ' + @WhereClause +
         ' ORDER BY ' + @OrderByClause +
