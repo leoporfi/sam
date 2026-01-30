@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-01-30
+
+### Added
+- **Base de Datos - Vista de Auditoría**: Creación de la vista `dbo.AuditoriaExtendida` (migración `008`) que enriquece la tabla de auditoría resolviendo los nombres de Robots, Equipos y Programaciones para facilitar el análisis y reporte.
+
+
 ## [1.16.3] - 2026-01-30
 
 ### Fixed
